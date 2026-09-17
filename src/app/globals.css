@@ -12,6 +12,11 @@
  */
 
 :root {
+  /* Tells the browser which way to paint the controls it draws itself — date
+     pickers, scrollbars, autofill. It belongs on the element that carries the
+     theme class, which is <html>. */
+  color-scheme: light;
+
   --card: oklch(1 0 0);
   --ring: oklch(0 0 0);
   --input: oklch(0.94 0 0);
@@ -40,6 +45,8 @@
 }
 
 .dark {
+  color-scheme: dark;
+
   --card: oklch(0.14 0 0);
   --ring: oklch(0.72 0 0);
   --input: oklch(0.32 0 0);
@@ -86,11 +93,6 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  /* Tells the browser to render form controls and scrollbars to match. */
-  color-scheme: light;
-}
-.app.dark {
-  color-scheme: dark;
 }
 
 a {
@@ -388,6 +390,131 @@ select.client:focus-visible {
   color: var(--primary-foreground);
 }
 
+/* --- Editable cells ------------------------------------------------------- */
+/* A spreadsheet cell, not a form field: no chrome until you reach for it, so a
+   wide table of figures reads as data rather than as hundreds of boxes. */
+
+input.cell {
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--foreground);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+input.cell:hover {
+  border-color: var(--border);
+  background: var(--card);
+}
+input.cell:focus-visible {
+  border-color: var(--ring);
+  background: var(--card);
+  outline: none;
+}
+input.cell:read-only {
+  color: var(--muted-foreground);
+}
+
+/* --- Stepper -------------------------------------------------------------- */
+
+.step {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-size: 13px;
+  color: var(--foreground);
+  /* Set explicitly because these are <button>s, which would otherwise take the
+     platform's own button face — white, in a dark theme. */
+  background: transparent;
+  border: 0;
+}
+.step:hover {
+  background: var(--muted);
+}
+.step.on {
+  background: var(--accent);
+}
+.step i {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  background: var(--card);
+}
+.step.done i {
+  background: var(--foreground);
+  color: var(--background);
+  border-color: var(--foreground);
+}
+.step small {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  margin-top: 1px;
+}
+
+/* --- Drop zone ------------------------------------------------------------ */
+
+.drop {
+  padding: 34px 30px;
+  border: 1.5px dashed var(--chart-3);
+  border-radius: var(--radius);
+  text-align: center;
+  cursor: pointer;
+  background: var(--card);
+}
+.drop:hover {
+  border-color: var(--foreground);
+}
+
+/* --- Processing steps ----------------------------------------------------- */
+
+.pstep {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.pstep i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  box-sizing: border-box;
+}
+.pstep.active {
+  color: var(--foreground);
+}
+.pstep.active i {
+  border-color: var(--foreground);
+  border-top-color: transparent;
+  animation: spin 0.8s linear infinite;
+}
+.pstep.done i {
+  background: var(--foreground);
+  border-color: var(--foreground);
+}
+.pstep small {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
 /* --- Charts --------------------------------------------------------------- */
 
 @keyframes rise {
@@ -421,7 +548,8 @@ select.client:focus-visible {
 /* Respect a viewer who has asked for less movement. */
 @media (prefers-reduced-motion: reduce) {
   .bar-seg,
-  .spin {
+  .spin,
+  .pstep.active i {
     animation: none;
   }
 }

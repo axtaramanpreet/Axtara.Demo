@@ -15,7 +15,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+    // suppressHydrationWarning is scoped to this one element on purpose: the
+    // theme script below adds `dark` to <html> before React hydrates, so the
+    // server markup and the live DOM legitimately disagree about this class and
+    // nothing else. Without it React reports a mismatch on every page load.
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         {/* Applies the stored theme before first paint, so a dark-mode user
             never sees a white flash on navigation. */}

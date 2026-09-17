@@ -851,6 +851,19 @@ export type Database = {
       auth_can_write_firm: { Args: { target_firm: string }; Returns: boolean }
       auth_client_ids: { Args: never; Returns: string[] }
       auth_firm_ids: { Args: never; Returns: string[] }
+      save_call_inputs: {
+        Args: {
+          p_call: Json
+          p_call_id: string
+          p_components: Json
+          p_expected: Json
+          p_lps: Json
+          p_offsets: Json
+          p_sources: Json
+          p_transfers: Json
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

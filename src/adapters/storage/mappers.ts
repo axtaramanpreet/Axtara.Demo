@@ -16,7 +16,7 @@
  * becomes NaN, then 0. Nothing throws. Hence the round-trip tests next door.
  */
 
-import { num } from '@/engine';
+import { num, serialToISO } from '@/engine';
 import type {
   CallModel,
   ComponentRow,
@@ -240,8 +240,8 @@ export function fromCallModel(model: CallModel) {
   return {
     fund_name: String(s.Fund_Name ?? ''),
     reporting_currency: String(s.Reporting_Currency || 'USD'),
-    call_date: emptyToNull(s.Call_Date),
-    payment_due_date: emptyToNull(s.Payment_Due_Date),
+    call_date: toStoredDate(s.Call_Date),
+    payment_due_date: toStoredDate(s.Payment_Due_Date),
     default_mgmt_fee_rate_annual: numericOrNull(s.Default_Mgmt_Fee_Rate_Annual),
     default_mgmt_fee_basis: String(s.Default_Mgmt_Fee_Basis || 'Commitment'),
     mgmt_fee_period_fraction: numericOrNull(s.Mgmt_Fee_Period_Fraction),
@@ -264,11 +264,9 @@ export function fromComponentRow(c: ComponentRow, callId: string, position: numb
     component_name: c.Component_Name,
     category: emptyToNull(c.Category),
     total_amount: toStoredAmount(c.Total_Amount),
-    allocation_basis: ['Commitment', 'UCC', 'Invested_Capital'].includes(
-      String(c.Allocation_Basis),
-    )
-      ? String(c.Allocation_Basis)
-      : 'Commitment',
+    // Stored as entered. An unrecognised basis is reported by the engine as a
+    // warning, not quietly rewritten here.
+    allocation_basis: String(c.Allocation_Basis ?? ''),
     reduces_unfunded: fromYesNo(c.Reduces_Unfunded),
     excused_lp_ids: fromIdList(c.Excused_LP_IDs),
     notes: emptyToNull(c.Notes),
@@ -291,11 +289,11 @@ export function fromTransferRow(t: TransferRow, callId: string, position: number
   return {
     call_id: callId,
     transfer_id: t.Transfer_ID,
-    effective_date: emptyToNull(t.Effective_Date),
+    effective_date: toStoredDate(t.Effective_Date),
     from_lp_id: emptyToNull(t.From_LP_ID),
     to_lp_id: emptyToNull(t.To_LP_ID),
     to_lp_name_if_new: emptyToNull(t.To_LP_Name_if_new),
-    transfer_type: String(t.Transfer_Type).toLowerCase() === 'full' ? 'Full' : 'Partial',
+    transfer_type: String(t.Transfer_Type ?? ''),
     transfer_pct: numericOrNull(t.Transfer_Pct),
     transfers_commitment: fromYesNo(t.Transfers_Commitment),
     transfers_paid_in: fromYesNo(t.Transfers_Paid_In),
@@ -316,9 +314,9 @@ export function fromLPRow(l: LPRow, callId: string, investorId: string, position
     opening_invested_capital: toStoredAmount(l.Opening_Invested_Capital),
     mgmt_fee_rate_override: numericOrNull(l.Mgmt_Fee_Rate_Override),
     fee_exempt: fromYesNo(l.Fee_Exempt),
-    status: ['Active', 'Transferred', 'Defaulted'].includes(String(l.Status))
-      ? String(l.Status)
-      : 'Active',
+    // Any status other than Active means "not participating" to the engine, so
+    // a firm's own vocabulary survives storage.
+    status: String(l.Status ?? 'Active'),
     position,
   };
 }
@@ -340,6 +338,17 @@ export function fromLPRowIdentity(l: LPRow, clientId: string) {
 function emptyToNull(v: unknown): string | null {
   const s = v === null || v === undefined ? '' : String(v).trim();
   return s === '' ? null : s;
+}
+
+/**
+ * A date ready for a `date` column.
+ *
+ * Workbook cells arrive as Excel serial day counts (46296) as readily as ISO
+ * strings; Postgres accepts only the latter. `serialToISO` handles both.
+ */
+function toStoredDate(v: unknown): string | null {
+  if (v === null || v === undefined || String(v).trim() === '') return null;
+  return serialToISO(v as string | number) || null;
 }
 
 /** A blank numeric field is null, not zero — a missing fee rate is not 0%. */

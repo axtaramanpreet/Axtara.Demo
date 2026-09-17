@@ -26,8 +26,15 @@ import { buildNotice, compute } from '@/engine';
 import { SCENARIOS } from '@/engine/fixtures/scenarios';
 import type { CallModel } from '@/engine/types';
 
+/**
+ * Scenarios where this engine deliberately differs from the original, with the
+ * divergence asserted separately below rather than waved through here.
+ */
+const DELIBERATE_DIVERGENCE = new Set(['wholeDollarRounding']);
+
 describe('ported engine matches the original handoff implementation', () => {
   for (const [name, model] of Object.entries(SCENARIOS)) {
+    if (DELIBERATE_DIVERGENCE.has(name)) continue;
     describe(name, () => {
       // Each engine gets its own copy: `applyTransfers` mutates its roster, and
       // sharing input would let the first run contaminate the second.
@@ -68,4 +75,49 @@ describe('ported engine matches the original handoff implementation', () => {
       });
     });
   }
+});
+
+/**
+ * The one deliberate departure from the handoff engine.
+ *
+ * It computed rounding decimals as `num(Rounding_Decimals) || 2`, so a fund
+ * that configured 0 — reporting in yen, or calling in whole units — silently
+ * got two decimals instead. This engine honours the 0.
+ *
+ * Asserted rather than excluded, so the difference stays a decision on the
+ * record instead of drift nobody notices.
+ */
+describe('deliberate divergence: a configured zero means zero', () => {
+  const model = SCENARIOS.wholeDollarRounding;
+
+  it('rounds to whole units where the original used cents', () => {
+    const ported = compute(structuredClone(model) as CallModel);
+    const original = computeOriginal(structuredClone(model));
+
+    expect(ported.d).toBe(0);
+    expect(original.d).toBe(2);
+
+    expect(ported.rows.every((r) => Number.isInteger(r.total))).toBe(true);
+    // The handoff module is untyped, hence the annotation.
+    expect(original.rows.some((r: { total: number }) => !Number.isInteger(r.total))).toBe(true);
+  });
+
+  it('still ties: whole-unit allocations sum to the amount called', () => {
+    // Without the Expected_Output rows, which state this fund in cents and so
+    // rightly disagree with a call rounded to whole units. Every other check —
+    // the component tie-outs and both roll-forwards — must still pass.
+    const withoutFixture = structuredClone(model) as CallModel;
+    withoutFixture.golden = null;
+
+    const ported = compute(withoutFixture);
+    expect(ported.checks.filter((c) => c.level === 'fail')).toEqual([]);
+    expect(ported.rows.every((r) => Number.isInteger(r.total))).toBe(true);
+  });
+
+  it('leaves a blank Rounding_Decimals on cents, as before', () => {
+    const blank = structuredClone(model) as CallModel;
+    blank.setup.Rounding_Decimals = '';
+    expect(compute(blank).d).toBe(2);
+    expect(computeOriginal(structuredClone(blank)).d).toBe(2);
+  });
 });

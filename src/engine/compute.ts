@@ -19,6 +19,7 @@ import { applyTransfers } from './transfers';
 import type {
   AllocationBasis,
   CallModel,
+  FundSetup,
   Check,
   CheckLevel,
   ComputedComponent,
@@ -55,10 +56,26 @@ const GOLDEN_ECHOED_COLUMNS = [
   'Fee_Rate',
 ];
 
+/**
+ * Decimal places for every allocation in this call.
+ *
+ * Blank means "not configured", and falls back to cents. Zero means zero — a
+ * fund reporting in yen, or one that calls in whole units, sets it deliberately
+ * and must not be quietly given two decimals instead.
+ *
+ * This is the one place this engine departs from the handoff implementation,
+ * which wrote `num(...) || 2` and so treated a configured 0 as unset. See the
+ * equivalence test, where the divergence is asserted rather than tolerated.
+ */
+function roundingDecimals(configured: FundSetup['Rounding_Decimals']): number {
+  if (configured === '' || configured === null || configured === undefined) return 2;
+  return Math.max(0, Math.round(num(configured)));
+}
+
 export function compute(model: CallModel): ComputeResult {
   const { setup, lps, components, fee, transfers, golden } = model;
 
-  const d = Math.max(0, Math.round(num(setup.Rounding_Decimals) || 2));
+  const d = roundingDecimals(setup.Rounding_Decimals);
   const callDate = serialToISO(setup.Call_Date);
 
   const checks: Check[] = [];

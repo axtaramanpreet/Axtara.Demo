@@ -10,25 +10,16 @@
  * not running, so the unit suite stays runnable without Docker.
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { compute } from '@/engine';
 import { ILLUSTRATIVE_FUND } from '@/engine/fixtures/illustrative-fund';
 import { SCENARIOS } from '@/engine/fixtures/scenarios';
-import type { Database } from '../database.types';
 import { createSupabaseRepository } from '../supabase-repository';
 import type { SupabaseClient } from '../supabase-client';
 import type { CallRepository, CallSources } from '../types';
+import { LOCAL_URL, createLocalServiceClient } from './local-stack';
 
-const URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
-// The CLI's well-known local service key. Valid only against 127.0.0.1.
-const SERVICE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ??
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU';
-
-const db = createClient<Database>(URL, SERVICE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+const db = createLocalServiceClient();
 
 const FIRM_ID = '0e57f19a-0000-4000-8000-00000000f127';
 const CLIENT_ID = '0e57f19a-0000-4000-8000-00000000c11e';
@@ -152,7 +143,7 @@ if (!up) {
   // A silent skip would let this rot unnoticed.
   console.warn(
     '\n  Supabase integration tests skipped — local stack not reachable at ' +
-      URL +
+      LOCAL_URL +
       '.\n  Start it with `npm run db:start`.\n',
   );
 }

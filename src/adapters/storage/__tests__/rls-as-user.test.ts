@@ -12,26 +12,24 @@
  * Requires the local stack with its seed (`npm run db:reset`).
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { describe, expect, it } from 'vitest';
 import { compute } from '@/engine';
-import type { Database } from '../database.types';
 import { createSupabaseRepository } from '../supabase-repository';
 import type { SupabaseClient } from '../supabase-client';
-
-const URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
+import {
+  LOCAL_ANON_KEY,
+  LOCAL_URL,
+  createLocalClient,
+  createLocalServiceClient,
+} from './local-stack';
 
 // Fixed ids from supabase/seed.sql. Matching on name is too loose — another
 // fixture sharing it would silently redirect these assertions.
 const SEEDED_FUND_II = '00000000-0000-4000-8000-0000000000c1';
-const ANON_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+const SEEDED_FUND_III = '00000000-0000-4000-8000-0000000000c2';
 
 async function signInAsSeededUser() {
-  const db = createClient<Database>(URL, ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const db = createLocalClient(LOCAL_ANON_KEY);
   const { error } = await db.auth.signInWithPassword({
     email: 'dev@axtara.local',
     password: 'password',
@@ -44,12 +42,43 @@ const db = await signInAsSeededUser().catch(() => null);
 describe.skipIf(!db)('reading the seeded fund as a signed-in user', () => {
   const repo = createSupabaseRepository(db as unknown as SupabaseClient);
 
-  it('sees both of the firm’s funds and nothing else', async () => {
-    const clients = await repo.listClients();
-    expect(clients.map((c) => c.name).sort()).toEqual([
-      'Illustrative Fund II, L.P.',
-      'Illustrative Fund III, L.P.',
-    ]);
+  /**
+   * Asserts membership rather than an exact list. Listing every fund by name
+   * meant the test failed the moment anyone created one through the app, which
+   * is a test that punishes using the product. What actually matters is the
+   * policy: this firm's funds are visible, another firm's are not.
+   */
+  it('sees its own firm’s funds, and not another firm’s', async () => {
+    expect((await repo.listClients()).map((c) => c.id)).toEqual(
+      expect.arrayContaining([SEEDED_FUND_II, SEEDED_FUND_III]),
+    );
+
+    // Arranged with the service role because a signed-in user cannot create a
+    // fund outside their own firm — which is the thing being tested.
+    const service = createLocalServiceClient();
+    const firmId = crypto.randomUUID();
+    const fundId = crypto.randomUUID();
+
+    const { error: firmError } = await service
+      .from('firms')
+      .insert({ id: firmId, name: `Rival Administrators ${firmId.slice(0, 8)}` });
+    expect(firmError).toBeNull();
+
+    try {
+      const { error: fundError } = await service
+        .from('clients')
+        .insert({ id: fundId, firm_id: firmId, name: 'Someone Else’s Fund, L.P.' });
+      expect(fundError).toBeNull();
+
+      expect((await repo.listClients()).map((c) => c.id)).not.toContain(fundId);
+    } finally {
+      // Dependency order, and asserted: a silent cleanup failure once left 122
+      // stray rows behind and broke later runs.
+      const { error: fundCleanup } = await service.from('clients').delete().eq('id', fundId);
+      const { error: firmCleanup } = await service.from('firms').delete().eq('id', firmId);
+      expect(fundCleanup).toBeNull();
+      expect(firmCleanup).toBeNull();
+    }
   });
 
   it('lists the seeded call as in progress', async () => {
@@ -125,7 +154,7 @@ describe.skipIf(!db)('reading the seeded fund as a signed-in user', () => {
 if (!db) {
   console.warn(
     '\n  RLS tests skipped — could not sign in at ' +
-      URL +
+      LOCAL_URL +
       '.\n  Run `npm run db:reset` to apply the seed.\n',
   );
 }

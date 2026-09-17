@@ -86,12 +86,23 @@ browser could approve its way past a failing tie-out check.
 
 ## Status
 
-Done: the engine, the workbook parser, the schema, the storage layer, and the
-Home view.
+Done: the engine, the workbook parser, the schema, the storage layer, and all
+three views — Home, Set up call, and the Call view with its Summary,
+Allocation, Checks and Notices tabs. Notices can be approved and sent, which
+freezes a snapshot and locks the call.
 
-Not done: Set up call, the Call view (Summary · Allocation · Checks · Notices),
-and Ask Axtara — which needs an Azure AI Foundry endpoint, deployment name and
-key before it can answer anything.
+Not done: **Ask Axtara**, which needs an Azure AI Foundry endpoint, deployment
+name and key before it can answer anything.
+
+Also outstanding before this reaches real investors:
+
+- Sending records the notice and freezes it, but does not yet deliver email.
+  The prototype's `mailto:` needs to become a real provider with the PDF
+  attached.
+- The notice carries **no payment instructions**, as the design specified. No
+  investor can wire against it as it stands.
+- There is no way to invite a colleague: `firm_members` has no insert policy,
+  so adding one means running SQL.
 
 ## Known local quirks
 

@@ -11,6 +11,7 @@ export { compute } from './compute';
 export { allocate, type AllocationPart } from './allocate';
 export { applyTransfers } from './transfers';
 export { buildNotice } from './notice';
+export { splitCall, type CallSplit } from './summary';
 export type { NoticeData, NoticeLine, NoticeAccountLine, NoticeFootnote } from './notice';
 export { fmt, fmtDate, ids, num, pct, round, serialToISO, yes } from './format';
 export type * from './types';

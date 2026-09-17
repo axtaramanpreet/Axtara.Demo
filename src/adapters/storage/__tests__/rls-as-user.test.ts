@@ -20,6 +20,11 @@ import { createSupabaseRepository } from '../supabase-repository';
 import type { SupabaseClient } from '../supabase-client';
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
+
+// Fixed ids from supabase/seed.sql. Matching on name is too loose — another
+// fixture sharing it would silently redirect these assertions.
+const SEEDED_FUND_II = '00000000-0000-4000-8000-0000000000c1';
+const SEEDED_FUND_III = '00000000-0000-4000-8000-0000000000c2';
 const ANON_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
@@ -49,9 +54,7 @@ describe.skipIf(!db)('reading the seeded fund as a signed-in user', () => {
   });
 
   it('lists the seeded call as in progress', async () => {
-    const clients = await repo.listClients();
-    const fundII = clients.find((c) => c.name.includes('Fund II'))!;
-    const calls = await repo.listCalls(fundII.id);
+    const calls = await repo.listCalls(SEEDED_FUND_II);
 
     expect(calls).toHaveLength(1);
     expect(calls[0].callNo).toBe(2);
@@ -62,9 +65,7 @@ describe.skipIf(!db)('reading the seeded fund as a signed-in user', () => {
   });
 
   it('computes the seeded call to the accountant’s Expected_Output', async () => {
-    const clients = await repo.listClients();
-    const fundII = clients.find((c) => c.name.includes('Fund II'))!;
-    const [call] = await repo.listCalls(fundII.id);
+    const [call] = await repo.listCalls(SEEDED_FUND_II);
     const detail = await repo.getCall(call.id);
 
     const result = compute(detail!.model);
@@ -82,9 +83,7 @@ describe.skipIf(!db)('reading the seeded fund as a signed-in user', () => {
    * with 9.8m already contributed as having its full 50.5m outstanding.
    */
   it('reports a fund position whose lines reconcile', async () => {
-    const clients = await repo.listClients();
-    const fundII = clients.find((c) => c.name.includes('Fund II'))!;
-    const position = await repo.getClientPosition(fundII.id);
+    const position = await repo.getClientPosition(SEEDED_FUND_II);
 
     expect(position).not.toBeNull();
     expect(position!.totalCommitments).toBeCloseTo(50500000, 2);
@@ -103,9 +102,7 @@ describe.skipIf(!db)('reading the seeded fund as a signed-in user', () => {
   });
 
   it('shows an empty fund as having no calls', async () => {
-    const clients = await repo.listClients();
-    const fundIII = clients.find((c) => c.name.includes('Fund III'))!;
-    expect(await repo.listCalls(fundIII.id)).toEqual([]);
+    expect(await repo.listCalls(SEEDED_FUND_III)).toEqual([]);
   });
 });
 

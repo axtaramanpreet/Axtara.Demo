@@ -303,7 +303,7 @@ export { num };
  * reserved for the server. Both are deliberate, so they get a plain
  * explanation rather than a raw SQL message.
  */
-function asError(error: { code?: string; message: string }, doing: string): Error {
+export function asError(error: { code?: string; message: string }, doing: string): Error {
   if (error.code === '23001') {
     return new Error(
       `This capital call has been issued, so its inputs can no longer be changed. Raise a new call to correct it.`,

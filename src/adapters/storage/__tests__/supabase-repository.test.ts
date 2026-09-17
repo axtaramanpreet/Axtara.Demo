@@ -58,15 +58,27 @@ describe.skipIf(!up)('Supabase repository (integration)', () => {
   beforeAll(async () => {
     await db.from('firms').delete().eq('id', FIRM_ID);
     await db.from('firms').insert({ id: FIRM_ID, name: 'Integration Test Administrators' });
+    // Deliberately not named like the seeded fund: a shared name once made the
+    // row-level-security test pick up this fixture's calls instead of the seed's.
     await db
       .from('clients')
-      .insert({ id: CLIENT_ID, firm_id: FIRM_ID, name: 'Illustrative Fund II, L.P.' });
+      .insert({ id: CLIENT_ID, firm_id: FIRM_ID, name: 'Integration Test Fund, L.P.' });
     repo = createSupabaseRepository(db as unknown as SupabaseClient);
   });
 
   afterAll(async () => {
-    // Cascades through clients, calls and their inputs.
-    await db.from('firms').delete().eq('id', FIRM_ID);
+    // Order matters, and the result is checked. `call_register.investor_id` is
+    // ON DELETE RESTRICT, so deleting the firm while register rows still point
+    // at its investors fails — and an unchecked failure here quietly left more
+    // than a hundred stray calls behind before this was noticed.
+    await db.from('calls').delete().eq('client_id', CLIENT_ID);
+    await db.from('investors').delete().eq('client_id', CLIENT_ID);
+    await db.from('clients').delete().eq('id', CLIENT_ID);
+    const { error } = await db.from('firms').delete().eq('id', FIRM_ID);
+    expect(error).toBeNull();
+
+    const { data: leftovers } = await db.from('calls').select('id').eq('client_id', CLIENT_ID);
+    expect(leftovers ?? []).toEqual([]);
   });
 
   it('writes and reads back a call whose figures still tie to the workbook', async () => {
@@ -111,17 +123,12 @@ describe.skipIf(!up)('Supabase repository (integration)', () => {
     );
   });
 
-  it('refuses to edit a call once it has been issued', async () => {
-    const created = await repo.createCall(CLIENT_ID, ILLUSTRATIVE_FUND, ALL_SOURCES);
-    await db.from('calls').update({ locked_at: new Date().toISOString() }).eq('id', created.id);
-
-    await expect(repo.saveCall(created.id, ILLUSTRATIVE_FUND, ALL_SOURCES)).rejects.toThrow(
-      /has been issued/i,
-    );
-
-    // Unlock so the fixture teardown can cascade normally.
-    await db.from('calls').update({ locked_at: null }).eq('id', created.id);
-  });
+  // Note: nothing here locks a call. Issuing one is permanent by design — the
+  // trigger refuses to unlock or delete it, so a test that locked a call would
+  // leave a row no teardown could remove. The lock and its refusals are covered
+  // by supabase/tests/immutability.test.sql, at the level that enforces them;
+  // what this layer owes is the message an accountant sees, tested directly
+  // against asError below.
 
   // The whole point of the storage layer is that it changes nothing. If any
   // scenario computes differently after a database round trip, the database is

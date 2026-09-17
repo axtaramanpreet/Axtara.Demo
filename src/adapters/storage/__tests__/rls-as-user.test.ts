@@ -24,7 +24,6 @@ const URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
 // Fixed ids from supabase/seed.sql. Matching on name is too loose — another
 // fixture sharing it would silently redirect these assertions.
 const SEEDED_FUND_II = '00000000-0000-4000-8000-0000000000c1';
-const SEEDED_FUND_III = '00000000-0000-4000-8000-0000000000c2';
 const ANON_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
@@ -101,8 +100,25 @@ describe.skipIf(!db)('reading the seeded fund as a signed-in user', () => {
     );
   });
 
-  it('shows an empty fund as having no calls', async () => {
-    expect(await repo.listCalls(SEEDED_FUND_III)).toEqual([]);
+  /**
+   * Creates its own fund rather than asserting the seeded one is still empty.
+   * Anyone using the app locally will add a call to it sooner or later, and a
+   * test that breaks when the app is used is a test nobody keeps.
+   */
+  it('shows a fund with no calls as empty', async () => {
+    const fund = await repo.createClient(`Empty Fund ${Date.now()}`);
+    try {
+      expect(await repo.listCalls(fund.id)).toEqual([]);
+      expect((await repo.getClientPosition(fund.id))?.callsIssued).toBe(0);
+    } finally {
+      await repo.deleteClient(fund.id);
+    }
+  });
+
+  it('can delete a fund that has no history', async () => {
+    const fund = await repo.createClient(`Throwaway ${Date.now()}`);
+    await repo.deleteClient(fund.id);
+    expect((await repo.listClients()).map((c) => c.id)).not.toContain(fund.id);
   });
 });
 

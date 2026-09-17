@@ -75,6 +75,11 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
       return data;
     },
 
+    async deleteClient(clientId: string): Promise<void> {
+      const { error } = await db.from('clients').delete().eq('id', clientId);
+      if (error) throw asError(error, 'delete this fund');
+    },
+
     async getClientPosition(clientId: string): Promise<ClientPosition | null> {
       const { data, error } = await db
         .from('client_positions')

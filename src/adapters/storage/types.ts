@@ -98,6 +98,11 @@ export interface ClientPosition {
 export interface CallRepository {
   listClients(): Promise<Client[]>;
   createClient(name: string): Promise<Client>;
+  /**
+   * Remove a fund. The database refuses this once the fund has any call
+   * history, so it only ever undoes a mistake.
+   */
+  deleteClient(clientId: string): Promise<void>;
 
   getClientPosition(clientId: string): Promise<ClientPosition | null>;
   listCalls(clientId: string): Promise<CallSummary[]>;

@@ -76,6 +76,8 @@ export interface ClientPosition {
   clientId: string;
   name: string;
   totalCommitments: number;
+  /** Contributions received before the call currently open. */
+  paidInCapital: number;
   investors: number;
   callsIssued: number;
   calledToDate: number;

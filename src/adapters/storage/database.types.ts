@@ -835,6 +835,7 @@ export type Database = {
           latest_call_no: number | null
           name: string | null
           next_payment_due: string | null
+          paid_in_capital: number | null
           total_commitments: number | null
           unfunded_commitment: number | null
         }

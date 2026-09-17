@@ -87,6 +87,7 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
         clientId: data.client_id as string,
         name: data.name as string,
         totalCommitments: toNumber(data.total_commitments),
+        paidInCapital: toNumber(data.paid_in_capital),
         investors: toNumber(data.investors),
         callsIssued: toNumber(data.calls_issued),
         calledToDate: toNumber(data.called_to_date),

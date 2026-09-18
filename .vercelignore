@@ -1,0 +1,7 @@
+# Uploaded to Vercel on `vercel deploy`. Nothing here is needed to build the
+# app, and the handoff reference in particular is a read-only comparison copy
+# that only the equivalence test imports.
+design_handoff_capital_call_engine 2/
+supabase/
+samples/
+.claude/

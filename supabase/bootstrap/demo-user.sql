@@ -27,7 +27,7 @@
 -- Before this environment sees real investor data, either change it (the
 -- statement is at the bottom of this file) or remove the account:
 --
---   delete from auth.users where email = 'dev@axtara.local';
+--   delete from auth.users where email = 'demo@axtara.ai';
 --
 -- Safe to run more than once: every statement is ON CONFLICT DO NOTHING, so a
 -- second run changes nothing. That also means it will NOT change the password
@@ -55,15 +55,15 @@ insert into auth.users (
   email_change_token_new, email_change_token_current, reauthentication_token
 )
 values (
-  '00000000-0000-4000-8000-000000000001',
+  '00000000-0000-4000-8000-000000000002',
   '00000000-0000-0000-0000-000000000000',
   'authenticated', 'authenticated',
-  'dev@axtara.local',
+  'demo@axtara.ai',
 
   crypt('password', gen_salt('bf')),   -- the sign-in password
 
-  -- Confirmed on creation: dev@axtara.local cannot receive mail, so an
-  -- unconfirmed account could never be confirmed.
+  -- Confirmed on creation, so no confirmation mail has to be delivered or
+  -- clicked before the account can sign in.
   now(), now(), now(),
   '{"provider": "email", "providers": ["email"]}'::jsonb,
   '{"name": "Axtara Demo"}'::jsonb,
@@ -75,11 +75,11 @@ insert into auth.identities (
   id, user_id, provider_id, provider, identity_data, created_at, updated_at, last_sign_in_at
 )
 values (
-  '00000000-0000-4000-8000-000000000001',
-  '00000000-0000-4000-8000-000000000001',
-  '00000000-0000-4000-8000-000000000001',
+  '00000000-0000-4000-8000-000000000002',
+  '00000000-0000-4000-8000-000000000002',
+  '00000000-0000-4000-8000-000000000002',
   'email',
-  '{"sub": "00000000-0000-4000-8000-000000000001", "email": "dev@axtara.local", "email_verified": true}'::jsonb,
+  '{"sub": "00000000-0000-4000-8000-000000000002", "email": "demo@axtara.ai", "email_verified": true}'::jsonb,
   now(), now(), now()
 )
 on conflict (provider_id, provider) do nothing;
@@ -93,7 +93,7 @@ on conflict (id) do nothing;
 insert into firm_members (firm_id, user_id, role)
 values (
   '00000000-0000-4000-8000-0000000000f1',
-  '00000000-0000-4000-8000-000000000001',
+  '00000000-0000-4000-8000-000000000002',
   'owner'
 )
 on conflict do nothing;
@@ -107,7 +107,7 @@ select u.email, f.name as firm, m.role
   from auth.users u
   join firm_members m on m.user_id = u.id
   join firms f on f.id = m.firm_id
- where u.id = '00000000-0000-4000-8000-000000000001';
+ where u.id = '00000000-0000-4000-8000-000000000002';
 
 -- ---------------------------------------------------------------------------
 -- Changing the password later
@@ -117,5 +117,5 @@ select u.email, f.name as firm, m.role
 --   update auth.users
 --      set encrypted_password = crypt('the-new-password', gen_salt('bf')),
 --          updated_at = now()
---    where email = 'dev@axtara.local';
+--    where email = 'demo@axtara.ai';
 -- ---------------------------------------------------------------------------

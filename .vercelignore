@@ -1,11 +1,26 @@
-# Uploaded to Vercel on `vercel deploy`. Nothing here is needed to build the
-# app, and the handoff reference in particular is a read-only comparison copy
-# that only the equivalence test imports.
+# What NOT to upload on `vercel deploy`.
 #
-# Leading slashes matter: a bare `supabase/` matches any directory of that name
-# at any depth, which silently excluded src/lib/supabase/ and broke the build
-# with "Can't resolve '@/lib/supabase/server'".
+# This file replaces .gitignore for the upload rather than adding to it, so
+# build output and dependencies have to be named here too — leaving .next out
+# meant uploading 419MB of local build on every deploy, and the deployment sat
+# in "Initializing" until it gave up.
+#
+# Leading slashes matter: a bare `supabase/` matches a directory of that name at
+# any depth, which silently excluded src/lib/supabase/ and broke the build with
+# "Can't resolve '@/lib/supabase/server'".
+
+# Built on Vercel, never uploaded.
+/.next/
+/node_modules/
+
+# A read-only comparison copy that only the equivalence test imports.
 /design_handoff_capital_call_engine 2/
+
+# Migrations, sample workbooks and local tooling: not part of the app bundle.
 /supabase/
 /samples/
 /.claude/
+/.git/
+
+# TypeScript incremental caches, rebuilt on demand.
+*.tsbuildinfo

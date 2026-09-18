@@ -23,20 +23,21 @@
  * workbook differ in zip metadata, which says nothing about the data.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import * as XLSX from 'xlsx';
 import { describe, expect, it } from 'vitest';
 import { compute } from '@/engine';
-import { newModelFromTemplate } from '@/engine/fixtures/illustrative-fund';
-import type { CallModel } from '@/engine/types';
-import { parseWorkbook, type WorkbookLike, type WorkbookReader } from '../parse-workbook';
+import {
+  assemble,
+  parseAsApp,
+  parseCommitted,
+  publishIfRequested,
+  type Row,
+  type Tab,
+} from './sample-support';
 
 const SAMPLE_PATH = fileURLToPath(
   new URL('../../../../samples/meridian-growth-partners-iii-call-4.xlsx', import.meta.url),
 );
-
-type Row = (string | number)[];
 
 // ---------------------------------------------------------------------------
 // The fund
@@ -187,37 +188,17 @@ const README: Row[] = [
 
 // ---------------------------------------------------------------------------
 
-/** Assemble the workbook. Input tabs only — see the note at the top of the file. */
-function build(): XLSX.WorkBook {
-  const wb = XLSX.utils.book_new();
-  const add = (rows: Row[], name: string) =>
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), name);
+/** Input tabs only — see the note at the top of the file. */
+const TABS: readonly Tab[] = [
+  ['README', README],
+  ['Fund_Setup', SETUP],
+  ['LP_Register', REGISTER],
+  ['Call_Components', COMPONENTS],
+  ['Management_Fee', FEE],
+  ['Transfers', TRANSFERS],
+];
 
-  add(README, 'README');
-  add(SETUP, 'Fund_Setup');
-  add(REGISTER, 'LP_Register');
-  add(COMPONENTS, 'Call_Components');
-  add(FEE, 'Management_Fee');
-  add(TRANSFERS, 'Transfers');
-  return wb;
-}
-
-/**
- * Parse exactly as the Set up screen does, including its baseline.
- *
- * The baseline matters: `parseWorkbook` layers onto it field by field, so a tab
- * this workbook left blank would inherit the illustrative fund's value. Parsing
- * against the same baseline the app uses is what proves nothing leaks through.
- */
-function parse(wb: XLSX.WorkBook): CallModel {
-  return parseWorkbook(
-    XLSX as unknown as WorkbookReader,
-    wb as unknown as WorkbookLike,
-    newModelFromTemplate(),
-  );
-}
-
-/** One expected figure, named for the assertion message. */
+/** Column names for `EXPECTED`, so a failure says which figure is wrong. */
 const EXPECTED_COLUMNS = [
   ...COMPONENT_ROWS.map((c) => String(c[1])),
   'Fee_Rate', 'Fee_Gross', 'Fee_Offset', 'Fee_Net',
@@ -225,8 +206,8 @@ const EXPECTED_COLUMNS = [
 ];
 
 describe('the sample input workbook', () => {
-  const workbook = build();
-  const model = parse(workbook);
+  const workbook = assemble(TABS);
+  const model = parseAsApp(workbook);
   const result = compute(model);
 
   it('inherits nothing from the illustrative baseline', () => {
@@ -287,13 +268,7 @@ describe('the sample input workbook', () => {
   });
 
   it('matches the workbook committed in samples/', () => {
-    if (process.env.WRITE_SAMPLE) {
-      writeFileSync(SAMPLE_PATH, XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
-    }
-
-    const committed = parse(
-      XLSX.read(readFileSync(SAMPLE_PATH), { type: 'buffer' }),
-    );
-    expect(committed).toEqual(model);
+    publishIfRequested(SAMPLE_PATH, workbook);
+    expect(parseCommitted(SAMPLE_PATH)).toEqual(model);
   });
 });

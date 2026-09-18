@@ -10,18 +10,20 @@ without hand-typing a register.
 Every figure ties, so nothing here should raise a WARN or a FAIL. If the app
 shows one, the app is wrong.
 
-## About the Expected_Output tab
+## Input only
 
-The figures on it come from the **delivered spec engine**
-(`design_handoff_capital_call_engine 2/engine.js`), not from the engine that
-reads them. That matters: a fixture an engine generated for itself only shows
-the engine is self-consistent, and its green check in the Checks tab would mean
-nothing. These come from a second implementation, so `Expected_Output: OK` on
-upload is a real statement about the arithmetic.
+These are what a client sends: `Fund_Setup`, `LP_Register`, `Call_Components`,
+`Management_Fee`, `Transfers`. Nothing else.
 
-The awkward cases — applied transfers, excused investors, zero-basis
-components, over-calls — are covered by `src/engine/fixtures/scenarios.ts`
-rather than by a workbook.
+The handoff template also carries an `Expected_Output` tab. That tab describes
+the **allocation sheet the app produces** — `export-allocation.ts` keeps its
+column order so the two can be diffed — so no client would ever fill one in,
+and a sample that shipped one would teach the wrong thing about the format.
+
+The figures that tab would have held are assertions in
+`src/adapters/workbook/__tests__/sample-workbook.test.ts` instead, taken from
+the delivered spec engine rather than from ours, which is the only way an
+expected answer is worth anything.
 
 ## Regenerating
 

@@ -7,14 +7,17 @@
  *   WRITE_SAMPLE=1 npx vitest run src/adapters/workbook/__tests__/sample-workbook.test.ts
  *
  * Without that flag the test only reads. It parses the definition through the
- * real parser, checks the call ties out and agrees with the Expected_Output
- * figures, and then checks the committed file parses to the same model — so the
- * shipped sample cannot drift away from the definition, and a sample that would
- * show a FAIL on upload cannot be shipped.
+ * real parser, checks the call ties out and computes to the figures in
+ * `EXPECTED`, and then checks the committed file parses to the same model — so
+ * the shipped sample cannot drift away from the definition, and a sample that
+ * would show a FAIL on upload cannot be shipped.
  *
- * The Expected_Output figures are literals taken from the delivered spec
- * engine, not from this one. See the comment on `EXPECTED` for why that
- * distinction is the whole point of the tab.
+ * The workbook carries input tabs only, and deliberately no Expected_Output.
+ * That tab in the handoff template describes the sheet the engine *produces* —
+ * `export-allocation.ts` keeps its column order — so no client would ever fill
+ * one in, and shipping a sample with one would teach the wrong thing about the
+ * format. Its figures live below as assertions instead, which is where an
+ * expected answer belongs.
  *
  * The models are compared rather than the bytes: two writes of the same
  * workbook differ in zip metadata, which says nothing about the data.
@@ -96,10 +99,8 @@ const COMPONENT_HEADER: Row = [
   'Allocation_Basis', 'Reduces_Unfunded', 'Excused_LP_IDs', 'Notes',
 ];
 
-// Component names carry no punctuation and share no leading words. The
-// Expected_Output tab matches its columns back to these names by loose prefix,
-// so "Project Helios" alongside "Project Helios II" would be ambiguous, and a
-// hyphen in a name would stop its column matching at all.
+// Component names double as column headings on the allocation sheet the app
+// exports, so they stay free of punctuation and share no leading words.
 const COMPONENT_ROWS: Row[] = [
   ['C1', 'Project Helios', 'Deal', 6200000, 'Commitment', 'Y', '', 'Platform acquisition; allocated on committed capital.'],
   ['C2', 'Project Orion', 'Deal', 3400000, 'Commitment', 'Y', '', 'Bolt-on acquisition; allocated on committed capital.'],
@@ -142,18 +143,16 @@ const TRANSFERS: Row[] = [
 ];
 
 /**
- * The Expected_Output tab: this fund's figures as produced by the delivered
- * spec engine, `design_handoff_capital_call_engine 2/engine.js`, transcribed
- * here as literals.
+ * What this call should come to, per investor.
  *
- * Deliberately NOT generated from this engine's own output. A fixture an engine
- * wrote for itself only shows the engine is self-consistent; it would agree
- * with a wrong answer just as happily, and the green check in the Checks tab
- * would mean nothing. These came from a separate implementation, so a
- * regression in the port shows up as a diff.
+ * Produced by the delivered spec engine, `design_handoff_capital_call_engine
+ * 2/engine.js`, and transcribed here as literals. Deliberately NOT generated
+ * from this engine's own output: a fixture an engine wrote for itself only
+ * shows the engine is self-consistent, and would agree with a wrong answer
+ * just as happily.
  *
  * Do not regenerate from `compute()`. If a figure here looks wrong, the spec
- * engine and the port disagree, and that disagreement is the finding.
+ * engine and this one disagree, and that disagreement is the finding.
  *
  * Columns: LP_ID, the five components in order, then the fee and roll-forward.
  */
@@ -179,15 +178,17 @@ const README: Row[] = [
   ['  Call_Components   One row per deal and per expense in this call.'],
   ['  Management_Fee    Fee basis, rate, period and offsets.'],
   ['  Transfers         Secondary transfers effective on or before the call date.'],
-  ['  Expected_Output   Regression fixture. The engine checks its result against it.'],
   [''],
   ['This tab, and any tab not listed above, is ignored.'],
+  [''],
+  ['There is no expected-output tab: the allocation sheet is what the app'],
+  ['produces from these inputs, not something you fill in.'],
 ];
 
 // ---------------------------------------------------------------------------
 
-/** Assemble the workbook, with the Expected_Output tab only once it is known. */
-function build(expected: Row[] | null): XLSX.WorkBook {
+/** Assemble the workbook. Input tabs only — see the note at the top of the file. */
+function build(): XLSX.WorkBook {
   const wb = XLSX.utils.book_new();
   const add = (rows: Row[], name: string) =>
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), name);
@@ -198,7 +199,6 @@ function build(expected: Row[] | null): XLSX.WorkBook {
   add(COMPONENTS, 'Call_Components');
   add(FEE, 'Management_Fee');
   add(TRANSFERS, 'Transfers');
-  if (expected) add(expected, 'Expected_Output');
   return wb;
 }
 
@@ -217,59 +217,15 @@ function parse(wb: XLSX.WorkBook): CallModel {
   );
 }
 
-/** The Expected_Output tab, laid out around the `EXPECTED` figures. */
-function expectedOutputTab(): Row[] {
-  const componentColumns = COMPONENT_ROWS.map((c) => String(c[1]).replace(/ /g, '_'));
-
-  const header: Row = [
-    'LP_ID', 'LP_Name', 'Commitment', 'Opening_UCC', 'Opening_Paid_In',
-    ...componentColumns, 'Fee_Rate', 'Fee_Gross', 'Fee_Offset', 'Fee_Net',
-    'Total_Call', 'Reduces_Unfunded_Amt', 'Closing_UCC', 'Closing_Paid_In',
-  ];
-
-  // The opening columns are inputs echoed back for the reader's benefit; the
-  // engine skips them when diffing. Taken from the register so the two tabs
-  // cannot disagree.
-  const body: Row[] = EXPECTED.map((row) => {
-    const lp = LP_ROWS.find((l) => l[0] === row[0]);
-    if (!lp) throw new Error(`Expected_Output names ${row[0]}, which is not in LP_Register`);
-    return [row[0], lp[1], lp[3], lp[5], lp[4], ...row.slice(1)];
-  });
-
-  // A blank LP_ID is how the parser knows the table has ended, so this reads as
-  // a footer rather than as a ninth investor. Its figures are never checked.
-  // Rounded, because summing cents in binary floating point drifts.
-  const down = (rows: Row[], column: number) =>
-    Math.round(rows.reduce((s, r) => s + Number(r[column]), 0) * 100) / 100;
-
-  const componentTotals = COMPONENT_ROWS.map((_, i) => down(EXPECTED, 1 + i));
-  const feeAndRollForward = [7, 8, 9, 10, 11, 12, 13].map((c) => down(EXPECTED, c));
-
-  const total: Row = [
-    '', 'TOTAL',
-    down(LP_ROWS, 3), // Commitment
-    down(LP_ROWS, 5), // Opening_UCC
-    down(LP_ROWS, 4), // Opening_Paid_In
-    ...componentTotals,
-    '', // Fee_Rate does not total
-    ...feeAndRollForward,
-  ];
-
-  const blanks = header.slice(1).map(() => '');
-  return [
-    ['Expected Output — golden test case', ...blanks],
-    [
-      'Figures produced by the delivered spec engine. The app checks its own result against them.',
-      ...blanks,
-    ],
-    header,
-    ...body,
-    total,
-  ];
-}
+/** One expected figure, named for the assertion message. */
+const EXPECTED_COLUMNS = [
+  ...COMPONENT_ROWS.map((c) => String(c[1])),
+  'Fee_Rate', 'Fee_Gross', 'Fee_Offset', 'Fee_Net',
+  'Total_Call', 'Reduces_Unfunded_Amt', 'Closing_UCC', 'Closing_Paid_In',
+];
 
 describe('the sample input workbook', () => {
-  const workbook = build(expectedOutputTab());
+  const workbook = build();
   const model = parse(workbook);
   const result = compute(model);
 
@@ -289,20 +245,41 @@ describe('the sample input workbook', () => {
     expect(result.checks.filter((c) => c.level === 'warn')).toEqual([]);
   });
 
-  it('computes to the spec engine’s figures, to the cent', () => {
-    // `EXPECTED` came from the delivered spec engine, not from this one, so
-    // this is a real check on the arithmetic and not a tautology. It also
-    // covers the round trip: every figure has to survive being written to a
-    // cell and read back for the diff to come out empty.
-    expect(model.golden).toHaveLength(LP_ROWS.length);
-    expect(result.goldenDiffs).toEqual([]);
+  it('carries input only, with no expected-output tab', () => {
+    // A client has no expected output to give. If one ever appears here, the
+    // sample has started describing the app's own result back to it.
+    expect(workbook.SheetNames).toEqual([
+      'README', 'Fund_Setup', 'LP_Register', 'Call_Components', 'Management_Fee', 'Transfers',
+    ]);
+    expect(model.golden).toBeNull();
   });
 
-  it('names only investors that are in the register', () => {
-    // A typo in an Expected_Output LP_ID would otherwise surface as a missing
-    // investor on upload rather than as a broken fixture.
-    const ids = LP_ROWS.map((l) => l[0]);
-    expect(EXPECTED.map((r) => r[0])).toEqual(ids);
+  it('computes to the spec engine’s figures, to the cent', () => {
+    // `EXPECTED` came from the delivered spec engine, not from this one, so
+    // this is a real check on the arithmetic rather than a tautology. Asserted
+    // here instead of shipped in the workbook, because an expected answer
+    // belongs in a test.
+    expect(EXPECTED.map((r) => r[0])).toEqual(LP_ROWS.map((l) => l[0]));
+
+    EXPECTED.forEach((expected) => {
+      const row = result.rows.find((r) => r.LP_ID === expected[0]);
+      expect(row, `${expected[0]} is missing from the call`).toBeDefined();
+
+      const actual = [
+        ...COMPONENT_ROWS.map((c) => row!.comps.find((x) => x.id === c[0])?.amt ?? 0),
+        row!.feeRate, row!.feeGross, row!.feeOffset, row!.feeNet,
+        row!.total, row!.reduces, row!.closingUCC, row!.closingPaid,
+      ];
+
+      actual.forEach((value, i) => {
+        // Named so a failure says which investor and which column, rather than
+        // pointing at an index in an array of eighty numbers.
+        expect(value, `${expected[0]} · ${EXPECTED_COLUMNS[i]}`).toBeCloseTo(
+          Number(expected[i + 1]),
+          2,
+        );
+      });
+    });
   });
 
   it('gives every investor an address to send the notice to', () => {

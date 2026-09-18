@@ -558,15 +558,39 @@ input.cell:read-only {
 /* Notices are printed one per page; everything chrome-like disappears. */
 
 @media print {
+  /*
+   * Browsers draw their own header and footer — the document title and today's
+   * date at the top, the URL and page number at the bottom — in the page
+   * margin. There is no property that turns them off, but with no margin there
+   * is nowhere to put them, so they go. The notice supplies its own margin
+   * below, which is why the page does not end up printed edge to edge.
+   *
+   * A reader can still switch them back on in the print dialog. The downloaded
+   * PDF has no such chrome at all, which is the one to hand an investor.
+   */
+  @page {
+    margin: 0;
+    size: A4;
+  }
+
   [data-noprint] {
     display: none !important;
   }
+
   [data-notice] {
     box-shadow: none !important;
     border: 0 !important;
+    /* The page margin the browser is no longer providing. */
     margin: 0 !important;
+    padding: 18mm 16mm !important;
+    max-width: none !important;
     page-break-after: always;
   }
+
+  [data-notice]:last-of-type {
+    page-break-after: auto;
+  }
+
   .app {
     background: #fff;
     color: #000;

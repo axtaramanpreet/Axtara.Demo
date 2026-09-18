@@ -33,6 +33,39 @@ export function NoticesTab({
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
 
+  /**
+   * Ask the server for the file.
+   *
+   * A plain link would do, but an error would then arrive as a JSON body the
+   * browser saves as a download — so the response is checked first and the
+   * message surfaced, and only a real file is handed to the disk.
+   */
+  async function download(lpId?: string) {
+    setError(null);
+    const query = lpId ? `?lpId=${encodeURIComponent(lpId)}` : '';
+    try {
+      const response = await fetch(`/api/calls/${call.id}/notices/pdf${query}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        setError(body.error ?? 'The notices could not be produced.');
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      // The server names the file; this only has to not override it.
+      link.download = fileNameFrom(response.headers.get('Content-Disposition')) ?? '';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setError('The download could not be started.');
+    }
+  }
+
   const active = result.rows.filter((r) => r.isActive);
   const selected = active.find((r) => r.LP_ID === selectedLp) ?? active[0];
 
@@ -75,8 +108,11 @@ export function NoticesTab({
         data-noprint="1"
         style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}
       >
-        <Button variant="secondary" onClick={() => window.print()}>
-          Print / save PDF
+        <Button variant="secondary" onClick={() => download()}>
+          Download all as .zip
+        </Button>
+        <Button variant="ghost" onClick={() => window.print()}>
+          Print
         </Button>
         <Button variant="ghost" onClick={() => setShowAll((v) => !v)}>
           {showAll ? 'Show one investor' : `Show all ${active.length} notices`}
@@ -218,6 +254,9 @@ export function NoticesTab({
                         This notice has been issued and cannot be changed.
                       </span>
                     )}
+                    <Button variant="ghost" onClick={() => download(row.LP_ID)}>
+                      Download PDF
+                    </Button>
                   </span>
                 </div>
 
@@ -240,4 +279,27 @@ export function NoticesTab({
       </div>
     </div>
   );
+}
+
+/**
+ * The filename the server chose, out of `Content-Disposition`.
+ *
+ * Prefers the RFC 5987 `filename*`, which carries the real name — the plain
+ * `filename` beside it has had the em dash and anything else non-ASCII
+ * replaced, because not every client reads the encoded form.
+ */
+function fileNameFrom(header: string | null): string | null {
+  if (!header) return null;
+
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1]);
+    } catch {
+      // A malformed header is not worth failing a download over.
+    }
+  }
+
+  const plain = /filename="([^"]+)"/i.exec(header);
+  return plain ? plain[1] : null;
 }

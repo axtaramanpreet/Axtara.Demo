@@ -1,0 +1,10 @@
+{
+  // Everything tsconfig.json covers, plus the tests it leaves out.
+  //
+  // `next build` type-checks against tsconfig.json, which excludes tests: they
+  // do not ship, and they import the handoff reference that is not uploaded to
+  // the host. This config is what `npm run verify` uses, so the tests are still
+  // held to the same strictness as the app.
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules"]
+}

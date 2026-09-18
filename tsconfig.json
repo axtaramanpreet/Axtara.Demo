@@ -30,5 +30,11 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  // Tests are excluded so `next build`'s type check covers only what ships.
+  // They import the handoff reference, which is not uploaded to the host, and a
+  // production build failing over a test file's import is noise.
+  //
+  // They are still type-checked: `npm run verify` uses tsconfig.check.json,
+  // which includes them. Excluding them here must not mean nobody checks them.
+  "exclude": ["node_modules", "**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"]
 }

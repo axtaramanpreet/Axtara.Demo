@@ -52,12 +52,12 @@ export default async function ClientHomePage({
             <p className="text-muted">{homeHint(calls, openCall)}</p>
           </div>
           <div style={{ marginLeft: 'auto' }}>
-            <NewCallButton clientId={clientId} reuseCallId={notStarted?.id} />
+            <NewCallButton clientId={clientId} clientName={client.name} reuseCallId={notStarted?.id} />
           </div>
         </div>
 
         {calls.length === 0 ? (
-          <EmptyState clientId={clientId} />
+          <EmptyState clientId={clientId} clientName={client.name} />
         ) : (
           <>
             <CardGrid style={{ marginTop: 24 }}>
@@ -193,7 +193,7 @@ function CallRow({
   );
 }
 
-function EmptyState({ clientId }: { clientId: string }) {
+function EmptyState({ clientId, clientName }: { clientId: string; clientName: string }) {
   return (
     <Card style={{ maxWidth: 560, marginTop: 24 }} bodyPadding="28px">
       <h3>No capital calls yet</h3>
@@ -202,7 +202,7 @@ function EmptyState({ clientId }: { clientId: string }) {
         hand, or loading the illustrative template to see how it works.
       </p>
       <div style={{ marginTop: 18 }}>
-        <NewCallButton clientId={clientId} />
+        <NewCallButton clientId={clientId} clientName={clientName} />
       </div>
     </Card>
   );

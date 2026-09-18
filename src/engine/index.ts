@@ -8,6 +8,7 @@
  */
 
 export { compute } from './compute';
+export { emptyCall } from './empty-call';
 export { allocate, type AllocationPart } from './allocate';
 export { applyTransfers } from './transfers';
 export { buildNotice } from './notice';

@@ -11,7 +11,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { compute } from '@/engine';
+import { compute, emptyCall } from '@/engine';
 import { ILLUSTRATIVE_FUND } from '@/engine/fixtures/illustrative-fund';
 import { SCENARIOS } from '@/engine/fixtures/scenarios';
 import { createSupabaseRepository } from '../supabase-repository';
@@ -112,6 +112,44 @@ describe.skipIf(!up)('Supabase repository (integration)', () => {
     expect(lps.find((l) => l.LP_ID === 'LP01')?.Contact_Email).toBe(
       'treasury@alphapension.example',
     );
+  });
+
+  /**
+   * The write path used to invent values for anything left blank: 'USD' for the
+   * currency, 'Commitment' for both fee bases, and — worst — `Number('')`, which
+   * is 0, for the rounding decimals. A fund calling in cents that had simply not
+   * filled the field in was stored as rounding to whole units.
+   */
+  it('stores a blank call without inventing values for it', async () => {
+    const created = await repo.createCall(CLIENT_ID, emptyCall('Blank Fund, L.P.'), {
+      setup: 'empty',
+      lps: 'empty',
+      components: 'empty',
+      fee: 'empty',
+      transfers: 'empty',
+    });
+    const loaded = await repo.getCall(created.id);
+    const setup = loaded!.model.setup;
+
+    expect(setup.Fund_Name).toBe('Blank Fund, L.P.');
+    expect(setup.Reporting_Currency).toBe('');
+    expect(setup.Rounding_Decimals).toBe('');
+    expect(setup.Default_Mgmt_Fee_Basis).toBe('');
+    expect(setup.Call_Date).toBe('');
+    expect(setup.Payment_Due_Date).toBe('');
+    expect(loaded!.model.fee.Fee_Basis).toBe('');
+
+    // Blank still means cents, not whole units.
+    expect(compute(loaded!.model).d).toBe(2);
+  });
+
+  it('keeps a currency that was chosen, upper-cased for the column', async () => {
+    const model = emptyCall('Cased Fund, L.P.');
+    model.setup.Reporting_Currency = 'eur';
+    const created = await repo.createCall(CLIENT_ID, model, {
+      setup: 'manual', lps: 'empty', components: 'empty', fee: 'empty', transfers: 'empty',
+    });
+    expect((await repo.getCall(created.id))!.model.setup.Reporting_Currency).toBe('EUR');
   });
 
   // Note: nothing here locks a call. Issuing one is permanent by design — the

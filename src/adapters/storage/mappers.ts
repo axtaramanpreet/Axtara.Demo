@@ -115,15 +115,15 @@ export function fromIdList(v: unknown): string[] {
 export function toFundSetup(call: CallRow): FundSetup {
   return {
     Fund_Name: call.fund_name,
-    Reporting_Currency: call.reporting_currency,
+    Reporting_Currency: call.reporting_currency ?? '',
     Call_Number: call.call_no,
     Call_Date: call.call_date ?? '',
     Payment_Due_Date: call.payment_due_date ?? '',
     Default_Mgmt_Fee_Rate_Annual: toOptionalNumber(call.default_mgmt_fee_rate_annual),
-    Default_Mgmt_Fee_Basis: call.default_mgmt_fee_basis ?? 'Commitment',
+    Default_Mgmt_Fee_Basis: call.default_mgmt_fee_basis ?? '',
     Mgmt_Fee_Period_Fraction: toOptionalNumber(call.mgmt_fee_period_fraction),
     Org_Expense_Cap: toOptionalNumber(call.org_expense_cap),
-    Rounding_Decimals: call.rounding_decimals,
+    Rounding_Decimals: call.rounding_decimals ?? '',
     Rounding_Plug_LP_ID: call.rounding_plug_lp_id ?? '',
     Prepared_By: '',
   };
@@ -207,7 +207,7 @@ export function toCallModel(parts: CallParts): CallModel {
     lps: parts.register.map(toLPRow),
     components: parts.components.map(toComponentRow),
     fee: {
-      Fee_Basis: parts.call.fee_basis ?? 'Commitment',
+      Fee_Basis: parts.call.fee_basis ?? '',
       Default_Fee_Rate_Annual: toOptionalNumber(parts.call.fee_default_rate_annual),
       Fee_Period_Fraction: toOptionalNumber(parts.call.fee_period_fraction),
       Reduces_Unfunded: toYesNo(parts.call.fee_reduces_unfunded),
@@ -239,17 +239,17 @@ export function fromCallModel(model: CallModel) {
   const s = model.setup;
   return {
     fund_name: String(s.Fund_Name ?? ''),
-    reporting_currency: String(s.Reporting_Currency || 'USD'),
+    reporting_currency: currencyOrNull(s.Reporting_Currency),
     call_date: toStoredDate(s.Call_Date),
     payment_due_date: toStoredDate(s.Payment_Due_Date),
     default_mgmt_fee_rate_annual: numericOrNull(s.Default_Mgmt_Fee_Rate_Annual),
-    default_mgmt_fee_basis: String(s.Default_Mgmt_Fee_Basis || 'Commitment'),
+    default_mgmt_fee_basis: emptyToNull(s.Default_Mgmt_Fee_Basis),
     mgmt_fee_period_fraction: numericOrNull(s.Mgmt_Fee_Period_Fraction),
     org_expense_cap: numericOrNull(s.Org_Expense_Cap),
-    rounding_decimals: Number(s.Rounding_Decimals ?? 2),
+    rounding_decimals: decimalsOrNull(s.Rounding_Decimals),
     rounding_plug_lp_id: emptyToNull(s.Rounding_Plug_LP_ID),
 
-    fee_basis: String(model.fee.Fee_Basis || 'Commitment'),
+    fee_basis: emptyToNull(model.fee.Fee_Basis),
     fee_default_rate_annual: numericOrNull(model.fee.Default_Fee_Rate_Annual),
     fee_period_fraction: numericOrNull(model.fee.Fee_Period_Fraction),
     fee_reduces_unfunded: fromYesNo(model.fee.Reduces_Unfunded),
@@ -352,6 +352,30 @@ function toStoredDate(v: unknown): string | null {
 }
 
 /** A blank numeric field is null, not zero — a missing fee rate is not 0%. */
+/**
+ * An ISO currency code, or NULL when it has not been chosen.
+ *
+ * Upper-cased and trimmed because the column checks `^[A-Z]{3}$`, and an
+ * accountant typing `usd` should not be met with a constraint violation.
+ */
+function currencyOrNull(v: unknown): string | null {
+  const s = emptyToNull(v);
+  return s === null ? null : s.toUpperCase();
+}
+
+/**
+ * Rounding decimals, or NULL when they have not been chosen.
+ *
+ * Not `Number(v ?? 2)`: an unset field arrives as `''`, which is neither null
+ * nor undefined, so `??` never fired and `Number('')` stored 0 — silently
+ * turning "not decided" into "round to whole units" on a fund calling in
+ * cents. Blank means blank; the engine reads that as 2.
+ */
+function decimalsOrNull(v: unknown): number | null {
+  if (v === null || v === undefined || String(v).trim() === '') return null;
+  return Math.max(0, Math.round(Number(v)));
+}
+
 function numericOrNull(v: unknown): number | null {
   if (v === null || v === undefined || String(v).trim() === '') return null;
   return toStoredAmount(v);

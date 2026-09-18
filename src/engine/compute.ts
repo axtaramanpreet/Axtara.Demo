@@ -82,6 +82,31 @@ export function compute(model: CallModel): ComputeResult {
   const add = (level: CheckLevel, text: string) => checks.push({ level, text });
 
   // -------------------------------------------------------------------------
+  // 0. Is this call complete enough to issue?
+  //
+  // A new call starts blank, and setting it up happens over time — some typed,
+  // some from a workbook, some carried forward. That is fine while it is a
+  // draft. What must not happen is a blank reaching an investor: a notice with
+  // no due date is not a notice, and `canApprove` blocks on a failing check.
+  //
+  // The currency is a warning rather than a failure because the notice falls
+  // back to USD for display, so the figures are still readable — but nobody
+  // should be issuing in a currency they did not state.
+  // -------------------------------------------------------------------------
+  if (!String(setup.Fund_Name ?? '').trim()) {
+    add('fail', 'Fund_Name is not set — the notice would go out with no fund on it.');
+  }
+  if (!callDate) {
+    add('fail', 'Call_Date is not set.');
+  }
+  if (!serialToISO(setup.Payment_Due_Date)) {
+    add('fail', 'Payment_Due_Date is not set — investors would have no date to wire by.');
+  }
+  if (!String(setup.Reporting_Currency ?? '').trim()) {
+    add('warn', 'Reporting_Currency is not set — amounts are shown in USD by default.');
+  }
+
+  // -------------------------------------------------------------------------
   // 1. The register as at the call date
   // -------------------------------------------------------------------------
   const tr = applyTransfers(lps, transfers, callDate, d);

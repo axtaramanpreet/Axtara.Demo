@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createBrowserSupabase } from '@/adapters/storage/supabase-client';
 import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
-import { newModelFromTemplate } from '@/engine/fixtures/illustrative-fund';
+import { emptyCall } from '@/engine';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -13,15 +13,23 @@ import { Button } from '@/components/ui/button';
  * If a not-started call already exists it is reused rather than piling up empty
  * calls — clicking twice should not leave the fund with two Call No. 4s.
  *
- * A new call is seeded from the illustrative template only as a starting shape;
- * the Source step is where the accountant replaces it with their workbook,
- * manual entry, or a register carried forward from the previous call.
+ * A new call starts empty apart from the fund's own name. It used to be seeded
+ * from the illustrative fixture, which meant a real call arrived carrying
+ * another fund's fee, organizational cap and rounding plug, with the notice
+ * headed "Illustrative Fund II, L.P." — none of it chosen, all of it plausible.
+ *
+ * The Source step is where the figures come from: an uploaded workbook, the
+ * previous call carried forward, or typing. The illustrative data is still
+ * there as an explicit choice.
  */
 export function NewCallButton({
   clientId,
+  clientName,
   reuseCallId,
 }: {
   clientId: string;
+  /** The fund's name, which becomes the new call's Fund_Name. */
+  clientName: string;
   /** An existing not-started call to open instead of creating another. */
   reuseCallId?: string;
 }) {
@@ -40,11 +48,11 @@ export function NewCallButton({
     setBusy(true);
     try {
       const repo = createSupabaseRepository(createBrowserSupabase());
-      const created = await repo.createCall(clientId, newModelFromTemplate(), {
-        setup: 'template',
+      const created = await repo.createCall(clientId, emptyCall(clientName), {
+        setup: 'empty',
         lps: 'empty',
         components: 'empty',
-        fee: 'template',
+        fee: 'empty',
         transfers: 'empty',
       });
       router.push(`/clients/${clientId}/calls/${created.id}/setup`);

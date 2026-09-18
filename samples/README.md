@@ -10,6 +10,15 @@ without hand-typing a register.
 Every figure ties, so nothing here should raise a WARN or a FAIL. If the app
 shows one, the app is wrong.
 
+## About the Expected_Output tab
+
+The figures on it come from the **delivered spec engine**
+(`design_handoff_capital_call_engine 2/engine.js`), not from the engine that
+reads them. That matters: a fixture an engine generated for itself only shows
+the engine is self-consistent, and its green check in the Checks tab would mean
+nothing. These come from a second implementation, so `Expected_Output: OK` on
+upload is a real statement about the arithmetic.
+
 The awkward cases — applied transfers, excused investors, zero-basis
 components, over-calls — are covered by `src/engine/fixtures/scenarios.ts`
 rather than by a workbook.

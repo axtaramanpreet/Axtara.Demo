@@ -7,9 +7,14 @@
  *   WRITE_SAMPLE=1 npx vitest run src/adapters/workbook/__tests__/sample-workbook.test.ts
  *
  * Without that flag the test only reads. It parses the definition through the
- * real parser, checks the call ties out, and then checks the committed file
- * parses to the same model — so the shipped sample cannot drift away from the
- * definition, and a sample that would show a FAIL on upload cannot be shipped.
+ * real parser, checks the call ties out and agrees with the Expected_Output
+ * figures, and then checks the committed file parses to the same model — so the
+ * shipped sample cannot drift away from the definition, and a sample that would
+ * show a FAIL on upload cannot be shipped.
+ *
+ * The Expected_Output figures are literals taken from the delivered spec
+ * engine, not from this one. See the comment on `EXPECTED` for why that
+ * distinction is the whole point of the tab.
  *
  * The models are compared rather than the bytes: two writes of the same
  * workbook differ in zip metadata, which says nothing about the data.
@@ -136,6 +141,33 @@ const TRANSFERS: Row[] = [
     'Transfer_Pct', 'Transfers_Commitment', 'Transfers_Paid_In', 'Transfers_UCC', 'Notes'],
 ];
 
+/**
+ * The Expected_Output tab: this fund's figures as produced by the delivered
+ * spec engine, `design_handoff_capital_call_engine 2/engine.js`, transcribed
+ * here as literals.
+ *
+ * Deliberately NOT generated from this engine's own output. A fixture an engine
+ * wrote for itself only shows the engine is self-consistent; it would agree
+ * with a wrong answer just as happily, and the green check in the Checks tab
+ * would mean nothing. These came from a separate implementation, so a
+ * regression in the port shows up as a diff.
+ *
+ * Do not regenerate from `compute()`. If a figure here looks wrong, the spec
+ * engine and the port disagree, and that disagreement is the finding.
+ *
+ * Columns: LP_ID, the five components in order, then the fee and roll-forward.
+ */
+const EXPECTED: Row[] = [
+  ['LP01', 1614583.33, 885416.67, 325520.83, 74218.75, 31250, 0.0175, 33687.5, 21377.09, 12310.41, 2943299.99, 2912049.99, 13337950.01, 11693299.99],
+  ['LP02', 775000, 425000, 156250, 35625, 15000, 0.0175, 16170, 10261.01, 5908.99, 1412783.99, 1397783.99, 6402216.01, 5612783.99],
+  ['LP03', 387500, 212500, 78125, 17812.5, 7500, 0.015, 6930, 4397.57, 2532.43, 705969.93, 698469.93, 3201530.07, 2805969.93],
+  ['LP04', 1937500, 1062500, 390625, 89062.49, 37500, 0.0175, 40425, 25652.5, 14772.5, 3531959.99, 3494459.99, 16005540.01, 14031959.99],
+  ['LP05', 613541.67, 336458.33, 123697.92, 28203.13, 11875, 0.0175, 12801.25, 8123.29, 4677.96, 1118454.01, 1106579.01, 5068420.99, 4443454.01],
+  ['LP06', 290625, 159375, 58593.75, 13359.38, 5625, 0.0175, 6063.75, 3847.87, 2215.88, 529794.01, 524169.01, 2400830.99, 2104794.01],
+  ['LP07', 516666.67, 283333.33, 104166.67, 23750, 10000, 0.0175, 10780, 6840.67, 3939.33, 941856, 931856, 4268144, 3741856],
+  ['GP01', 64583.33, 35416.67, 13020.83, 2968.75, 1250, 0, 0, 0, 0, 117239.58, 115989.58, 534010.42, 467239.58],
+];
+
 const README: Row[] = [
   ['Capital Call Engine — Input Workbook'],
   [''],
@@ -185,8 +217,8 @@ function parse(wb: XLSX.WorkBook): CallModel {
   );
 }
 
-/** The Expected_Output tab, built from a computed call. */
-function expectedOutputTab(result: ReturnType<typeof compute>): Row[] {
+/** The Expected_Output tab, laid out around the `EXPECTED` figures. */
+function expectedOutputTab(): Row[] {
   const componentColumns = COMPONENT_ROWS.map((c) => String(c[1]).replace(/ /g, '_'));
 
   const header: Row = [
@@ -195,26 +227,41 @@ function expectedOutputTab(result: ReturnType<typeof compute>): Row[] {
     'Total_Call', 'Reduces_Unfunded_Amt', 'Closing_UCC', 'Closing_Paid_In',
   ];
 
-  const body: Row[] = result.rows.map((r) => [
-    r.LP_ID, String(r.LP_Name), Number(r.Commitment), r.openUCC, r.openPaid,
-    ...COMPONENT_ROWS.map((c) => r.comps.find((x) => x.id === c[0])?.amt ?? 0),
-    r.feeRate, r.feeGross, r.feeOffset, r.feeNet,
-    r.total, r.reduces, r.closingUCC, r.closingPaid,
-  ]);
+  // The opening columns are inputs echoed back for the reader's benefit; the
+  // engine skips them when diffing. Taken from the register so the two tabs
+  // cannot disagree.
+  const body: Row[] = EXPECTED.map((row) => {
+    const lp = LP_ROWS.find((l) => l[0] === row[0]);
+    if (!lp) throw new Error(`Expected_Output names ${row[0]}, which is not in LP_Register`);
+    return [row[0], lp[1], lp[3], lp[5], lp[4], ...row.slice(1)];
+  });
 
-  const t = result.totals;
-  // A blank LP_ID is how the parser knows the table has ended, so the TOTAL row
-  // reads as a footer rather than as a ninth investor.
+  // A blank LP_ID is how the parser knows the table has ended, so this reads as
+  // a footer rather than as a ninth investor. Its figures are never checked.
+  // Rounded, because summing cents in binary floating point drifts.
+  const down = (rows: Row[], column: number) =>
+    Math.round(rows.reduce((s, r) => s + Number(r[column]), 0) * 100) / 100;
+
+  const componentTotals = COMPONENT_ROWS.map((_, i) => down(EXPECTED, 1 + i));
+  const feeAndRollForward = [7, 8, 9, 10, 11, 12, 13].map((c) => down(EXPECTED, c));
+
   const total: Row = [
-    '', 'TOTAL', t.Commitment, t.openUCC, t.openPaid,
-    ...t.comps, '', t.feeGross, t.feeOffset, t.feeNet,
-    t.total, t.reduces, t.closingUCC, t.closingPaid,
+    '', 'TOTAL',
+    down(LP_ROWS, 3), // Commitment
+    down(LP_ROWS, 5), // Opening_UCC
+    down(LP_ROWS, 4), // Opening_Paid_In
+    ...componentTotals,
+    '', // Fee_Rate does not total
+    ...feeAndRollForward,
   ];
 
   const blanks = header.slice(1).map(() => '');
   return [
-    ['Expected Output — regression fixture', ...blanks],
-    ['The engine compares its own result against these rows on every compute.', ...blanks],
+    ['Expected Output — golden test case', ...blanks],
+    [
+      'Figures produced by the delivered spec engine. The app checks its own result against them.',
+      ...blanks,
+    ],
     header,
     ...body,
     total,
@@ -222,11 +269,7 @@ function expectedOutputTab(result: ReturnType<typeof compute>): Row[] {
 }
 
 describe('the sample input workbook', () => {
-  // Built without Expected_Output first: the fixture is the engine's own
-  // output, so it can only be written once the call has been computed.
-  const draft = parse(build(null));
-  const drafted = compute(draft);
-  const workbook = build(expectedOutputTab(drafted));
+  const workbook = build(expectedOutputTab());
   const model = parse(workbook);
   const result = compute(model);
 
@@ -246,11 +289,20 @@ describe('the sample input workbook', () => {
     expect(result.checks.filter((c) => c.level === 'warn')).toEqual([]);
   });
 
-  it('carries an Expected_Output fixture that the engine agrees with', () => {
-    // Every figure has to survive being written to a cell and read back, so
-    // this is a round-trip check on the parser, not on the arithmetic.
+  it('computes to the spec engine’s figures, to the cent', () => {
+    // `EXPECTED` came from the delivered spec engine, not from this one, so
+    // this is a real check on the arithmetic and not a tautology. It also
+    // covers the round trip: every figure has to survive being written to a
+    // cell and read back for the diff to come out empty.
     expect(model.golden).toHaveLength(LP_ROWS.length);
     expect(result.goldenDiffs).toEqual([]);
+  });
+
+  it('names only investors that are in the register', () => {
+    // A typo in an Expected_Output LP_ID would otherwise surface as a missing
+    // investor on upload rather than as a broken fixture.
+    const ids = LP_ROWS.map((l) => l[0]);
+    expect(EXPECTED.map((r) => r[0])).toEqual(ids);
   });
 
   it('gives every investor an address to send the notice to', () => {

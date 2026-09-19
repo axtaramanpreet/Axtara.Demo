@@ -177,12 +177,27 @@ p {
   color: var(--foreground);
 }
 
+/* Sizes. The default is 34px; these are the only two departures from it. */
+.btn-lg {
+  height: 38px;
+  padding: 0 18px;
+}
+.btn-sm {
+  height: 28px;
+  padding: 0 10px;
+  gap: 5px;
+}
+
 /* Square and label-free. The width is fixed rather than driven by the icon, so
    the spinner that replaces the icon mid-action cannot shrink the button and
    shuffle every control beside it. 34px matches the menu trigger, so a row of
    mixed controls sits level. */
 .btn-icon {
   width: 34px;
+  padding: 0;
+}
+.btn-icon.btn-sm {
+  width: 28px;
   padding: 0;
 }
 

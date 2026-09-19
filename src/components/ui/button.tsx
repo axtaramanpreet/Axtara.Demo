@@ -4,8 +4,10 @@ type Variant = 'primary' | 'secondary' | 'ghost';
 
 interface Common extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
-  /** Renders the taller 38px call-to-action used for the primary action on a page. */
+  /** The taller 38px call-to-action used for the primary action on a page. */
   large?: boolean;
+  /** The shorter 28px control used inside a dense list, where 34px crowds a row. */
+  small?: boolean;
   /**
    * Shows a spinner in place of the leading icon, and disables the button.
    *
@@ -30,15 +32,18 @@ type ButtonProps =
  * `secondary` carries a border and shadow so it reads as raised against the
  * page; `ghost` is flat until hovered. Disabled uses opacity rather than a
  * colour change, so a disabled primary still looks like the primary action.
+ *
+ * All three sizes are classes rather than inline styles, so a caller cannot
+ * end up with a height the stylesheet does not know about.
  */
 export function Button({
   variant = 'secondary',
   large,
+  small,
   loading,
   iconOnly,
   disabled,
   className,
-  style,
   children,
   ...props
 }: ButtonProps) {
@@ -47,10 +52,16 @@ export function Button({
       {...props}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={['btn', `btn-${variant}`, iconOnly && 'btn-icon', className]
+      className={[
+        'btn',
+        `btn-${variant}`,
+        large && 'btn-lg',
+        small && 'btn-sm',
+        iconOnly && 'btn-icon',
+        className,
+      ]
         .filter(Boolean)
         .join(' ')}
-      style={large ? { height: 38, padding: '0 18px', ...style } : style}
     >
       {loading && <span className="spinner" aria-hidden />}
       {children}

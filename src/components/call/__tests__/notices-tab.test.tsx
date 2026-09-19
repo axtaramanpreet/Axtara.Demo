@@ -120,6 +120,27 @@ describe('the detail header', () => {
   });
 });
 
+/**
+ * The investor list and the notices carry the same two actions, so an assertion
+ * against the whole document cannot tell which one it found. These split it.
+ */
+function tiles(html: string) {
+  const start = html.indexOf('aria-label="Investors"');
+  const end = html.indexOf('</nav>');
+  expect(start, 'no investor list in the markup').toBeGreaterThan(-1);
+  return html.slice(start, end);
+}
+
+function notices(html: string) {
+  return html.slice(html.indexOf('</nav>'));
+}
+
+/** The opening tag of the button with this accessible name. */
+function control(html: string, label: string) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`<button[^>]*aria-label="${escaped}"[^>]*>`).exec(html)?.[0] ?? null;
+}
+
 describe('the actions on one notice', () => {
   /** Every icon button in the markup. */
   function iconButtons(html: string) {
@@ -129,13 +150,13 @@ describe('the actions on one notice', () => {
   const lp = active[0].LP_Name;
 
   it('offers approval, and not sending, on a draft', () => {
-    const html = callWith('draft');
+    const html = notices(callWith('draft'));
     expect(html).toContain(`aria-label="Approve the notice for ${lp}"`);
     expect(html).not.toContain(`aria-label="Send the notice to ${lp}"`);
   });
 
   it('offers sending and undo once it is approved', () => {
-    const html = callWith('approved');
+    const html = notices(callWith('approved'));
     expect(html).toContain(`aria-label="Send the notice to ${lp}"`);
     expect(html).toContain(`aria-label="Take the notice for ${lp} back to draft"`);
     expect(html).not.toContain(`aria-label="Approve the notice for ${lp}"`);
@@ -143,7 +164,7 @@ describe('the actions on one notice', () => {
 
   it('offers nothing but the download once it is sent', () => {
     // An issued notice is frozen; there is no control that could change it.
-    const html = callWith('sent');
+    const html = notices(callWith('sent'));
     expect(html).toContain(`aria-label="Download the notice for ${lp}"`);
     expect(html).not.toContain(`aria-label="Approve the notice for ${lp}"`);
     expect(html).not.toContain(`aria-label="Send the notice to ${lp}"`);
@@ -166,6 +187,41 @@ describe('the actions on one notice', () => {
     for (const button of iconButtons(callWith('approved'))) {
       expect(button, button).toMatch(/title="[^"]+"/);
     }
+  });
+});
+
+describe('the actions on an investor tile', () => {
+  const lp = active[0].LP_Name;
+  const approve = `Approve the notice for ${lp}`;
+  const undo = `Take the notice for ${lp} back to draft`;
+
+  it('carries both on every tile, in every state', () => {
+    // Hiding them would move the rows around as a call progresses, and would
+    // leave nothing to explain why an investor has no approve on them.
+    for (const status of ['draft', 'approved', 'sent'] as const) {
+      const html = tiles(callWith(status));
+      expect(control(html, approve), `approve missing on ${status}`).not.toBeNull();
+      expect(control(html, undo), `undo missing on ${status}`).not.toBeNull();
+    }
+  });
+
+  it('enables approve only while the notice is a draft', () => {
+    expect(control(tiles(callWith('draft')), approve)).not.toContain('disabled');
+    expect(control(tiles(callWith('approved')), approve)).toContain('disabled');
+    expect(control(tiles(callWith('sent')), approve)).toContain('disabled');
+  });
+
+  it('enables undo only once the notice is approved', () => {
+    // A draft has nowhere to be taken back to, and an issued notice is frozen.
+    expect(control(tiles(callWith('approved')), undo)).not.toContain('disabled');
+    expect(control(tiles(callWith('draft')), undo)).toContain('disabled');
+    expect(control(tiles(callWith('sent')), undo)).toContain('disabled');
+  });
+
+  it('says why an icon is unavailable rather than just greying it', () => {
+    expect(control(tiles(callWith('approved')), approve)).toContain('Already approved');
+    expect(control(tiles(callWith('draft')), undo)).toContain('still a draft');
+    expect(control(tiles(callWith('sent')), undo)).toContain('cannot be taken back');
   });
 });
 
@@ -196,5 +252,15 @@ describe('showing that something is happening', () => {
     expect(html).not.toContain('spinner');
     expect(html).not.toContain('aria-busy');
     expect(html).not.toContain('disabled');
+  });
+
+  it('keeps a label-free button at a fixed width while it works', () => {
+    // Without this the spinner replaces the icon, the button shrinks to fit it,
+    // and every control beside it slides along mid-action.
+    const html = renderToStaticMarkup(
+      <Button iconOnly small variant="ghost" aria-label="Approve" loading />,
+    );
+    expect(html).toContain('btn-icon');
+    expect(html).toContain('btn-sm');
   });
 });

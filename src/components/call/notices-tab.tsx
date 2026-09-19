@@ -313,43 +313,107 @@ export function NoticesTab({
         <nav
           data-noprint="1"
           aria-label="Investors"
-          style={{ width: 220, flex: 'none', display: 'grid', gap: 2 }}
+          // Wider than the name alone needs, because each row now carries its
+          // own approve and undo.
+          style={{ width: 268, flex: 'none', display: 'grid', gap: 2 }}
         >
           {active.map((row) => {
             const status = noticeStatusFor(call.notices, row.LP_ID);
+            const here = !showAll && selected?.LP_ID === row.LP_ID;
+
             return (
-              <button
+              // A row, not a button: it holds three controls, and a button
+              // inside a button is not valid markup and does not click
+              // predictably.
+              <div
                 key={row.LP_ID}
-                type="button"
-                onClick={() => select(row.LP_ID)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                  padding: '8px 10px',
+                  gap: 2,
+                  paddingRight: 4,
                   borderRadius: 6,
-                  border: 0,
-                  cursor: 'pointer',
-                  font: 'inherit',
-                  fontSize: 13,
-                  textAlign: 'left',
-                  background:
-                    !showAll && selected?.LP_ID === row.LP_ID ? 'var(--muted)' : 'transparent',
-                  color: 'var(--foreground)',
+                  background: here ? 'var(--muted)' : 'transparent',
                 }}
               >
-                <span
-                  style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                <button
+                  type="button"
+                  onClick={() => select(row.LP_ID)}
+                  aria-current={here || undefined}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    padding: '8px 4px 8px 10px',
+                    borderRadius: 6,
+                    border: 0,
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    font: 'inherit',
+                    fontSize: 13,
+                    textAlign: 'left',
+                    color: 'var(--foreground)',
+                  }}
                 >
-                  {row.LP_Name}
-                </span>
-                {switchingTo === row.LP_ID ? (
-                  <span className="spinner text-muted" aria-label="Loading" />
-                ) : (
-                  <Tag tone={NOTICE_DISPLAY[status].tone}>{NOTICE_DISPLAY[status].label}</Tag>
-                )}
-              </button>
+                  <span
+                    style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {row.LP_Name}
+                  </span>
+                  {switchingTo === row.LP_ID ? (
+                    <span className="spinner text-muted" aria-label="Loading" />
+                  ) : (
+                    <Tag tone={NOTICE_DISPLAY[status].tone}>{NOTICE_DISPLAY[status].label}</Tag>
+                  )}
+                </button>
+
+                {/* Both icons are on every row, enabled only where they mean
+                    something. Showing and hiding them instead would shift the
+                    rows around as a call progresses, and would leave nothing to
+                    explain why an investor has no approve on them. */}
+                <Button
+                  iconOnly
+                  small
+                  variant="ghost"
+                  aria-label={`Approve the notice for ${row.LP_Name}`}
+                  title={
+                    status !== 'draft'
+                      ? status === 'approved'
+                        ? 'Already approved'
+                        : 'Issued — it cannot be changed'
+                      : failing > 0
+                        ? 'Resolve the failing checks first'
+                        : `Approve the notice for ${row.LP_Name}`
+                  }
+                  loading={working(`approve:${row.LP_ID}`)}
+                  disabled={busy || status !== 'draft' || failing > 0}
+                  onClick={() => act('approve', [row.LP_ID], `approve:${row.LP_ID}`)}
+                >
+                  {icon(`approve:${row.LP_ID}`, <Check size={15} aria-hidden />)}
+                </Button>
+
+                <Button
+                  iconOnly
+                  small
+                  variant="ghost"
+                  aria-label={`Take the notice for ${row.LP_Name} back to draft`}
+                  title={
+                    status === 'approved'
+                      ? 'Back to draft'
+                      : status === 'draft'
+                        ? 'Nothing to undo — this is still a draft'
+                        : 'Issued — it cannot be taken back'
+                  }
+                  loading={working(`revert:${row.LP_ID}`)}
+                  disabled={busy || status !== 'approved'}
+                  onClick={() => act('revert', [row.LP_ID], `revert:${row.LP_ID}`)}
+                >
+                  {icon(`revert:${row.LP_ID}`, <Undo2 size={15} aria-hidden />)}
+                </Button>
+              </div>
             );
           })}
         </nav>

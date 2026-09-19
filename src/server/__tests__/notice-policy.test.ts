@@ -12,6 +12,9 @@ const notice = (lpId: string, status: NoticeState['status']): NoticeState => ({
   approvedAt: null,
   sentAt: null,
   sentToEmail: null,
+  delivery: null,
+  deliveryError: null,
+  deliveredTo: null,
 });
 
 describe('approving notices', () => {

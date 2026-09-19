@@ -32,6 +32,9 @@ export interface Client {
 }
 
 /** One investor's notice workflow state for one call. */
+/** Whether the email arrived. Separate from `status`, which is about issuing. */
+export type NoticeDelivery = 'delivered' | 'failed' | 'pending';
+
 export interface NoticeState {
   investorId: string;
   lpId: string;
@@ -39,6 +42,12 @@ export interface NoticeState {
   approvedAt: string | null;
   sentAt: string | null;
   sentToEmail: string | null;
+  /** Null when no delivery has been attempted. */
+  delivery: NoticeDelivery | null;
+  /** Why it failed, verbatim from the provider. */
+  deliveryError: string | null;
+  /** The address actually used, which differs when a send override is on. */
+  deliveredTo: string | null;
 }
 
 /** A call as the Home list needs it — no inputs, just headline facts. */

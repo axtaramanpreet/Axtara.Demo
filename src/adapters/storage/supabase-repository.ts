@@ -169,7 +169,10 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
           db.from('call_stages').select('stage').eq('call_id', callId).maybeSingle(),
           db
             .from('notices')
-            .select('investor_id, status, approved_at, sent_at, sent_to_email, investors!inner ( lp_id )')
+            // One string literal, not a concatenation: supabase-js infers the
+            // row type from the select at the type level, and an expression
+            // collapses every column to an error type.
+            .select('investor_id, status, approved_at, sent_at, sent_to_email, email_status, email_error, email_delivered_to, investors!inner ( lp_id )')
             .eq('call_id', callId),
         ]);
 
@@ -210,6 +213,9 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
             approvedAt: n.approved_at as string | null,
             sentAt: n.sent_at as string | null,
             sentToEmail: n.sent_to_email as string | null,
+            delivery: n.email_status as NoticeState['delivery'],
+            deliveryError: n.email_error as string | null,
+            deliveredTo: n.email_delivered_to as string | null,
           }),
         ),
       };

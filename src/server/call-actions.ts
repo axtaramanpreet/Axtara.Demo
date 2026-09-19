@@ -25,6 +25,9 @@ import type { SupabaseClient } from '@/adapters/storage/supabase-client';
 import { getServerSupabase } from '@/lib/supabase/server';
 import type { Json } from '@/adapters/storage/database.types';
 import type { ComputeResult } from '@/engine';
+import { deliver } from './email';
+import { noticeEmail } from './notice-email';
+import { renderNoticePdf } from './notice-pdf';
 
 /** Identifies the engine that produced a snapshot, for later reconciliation. */
 const ENGINE_VERSION =
@@ -197,14 +200,104 @@ export async function sendNotices(callId: string, lpIds?: string[]) {
     .upsert(rows, { onConflict: 'call_id,investor_id' });
   if (error) throw new ActionError(error.message, 400);
 
+  // Issued. Delivery is attempted next, and is deliberately after this: the
+  // record of what the fund called must not depend on whether a mail provider
+  // was reachable, and a failed delivery has to be retryable without issuing
+  // the call again — which is impossible, by design.
+  const delivery = await deliverNotices(service, call, result, targets, investors);
+
   await audit(service, call, user.id, 'notices.sent', {
     lpIds: targets,
     skipped,
     snapshotId: snapshot.id,
     engineVersion: ENGINE_VERSION,
+    delivered: delivery.delivered,
+    failed: delivery.failed,
   });
 
-  return { sent: targets.length, skipped, snapshotId: snapshot.id };
+  return {
+    sent: targets.length,
+    skipped,
+    snapshotId: snapshot.id,
+    delivered: delivery.delivered,
+    failed: delivery.failed,
+    errors: delivery.errors,
+  };
+}
+
+/**
+ * Email each issued notice, and record what happened against it.
+ *
+ * Every outcome is written, including the failures. A notice whose email did
+ * not arrive is worse than one never issued, so it has to be visible rather
+ * than swallowed — the Notices tab reads these columns and offers a retry.
+ */
+async function deliverNotices(
+  service: ReturnType<typeof createServiceSupabase>,
+  call: Awaited<ReturnType<typeof loadAuthorised>>['call'],
+  result: ComputeResult,
+  targets: string[],
+  investors: Record<string, string>,
+): Promise<{ delivered: number; failed: number; errors: string[] }> {
+  let delivered = 0;
+  let failed = 0;
+  const errors: string[] = [];
+  const attemptedAt = new Date().toISOString();
+
+  for (const lpId of targets) {
+    const row = result.rows.find((r) => r.LP_ID === lpId)!;
+    const address = String(row.Contact_Email ?? '').trim();
+
+    let outcome: {
+      email_status: 'delivered' | 'failed';
+      email_message_id: string | null;
+      email_error: string | null;
+      email_delivered_to: string | null;
+    };
+
+    if (!address) {
+      // Not a provider failure, and worth saying so precisely: nobody put an
+      // address in the register.
+      outcome = {
+        email_status: 'failed',
+        email_message_id: null,
+        email_error: `No Contact_Email for ${lpId}.`,
+        email_delivered_to: null,
+      };
+    } else {
+      const notice = buildNotice(call.model, result, row);
+      const pdf = await renderNoticePdf(notice, 'sent', attemptedAt);
+      const sent = await deliver(noticeEmail(notice, pdf, address));
+
+      outcome = sent.ok
+        ? {
+            email_status: 'delivered',
+            email_message_id: sent.messageId,
+            email_error: null,
+            email_delivered_to: sent.deliveredTo,
+          }
+        : {
+            email_status: 'failed',
+            email_message_id: null,
+            email_error: sent.error,
+            email_delivered_to: sent.deliveredTo,
+          };
+    }
+
+    if (outcome.email_status === 'delivered') delivered += 1;
+    else {
+      failed += 1;
+      errors.push(`${lpId}: ${outcome.email_error}`);
+    }
+
+    await service
+      .from('notices')
+      .update({ ...outcome, email_attempted_at: attemptedAt })
+      .eq('call_id', call.id)
+      .eq('investor_id', investors[lpId]);
+  }
+
+  return { delivered, failed, errors };
 }
 
 /**

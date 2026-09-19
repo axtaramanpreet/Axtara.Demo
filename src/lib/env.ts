@@ -64,6 +64,49 @@ export function foundryEnv() {
   };
 }
 
+/**
+ * Email delivery settings.
+ *
+ * Returns null when no provider is configured, so the app runs without one and
+ * the Notices tab can say plainly that nothing will be delivered — which is
+ * honest, and better than a send that silently goes nowhere.
+ *
+ * `overrideTo` is a safety catch, not a convenience. While it is set, every
+ * notice is redirected to that one address whatever the register says, so a
+ * test deployment pointed at real investor data cannot email a real investor.
+ * Clearing it is the deliberate act of going live.
+ */
+export function emailEnv() {
+  if (typeof window !== 'undefined') {
+    throw new Error('emailEnv() was called in the browser. The API key must stay on the server.');
+  }
+
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+  if (!apiKey || !from) return null;
+
+  return {
+    provider: process.env.EMAIL_PROVIDER || 'resend',
+    apiKey,
+    from,
+    replyTo: process.env.EMAIL_REPLY_TO || undefined,
+    overrideTo: process.env.EMAIL_OVERRIDE_TO || undefined,
+  };
+}
+
+/**
+ * What the browser may know about email: whether it is configured at all, and
+ * whether sends are being redirected. Never the key, never the provider's
+ * credentials.
+ */
+export function emailStatusForClient() {
+  const config = emailEnv();
+  return {
+    configured: config !== null,
+    overrideTo: config?.overrideTo ?? null,
+  };
+}
+
 function required(name: string, value: string | undefined): string {
   if (!value) {
     throw new Error(`Missing ${name}. Copy .env.example to .env.local and fill it in.`);

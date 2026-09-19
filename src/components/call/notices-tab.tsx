@@ -20,11 +20,14 @@ import { NoticeSheet } from './notice-sheet';
 export function NoticesTab({
   call,
   result,
+  email,
   selectedLp,
   onSelect,
 }: {
   call: CallDetail;
   result: ComputeResult;
+  /** Whether notices can be emailed, and whether they are being redirected. */
+  email: { configured: boolean; overrideTo: string | null };
   selectedLp?: string;
   onSelect: (lpId: string) => void;
 }) {
@@ -104,6 +107,38 @@ export function NoticesTab({
 
   return (
     <div style={{ marginTop: 20 }}>
+      {email.overrideTo ? (
+        <p
+          data-noprint="1"
+          style={{
+            margin: '0 0 14px',
+            padding: '10px 14px',
+            border: '1px solid var(--destructive)',
+            borderRadius: 'var(--radius)',
+            fontSize: 13,
+          }}
+        >
+          <strong>Test mode.</strong> Every notice is emailed to{' '}
+          <span className="mono">{email.overrideTo}</span> whatever the register says. No investor
+          will receive anything. Clear <span className="mono">EMAIL_OVERRIDE_TO</span> to go live.
+        </p>
+      ) : !email.configured ? (
+        <p
+          data-noprint="1"
+          style={{
+            margin: '0 0 14px',
+            padding: '10px 14px',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+            fontSize: 13,
+          }}
+        >
+          No email provider is configured, so sending will record and freeze each notice but
+          deliver nothing. Download the PDFs and send them yourself, or set{' '}
+          <span className="mono">RESEND_API_KEY</span>.
+        </p>
+      ) : null}
+
       <div
         data-noprint="1"
         style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}
@@ -197,7 +232,9 @@ export function NoticesTab({
           {(showAll ? active : selected ? [selected] : []).map((row) => {
             const status = noticeStatusFor(call.notices, row.LP_ID);
             const record = noticeFor(call.notices, row.LP_ID);
-            const email = (row.Contact_Email as string) || '';
+            // Named apart from the `email` prop, which is the fund-wide
+            // delivery configuration rather than this investor's address.
+            const investorEmail = (row.Contact_Email as string) || '';
 
             return (
               <div key={row.LP_ID}>
@@ -245,7 +282,7 @@ export function NoticesTab({
                           disabled={busy}
                           onClick={() => act('send', [row.LP_ID])}
                         >
-                          Send to {email || row.LP_Name}
+                          Send to {investorEmail || row.LP_Name}
                         </Button>
                       </>
                     )}
@@ -260,7 +297,28 @@ export function NoticesTab({
                   </span>
                 </div>
 
-                {status !== 'draft' && !email && (
+                {record?.delivery === 'failed' && (
+                  <p
+                    data-noprint="1"
+                    role="alert"
+                    style={{ color: 'var(--destructive)', fontSize: 12, marginTop: 0 }}
+                  >
+                    Email not delivered — {record.deliveryError}. The notice itself is issued and
+                    its figures are frozen; sending the email again does not reissue it.
+                  </p>
+                )}
+
+                {record?.delivery === 'delivered' && (
+                  <p data-noprint="1" className="text-muted" style={{ fontSize: 12, marginTop: 0 }}>
+                    Emailed to <span className="mono">{record.deliveredTo}</span>
+                    {record.deliveredTo !== record.sentToEmail && record.sentToEmail
+                      ? ` (redirected from ${record.sentToEmail})`
+                      : ''}
+                    .
+                  </p>
+                )}
+
+                {status !== 'draft' && !investorEmail && (
                   <p data-noprint="1" className="text-muted" style={{ fontSize: 12, marginTop: 0 }}>
                     No Contact_Email for {row.LP_ID} — add one in the LP register to email this
                     notice.

@@ -690,6 +690,11 @@ export type Database = {
           approved_by: string | null
           call_id: string
           created_at: string
+          email_attempted_at: string | null
+          email_delivered_to: string | null
+          email_error: string | null
+          email_message_id: string | null
+          email_status: string | null
           id: string
           investor_id: string
           payload: Json | null
@@ -705,6 +710,11 @@ export type Database = {
           approved_by?: string | null
           call_id: string
           created_at?: string
+          email_attempted_at?: string | null
+          email_delivered_to?: string | null
+          email_error?: string | null
+          email_message_id?: string | null
+          email_status?: string | null
           id?: string
           investor_id: string
           payload?: Json | null
@@ -720,6 +730,11 @@ export type Database = {
           approved_by?: string | null
           call_id?: string
           created_at?: string
+          email_attempted_at?: string | null
+          email_delivered_to?: string | null
+          email_error?: string | null
+          email_message_id?: string | null
+          email_status?: string | null
           id?: string
           investor_id?: string
           payload?: Json | null

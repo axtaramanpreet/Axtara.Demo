@@ -26,7 +26,16 @@ type Tab = (typeof TABS)[number];
  * The tab and selected investor live in the URL so a colleague can be sent
  * straight to the check that is failing.
  */
-export function CallScreen({ call, clientId }: { call: CallDetail; clientId: string }) {
+export function CallScreen({
+  call,
+  clientId,
+  email,
+}: {
+  call: CallDetail;
+  clientId: string;
+  /** Whether notices can be emailed, and whether they are being redirected. */
+  email: { configured: boolean; overrideTo: string | null };
+}) {
   const router = useRouter();
   const params = useSearchParams();
 
@@ -105,6 +114,7 @@ export function CallScreen({ call, clientId }: { call: CallDetail; clientId: str
         <NoticesTab
           call={call}
           result={result}
+          email={email}
           selectedLp={selectedLp}
           onSelect={(lpId) => go('notices', lpId)}
         />

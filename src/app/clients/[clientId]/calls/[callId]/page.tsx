@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@/adapters/storage/supabase-client';
 import { getServerSupabase } from '@/lib/supabase/server';
 import { AppHeader } from '@/components/app-header';
 import { CallScreen } from '@/components/call/call-screen';
+import { emailStatusForClient } from '@/lib/env';
 
 /**
  * One capital call: Summary, Allocation, Checks and Notices.
@@ -29,7 +30,7 @@ export default async function CallPage({
       <AppHeader clients={clients} currentClientId={clientId} />
       <main style={{ padding: '28px 40px 60px', flex: 1 }}>
         <Suspense fallback={<p className="text-muted">Loading…</p>}>
-          <CallScreen call={call} clientId={clientId} />
+          <CallScreen call={call} clientId={clientId} email={emailStatusForClient()} />
         </Suspense>
       </main>
     </div>

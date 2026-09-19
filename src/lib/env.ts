@@ -99,6 +99,17 @@ export function emailEnv() {
  * whether sends are being redirected. Never the key, never the provider's
  * credentials.
  */
+/**
+ * Whether Ask Axtara has a model behind it — the only thing about the model the
+ * browser is allowed to know.
+ *
+ * `foundryEnv()` throws if it is ever called in the browser, because the key it
+ * reads would otherwise be inlined into the bundle. This is the safe half.
+ */
+export function askStatusForClient() {
+  return { connected: foundryEnv() !== null };
+}
+
 export function emailStatusForClient() {
   const config = emailEnv();
   return {

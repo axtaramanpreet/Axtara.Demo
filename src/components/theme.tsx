@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useSyncExternalStore } from 'react';
+import { MoonIcon, SunIcon } from './shell/icons';
 
 export type Theme = 'light' | 'dark';
 
@@ -44,43 +45,73 @@ export function useTheme() {
   return { theme, setTheme };
 }
 
-/** The Light/Dark pill in the header. */
-export function ThemeToggle() {
+/**
+ * The sun/moon button in the top bar.
+ *
+ * One button that flips, rather than the two-segment pill: in a 54px bar next
+ * to a breadcrumb there is no room to show both states, and the icon shown is
+ * the one you would be switching to.
+ */
+export function ThemeIconButton() {
   const { theme, setTheme } = useTheme();
+  const next = theme === 'dark' ? 'light' : 'dark';
+
   return (
-    <div className="toggle" title="Theme">
-      <button
-        type="button"
-        className={theme === 'light' ? 'on' : undefined}
-        onClick={() => setTheme('light')}
-        aria-pressed={theme === 'light'}
-      >
-        Light
-      </button>
-      <button
-        type="button"
-        className={theme === 'dark' ? 'on' : undefined}
-        onClick={() => setTheme('dark')}
-        aria-pressed={theme === 'dark'}
-      >
-        Dark
-      </button>
-    </div>
+    <button
+      type="button"
+      className="icon-btn"
+      title={next === 'dark' ? 'Dark mode' : 'Light mode'}
+      aria-label={next === 'dark' ? 'Switch to dark mode' : 'Switch to light mode'}
+      onClick={() => setTheme(next)}
+    >
+      {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+    </button>
   );
 }
 
+const RAIL_KEY = 'capcall.rail';
+
 /**
- * Applies the stored theme before the page paints.
+ * Whether the sidebar is collapsed to a rail.
  *
- * Without this a dark-mode viewer sees a white flash on every navigation. It
- * has to be a blocking inline script, hence a string rather than a component.
+ * Kept on `<html>` for the same reason as the theme: the pre-paint script has
+ * already decided by the time React runs, so there is no mismatch to reconcile
+ * and no frame at the wrong width. Reading it through the same store means the
+ * sidebar and the top bar's toggle cannot disagree about it.
+ */
+export function useRail() {
+  const rail = useSyncExternalStore(
+    subscribe,
+    () => document.documentElement.classList.contains('rail'),
+    () => false,
+  );
+
+  const setRail = useCallback((next: boolean) => {
+    document.documentElement.classList.toggle('rail', next);
+    try {
+      window.localStorage.setItem(RAIL_KEY, next ? '1' : '0');
+    } catch {
+      // Private window with site data blocked: it applies now, it just will
+      // not be remembered.
+    }
+  }, []);
+
+  return { rail, setRail };
+}
+
+/**
+ * Applies the stored theme and sidebar width before the page paints.
+ *
+ * Without this a dark-mode viewer sees a white flash on every navigation, and
+ * somebody who collapsed the sidebar sees it open and then jump. It has to be
+ * a blocking inline script, hence a string rather than a component.
  */
 export const THEME_INIT_SCRIPT = `
 (function () {
   try {
-    if (localStorage.getItem('${STORAGE_KEY}') === 'dark') {
-      document.documentElement.classList.add('dark');
-    }
+    var c = document.documentElement.classList;
+    if (localStorage.getItem('${STORAGE_KEY}') === 'dark') c.add('dark');
+    if (localStorage.getItem('${RAIL_KEY}') === '1') c.add('rail');
   } catch (e) {}
 })();
 `;

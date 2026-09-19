@@ -6,12 +6,12 @@ import type { SupabaseClient } from '@/adapters/storage/supabase-client';
 import type { CallDefaults } from '@/engine';
 import type { CallSummary } from '@/adapters/storage/types';
 import { getServerSupabase } from '@/lib/supabase/server';
-import { AppHeader } from '@/components/app-header';
+import { AppShell } from '@/components/shell/app-shell';
 import { Card, CardGrid } from '@/components/ui/card';
 import { StageTag } from '@/components/ui/tag';
 import { DrawdownChart, type DrawdownColumn } from '@/components/home/drawdown-chart';
 import { NewCallButton } from './new-call-button';
-import { noticeDefaults } from '@/lib/env';
+import { askStatusForClient, noticeDefaults } from '@/lib/env';
 
 /**
  * Home: every capital call for one fund, its position, and how much has been
@@ -45,10 +45,15 @@ export default async function ClientHomePage({
   const notStarted = calls.find((c) => c.stage === 'not_started');
 
   return (
-    <div className="app">
-      <AppHeader clients={clients} currentClientId={clientId} />
-
-      <main style={{ padding: '28px 40px 60px', flex: 1 }}>
+    <AppShell
+      clients={clients}
+      clientId={clientId}
+      callCount={calls.length}
+      crumb={{ leaf: 'Capital calls' }}
+      surface="home"
+      askConnected={askStatusForClient().connected}
+    >
+      <>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20, flexWrap: 'wrap', maxWidth: 1200 }}>
           <div>
             <h1>{client.name}</h1>
@@ -138,8 +143,8 @@ export default async function ClientHomePage({
             )}
           </>
         )}
-      </main>
-    </div>
+      </>
+    </AppShell>
   );
 }
 

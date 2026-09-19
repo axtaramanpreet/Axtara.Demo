@@ -2,7 +2,8 @@ import { notFound } from 'next/navigation';
 import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
 import type { SupabaseClient } from '@/adapters/storage/supabase-client';
 import { getServerSupabase } from '@/lib/supabase/server';
-import { AppHeader } from '@/components/app-header';
+import { askStatusForClient } from '@/lib/env';
+import { AppShell } from '@/components/shell/app-shell';
 import { SetupScreen } from '@/components/setup/setup-screen';
 
 /**
@@ -36,11 +37,19 @@ export default async function SetupPage({
   const previousCall = earlier ? await repo.getCall(earlier.id) : null;
 
   return (
-    <div className="app">
-      <AppHeader clients={clients} currentClientId={clientId} />
-      <main style={{ padding: '28px 40px 60px', flex: 1 }}>
-        <SetupScreen call={call} clientId={clientId} previousCall={previousCall} />
-      </main>
-    </div>
+    <AppShell
+      clients={clients}
+      clientId={clientId}
+      callCount={calls.length}
+      crumb={{
+        module: { label: 'Capital calls', href: `/clients/${clientId}` },
+        leaf: `Set up Call No. ${call.callNo}`,
+      }}
+      surface="setup"
+      preparedBy={call.model.setup.Prepared_By as string | undefined}
+      askConnected={askStatusForClient().connected}
+    >
+      <SetupScreen call={call} clientId={clientId} previousCall={previousCall} />
+    </AppShell>
   );
 }

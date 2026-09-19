@@ -459,3 +459,33 @@ describe('an icon button does not look disabled when it is not', () => {
     expect(rule![1]).toContain('opacity');
   });
 });
+
+describe('a tile row cannot outgrow the list it is in', () => {
+  /**
+   * The undo was unclickable for two days because the row was 326px wide in a
+   * 268px list. The overflow slid under the notice pane beside it, which paints
+   * later and so swallowed every click on the last icon in the row.
+   *
+   * jsdom does no layout, so this cannot measure the overflow — it pins the two
+   * things that prevented it. Only a browser can prove the geometry; see the
+   * note in the commit that fixed it.
+   */
+  const html = tiles(callWith('approved'));
+
+  it('lets every row shrink to the width of the list', () => {
+    // A grid item keeps `min-width: auto` — the width of its content — unless
+    // it is told otherwise, and then it overflows instead of truncating.
+    const rows = html.match(/<div style="display:flex;align-items:center;gap:2px[^"]*"/g) ?? [];
+    expect(rows, 'no tile rows in the markup').toHaveLength(active.length);
+    for (const row of rows) expect(row).toContain('min-width:0');
+  });
+
+  it('gives the list room for a name, a status and both actions', () => {
+    const nav = /aria-label="Investors"[^>]*style="([^"]*)"/.exec(html);
+    expect(nav, 'no investor list').not.toBeNull();
+    const width = /width:(\d+)px/.exec(nav![1]);
+    expect(width, 'the list has no width').not.toBeNull();
+    // 76 for the status, 56 for the two actions, and the rest for the name.
+    expect(Number(width![1])).toBeGreaterThanOrEqual(STATUS_COLUMN + 56 + 160);
+  });
+});

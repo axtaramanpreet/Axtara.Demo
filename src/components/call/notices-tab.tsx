@@ -357,9 +357,10 @@ export function NoticesTab({
         <nav
           data-noprint="1"
           aria-label="Investors"
-          // Wider than the name alone needs, because each row now carries its
-          // own approve and undo.
-          style={{ width: 268, flex: 'none', display: 'grid', gap: 2 }}
+          // Wide enough for a long name, its status and both its actions.
+          // Too narrow and the names all truncate; the row cannot grow past it
+          // because a row that overflows slides under the notice beside it.
+          style={{ width: 332, flex: 'none', display: 'grid', gap: 2 }}
         >
           {active.map((row) => {
             const status = noticeStatusFor(call.notices, row.LP_ID);
@@ -378,6 +379,12 @@ export function NoticesTab({
                   paddingRight: 4,
                   borderRadius: 6,
                   background: here ? 'var(--muted)' : 'transparent',
+                  // A grid item will not shrink below its content unless told
+                  // to. Without this the row stayed as wide as the name plus
+                  // the status plus both icons — wider than the list — and the
+                  // overflow slid under the notice beside it, which painted
+                  // over the last icon and swallowed every click on it.
+                  minWidth: 0,
                 }}
               >
                 <button

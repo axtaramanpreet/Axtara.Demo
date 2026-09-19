@@ -1,10 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
 import { buildNotice, type ComputeResult } from '@/engine';
 import type { CallDetail } from '@/adapters/storage/types';
-import { CheckCheck, FileArchive, FileDown, Printer, Rows3, Send, Undo2 } from 'lucide-react';
+import { Check, CheckCheck, FileArchive, FileDown, Printer, Rows3, Send, Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Menu, MenuItem } from '@/components/ui/menu';
 import { Tag } from '@/components/ui/tag';
@@ -59,6 +59,13 @@ export function NoticesTab({
   const busy = requesting || isRefreshing;
   /** True for the one control that is working. */
   const working = (key: string) => busy && workingKey === key;
+  /**
+   * The icon for a control, or nothing while it is working.
+   *
+   * `Button` puts the spinner in front of its children, so a label-free button
+   * has to drop its icon or it would show both.
+   */
+  const icon = (key: string, glyph: ReactNode) => (working(key) ? null : glyph);
   /** The investor being switched to, while the pane is still catching up. */
   const switchingTo = isSwitching ? switchTarget : null;
 
@@ -387,48 +394,74 @@ export function NoticesTab({
                       `issued${record?.sentAt ? ` ${new Date(record.sentAt).toLocaleString('en-GB')}` : ''} — cannot be changed`}
                   </span>
 
-                  <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-                    <Menu label={`Other actions for ${row.LP_Name}`}>
-                      <MenuItem icon={<FileDown size={15} />} onClick={() => download(row.LP_ID)}>
-                        Download PDF
-                      </MenuItem>
-                      {status === 'approved' && (
-                        <MenuItem
-                          icon={<Undo2 size={15} />}
-                          disabled={busy}
-                          onClick={() => act('revert', [row.LP_ID], `revert:${row.LP_ID}`)}
-                        >
-                          Back to draft
-                        </MenuItem>
-                      )}
-                    </Menu>
+                  {/* One notice's own actions, as icons.
+                      A tile carries at most three, and a row of worded buttons
+                      repeated down a stacked list drowned out the figures they
+                      belong to. Each icon still has an `aria-label` and a
+                      `title`, so nothing is hidden — only shortened. */}
+                  <span
+                    style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, alignItems: 'center' }}
+                  >
+                    <Button
+                      iconOnly
+                      variant="ghost"
+                      aria-label={`Download the notice for ${row.LP_Name}`}
+                      title="Download this notice as a PDF"
+                      loading={working(`download:${row.LP_ID}`)}
+                      onClick={() => download(row.LP_ID)}
+                    >
+                      {icon(`download:${row.LP_ID}`, <FileDown size={16} aria-hidden />)}
+                    </Button>
+
+                    {/* There is no "rejected" state to move a draft into, so
+                        undo is only offered on something already approved:
+                        it takes the approval back, it does not refuse the
+                        investor. */}
+                    {status === 'approved' && (
+                      <Button
+                        iconOnly
+                        variant="ghost"
+                        aria-label={`Take the notice for ${row.LP_Name} back to draft`}
+                        title="Back to draft"
+                        loading={working(`revert:${row.LP_ID}`)}
+                        disabled={busy}
+                        onClick={() => act('revert', [row.LP_ID], `revert:${row.LP_ID}`)}
+                      >
+                        {icon(`revert:${row.LP_ID}`, <Undo2 size={16} aria-hidden />)}
+                      </Button>
+                    )}
 
                     {status === 'draft' && (
                       <Button
+                        iconOnly
                         variant="primary"
+                        aria-label={`Approve the notice for ${row.LP_Name}`}
+                        title={
+                          failing > 0 ? 'Resolve the failing checks first' : 'Approve this notice'
+                        }
                         loading={working(`approve:${row.LP_ID}`)}
                         disabled={busy || failing > 0}
-                        title={failing > 0 ? 'Resolve the failing checks first' : undefined}
                         onClick={() => act('approve', [row.LP_ID], `approve:${row.LP_ID}`)}
                       >
-                        {working(`approve:${row.LP_ID}`) ? null : <CheckCheck size={15} aria-hidden />}
-                        Approve
+                        {icon(`approve:${row.LP_ID}`, <Check size={16} aria-hidden />)}
                       </Button>
                     )}
+
                     {status === 'approved' && (
                       <Button
+                        iconOnly
                         variant="primary"
-                        loading={working(`send:${row.LP_ID}`)}
-                        disabled={busy}
+                        aria-label={`Send the notice to ${row.LP_Name}`}
                         title={
                           investorEmail
                             ? `Emails the notice to ${investorEmail}`
                             : 'No Contact_Email on the register for this investor'
                         }
+                        loading={working(`send:${row.LP_ID}`)}
+                        disabled={busy}
                         onClick={() => act('send', [row.LP_ID], `send:${row.LP_ID}`)}
                       >
-                        {working(`send:${row.LP_ID}`) ? null : <Send size={15} aria-hidden />}
-                        Send
+                        {icon(`send:${row.LP_ID}`, <Send size={16} aria-hidden />)}
                       </Button>
                     )}
                   </span>

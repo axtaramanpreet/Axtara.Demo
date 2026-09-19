@@ -111,12 +111,61 @@ describe('the detail header', () => {
     expect(html).toContain(active[0].LP_Name);
   });
 
-  it('keeps the secondary actions behind a menu rather than beside the primary one', () => {
+  it('keeps the call-wide secondary actions behind a menu', () => {
     const html = callWith('approved');
     expect(html).toContain('aria-haspopup="menu"');
     // Closed by default: the markup holds the trigger, not the items.
-    expect(html).not.toContain('Back to draft');
-    expect(html).not.toContain('Download PDF');
+    expect(html).not.toContain('Download all as .zip');
+    expect(html).not.toContain('Print all');
+  });
+});
+
+describe('the actions on one notice', () => {
+  /** Every icon button in the markup. */
+  function iconButtons(html: string) {
+    return html.match(/<button[^>]*btn-icon[^>]*>/g) ?? [];
+  }
+
+  const lp = active[0].LP_Name;
+
+  it('offers approval, and not sending, on a draft', () => {
+    const html = callWith('draft');
+    expect(html).toContain(`aria-label="Approve the notice for ${lp}"`);
+    expect(html).not.toContain(`aria-label="Send the notice to ${lp}"`);
+  });
+
+  it('offers sending and undo once it is approved', () => {
+    const html = callWith('approved');
+    expect(html).toContain(`aria-label="Send the notice to ${lp}"`);
+    expect(html).toContain(`aria-label="Take the notice for ${lp} back to draft"`);
+    expect(html).not.toContain(`aria-label="Approve the notice for ${lp}"`);
+  });
+
+  it('offers nothing but the download once it is sent', () => {
+    // An issued notice is frozen; there is no control that could change it.
+    const html = callWith('sent');
+    expect(html).toContain(`aria-label="Download the notice for ${lp}"`);
+    expect(html).not.toContain(`aria-label="Approve the notice for ${lp}"`);
+    expect(html).not.toContain(`aria-label="Send the notice to ${lp}"`);
+    expect(html).not.toContain('back to draft');
+  });
+
+  it('names every icon, since none of them carry a visible label', () => {
+    // The whole point of shrinking these to icons is that the wording is gone
+    // from the screen. It must not also be gone from a screen reader.
+    for (const status of ['draft', 'approved', 'sent'] as const) {
+      const buttons = iconButtons(callWith(status));
+      expect(buttons.length, status).toBeGreaterThan(0);
+      for (const button of buttons) {
+        expect(button, `${status}: ${button}`).toMatch(/aria-label="[^"]+"/);
+      }
+    }
+  });
+
+  it('gives every icon a tooltip as well, for a mouse that is not sure', () => {
+    for (const button of iconButtons(callWith('approved'))) {
+      expect(button, button).toMatch(/title="[^"]+"/);
+    }
   });
 });
 

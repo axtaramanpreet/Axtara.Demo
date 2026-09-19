@@ -177,6 +177,15 @@ p {
   color: var(--foreground);
 }
 
+/* Square and label-free. The width is fixed rather than driven by the icon, so
+   the spinner that replaces the icon mid-action cannot shrink the button and
+   shuffle every control beside it. 34px matches the menu trigger, so a row of
+   mixed controls sits level. */
+.btn-icon {
+  width: 34px;
+  padding: 0;
+}
+
 /* --- Tags ----------------------------------------------------------------- */
 /* A 7px dot plus 12px text. Colour alone never carries the meaning — the
    label next to it always says the same thing in words. */

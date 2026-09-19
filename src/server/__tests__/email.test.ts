@@ -72,14 +72,19 @@ describe('the override', () => {
 });
 
 describe('what gets sent', () => {
-  it('carries the PDF, the reply-to and the amount in the subject', async () => {
+  it('carries the PDF and the reply-to, and subjects it as the fund asked', async () => {
     stubProvider({ status: 200, body: { id: 'msg-3' } });
     await deliver(noticeEmail(notice, pdf, 'treasury@investor.example'));
 
     expect(lastBody?.from).toBe('Axtara <notices@notices.example>');
     expect(lastBody?.reply_to).toBe('admin@axtara.example');
-    expect(String(lastBody?.subject)).toContain(notice.total);
-    expect(String(lastBody?.subject)).toContain(notice.fund);
+
+    // "Capital Call #2 – Illustrative Fund II, L.P." — the call number and the
+    // fund, and deliberately not the amount. A subject line is the one part of
+    // a message that leaks into notification popups and mail previews, and a
+    // sum of money does not belong there.
+    expect(lastBody?.subject).toBe(`Capital Call #${notice.callNo} \u2013 ${notice.fund}`);
+    expect(String(lastBody?.subject)).not.toContain(notice.total);
 
     const attachments = lastBody?.attachments as { filename: string; content: string }[];
     expect(attachments).toHaveLength(1);
@@ -87,11 +92,28 @@ describe('what gets sent', () => {
     expect(Buffer.from(attachments[0].content, 'base64').toString()).toBe(pdf.toString());
   });
 
-  it('names the investor and the due date in the body', async () => {
+  it('puts the fund’s own letter in the body, not a second version of it', async () => {
     const email = noticeEmail(notice, pdf, 'treasury@investor.example');
-    expect(email.text).toContain(notice.name);
-    expect(email.text).toContain(notice.dueDate);
+
+    // Every part comes from the notice, so the mail and the attached document
+    // cannot say different things.
+    for (const part of [
+      notice.salutation,
+      ...notice.intro,
+      ...notice.closing,
+      ...notice.signOff,
+    ]) {
+      expect(email.text, `missing: ${part.slice(0, 40)}`).toContain(part);
+    }
+
     expect(email.text).toContain(notice.total);
+    expect(email.text).toContain(notice.dueDate);
+  });
+
+  it('signs off the way the fund set it up', async () => {
+    expect(notice.signOff[0]).toBe('Best Regards,');
+    // Blank lines are dropped rather than printed empty.
+    expect(notice.signOff).not.toContain('');
   });
 });
 

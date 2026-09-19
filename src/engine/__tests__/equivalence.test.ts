@@ -41,12 +41,11 @@ const DELIBERATE_DIVERGENCE = new Set(['wholeDollarRounding']);
  * asked for. Everything an investor acts on — the amounts, the account summary,
  * the footnotes — still has to match to the character.
  */
+const WORDING = ['gp', 'salutation', 'subject', 'intro', 'closing', 'signOff'] as const;
+
 function figuresOf(notice: NoticeData | Record<string, unknown>) {
-  const { gp, salutation, intro, closing, ...rest } = notice as Record<string, unknown>;
-  void gp;
-  void salutation;
-  void intro;
-  void closing;
+  const rest = { ...(notice as Record<string, unknown>) };
+  for (const key of WORDING) delete rest[key];
   return rest;
 }
 
@@ -197,8 +196,8 @@ describe('deliberate divergence: the fund supplies the letter', () => {
 
     // The handoff notice carries no letter at all; that absence is the
     // divergence, and it is why figuresOf() drops these before comparing.
-    expect(theirs.intro).toBeUndefined();
-    expect(theirs.closing).toBeUndefined();
-    expect(theirs.salutation).toBeUndefined();
+    for (const key of WORDING) {
+      expect(theirs[key], `handoff notice unexpectedly has ${key}`).toBeUndefined();
+    }
   });
 });

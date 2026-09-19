@@ -80,15 +80,7 @@ const styles = StyleSheet.create({
   note: { flexDirection: 'row', marginBottom: 3 },
   noteMark: { width: 14 },
 
-  signature: { marginTop: 40 },
-  signatureLine: {
-    width: 210,
-    borderTopWidth: 0.8,
-    borderTopColor: '#111111',
-    marginTop: 44,
-    paddingTop: 5,
-  },
-  signatureCaption: { fontSize: 8, color: '#6b6b6b' },
+  signature: { marginTop: 36 },
 
   footer: {
     position: 'absolute',
@@ -178,9 +170,7 @@ export function NoticeDocument({
           <Meta label="Currency" value={notice.cur} />
         </View>
 
-        <Text style={[styles.paragraph, styles.bold]}>
-          {`Capital Call #${callNo} \u2013 ${notice.fund}`}
-        </Text>
+        <Text style={[styles.paragraph, styles.bold]}>{notice.subject}</Text>
 
         <Text style={styles.paragraph}>{notice.salutation}</Text>
 
@@ -232,14 +222,11 @@ export function NoticeDocument({
         ))}
 
         <View style={styles.signature} wrap={false}>
-          <Text>
-            {notice.gp === 'the General Partner'
-              ? `For and on behalf of the General Partner of ${notice.fund}`
-              : `For and on behalf of ${notice.gp}, General Partner of ${notice.fund}`}
-          </Text>
-          <View style={styles.signatureLine}>
-            <Text style={styles.signatureCaption}>Authorized Signatory</Text>
-          </View>
+          {notice.signOff.map((line, i) => (
+            <Text key={`sign-${i}`} style={i === 0 ? undefined : styles.bold}>
+              {line}
+            </Text>
+          ))}
         </View>
 
         <View style={styles.footer} fixed>

@@ -34,6 +34,8 @@ export function emptyCall(fundName: string): CallModel {
       Org_Expense_Cap: '',
       Rounding_Decimals: '',
       Rounding_Plug_LP_ID: '',
+      Signatory_Name: '',
+      Signatory_Title: '',
       Prepared_By: '',
     },
     lps: [],

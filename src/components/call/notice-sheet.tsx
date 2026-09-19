@@ -186,19 +186,14 @@ export function NoticeSheet({
         </p>
       ))}
 
-      <div style={{ marginTop: 44 }}>
-        <p style={{ margin: 0 }}>
-          For and on behalf of {notice.gp}
-          {notice.gp === 'the General Partner' ? ` of ${notice.fund}` : `, General Partner of ${notice.fund}`}
-        </p>
-        <div
-          style={{ width: 240, borderTop: '1px solid var(--foreground)', marginTop: 46, paddingTop: 6 }}
-        >
-          <span className="text-muted" style={{ fontSize: 12 }}>
-            Authorized Signatory
-          </span>
-        </div>
+      <div style={{ marginTop: 40 }}>
+        {notice.signOff.map((line, i) => (
+          <p key={`sign-${i}`} style={{ margin: 0, fontWeight: i === 0 ? 400 : 500 }}>
+            {line}
+          </p>
+        ))}
       </div>
+
     </article>
   );
 }

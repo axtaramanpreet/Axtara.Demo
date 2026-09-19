@@ -459,6 +459,8 @@ export type Database = {
           reporting_currency: string | null
           rounding_decimals: number | null
           rounding_plug_lp_id: string | null
+          signatory_name: string | null
+          signatory_title: string | null
           source_components: string
           source_fee: string
           source_file_name: string | null
@@ -492,6 +494,8 @@ export type Database = {
           reporting_currency?: string | null
           rounding_decimals?: number | null
           rounding_plug_lp_id?: string | null
+          signatory_name?: string | null
+          signatory_title?: string | null
           source_components?: string
           source_fee?: string
           source_file_name?: string | null
@@ -525,6 +529,8 @@ export type Database = {
           reporting_currency?: string | null
           rounding_decimals?: number | null
           rounding_plug_lp_id?: string | null
+          signatory_name?: string | null
+          signatory_title?: string | null
           source_components?: string
           source_fee?: string
           source_file_name?: string | null

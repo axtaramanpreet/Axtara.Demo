@@ -24,16 +24,12 @@ export function noticeEmail(
   pdf: Buffer,
   to: string,
 ): Email {
-  const callNo = String(notice.callNo);
-  const fileName = noticeFileName(callNo, notice.name);
-
-  const subject = `${notice.fund} — Capital Call No. ${callNo} — ${notice.cur} ${notice.total} due ${notice.dueDate}`;
+  const fileName = noticeFileName(notice.callNo, notice.name);
 
   const text = [
-    `Dear ${notice.name},`,
+    notice.salutation,
     '',
-    `Please find attached Capital Call No. ${callNo} for ${notice.fund}.`,
-    '',
+    ...notice.intro.flatMap((p) => [p, '']),
     `    Amount due     ${notice.cur} ${notice.total}`,
     `    Payable by     ${notice.dueDate}`,
     `    Notice date    ${notice.callDate}`,
@@ -42,15 +38,15 @@ export function noticeEmail(
     'The attached notice sets out how the amount was arrived at, together with',
     'your capital account summary as at the notice date.',
     '',
-    'If any detail looks wrong, reply to this message before remitting.',
-    '',
-    'For and on behalf of the General Partner',
-    notice.fund,
+    ...notice.closing.flatMap((p) => [p, '']),
+    ...notice.signOff,
   ].join('\n');
 
   return {
     to,
-    subject,
+    // The same subject the notice itself carries, so the mail and the document
+    // an investor files against it agree.
+    subject: notice.subject,
     text,
     attachments: [{ filename: fileName, content: pdf }],
   };

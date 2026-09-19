@@ -66,6 +66,8 @@ const SETUP: Row[] = [
   ['Org_Expense_Cap', 750000, 'Lifetime cap on organizational expenses.'],
   ['Rounding_Decimals', 2, 'Decimal places for every allocation.'],
   ['Rounding_Plug_LP_ID', 'LP04', 'Absorbs the rounding residual. Largest commitment.'],
+  ['Signatory_Name', 'Priya Raghunathan', 'Who signs the notice.'],
+  ['Signatory_Title', 'Chief Financial Officer', 'Their title, under the name.'],
   ['Prepared_By', 'Fund Administration', 'Traceability.'],
 ];
 

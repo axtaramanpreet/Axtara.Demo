@@ -37,6 +37,10 @@ export interface FundSetup {
    * Partner", which reads correctly but names nobody.
    */
   GP_Name?: string;
+  /** Who signs the notice. Blank simply drops the line from the sign-off. */
+  Signatory_Name?: string;
+  /** Their title, under the name. Blank drops the line. */
+  Signatory_Title?: string;
   Reporting_Currency: string;
   Call_Number: Cell;
   /** ISO date or an Excel serial number. */

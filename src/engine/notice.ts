@@ -46,6 +46,10 @@ export interface NoticeData {
   intro: string[];
   /** Paragraphs after the figures, including how and by when to pay. */
   closing: string[];
+  /** "Capital Call #4 – Meridian Growth Partners III, L.P." */
+  subject: string;
+  /** The sign-off, already stripped of lines the fund left blank. */
+  signOff: string[];
   callNo: string | number;
   callDate: string;
   dueDate: string;
@@ -216,6 +220,16 @@ export function buildNotice(
           `Capital Call #${callNo} pursuant to the terms of the Limited Partnership Agreement ` +
           `(the “LPA”).`,
     ],
+    subject: `Capital Call #${callNo} \u2013 ${fund}`,
+    // Blank lines are dropped rather than printed empty: a notice signed by
+    // nobody should end at "Best Regards," and the General Partner, not leave
+    // two gaps where a name and a title were meant to go.
+    signOff: [
+      'Best Regards,',
+      String(setup.Signatory_Name ?? '').trim(),
+      String(setup.Signatory_Title ?? '').trim(),
+      gpName,
+    ].filter(Boolean),
     closing: [
       'Please remit the above amount to the Fund’s designated bank account in accordance with ' +
         'the wiring instructions provided with this notice.',

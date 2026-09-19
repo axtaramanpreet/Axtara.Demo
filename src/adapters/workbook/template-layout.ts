@@ -93,6 +93,8 @@ export const SETUP_FIELDS: FieldDef[] = [
   { key: 'Org_Expense_Cap', note: 'Cap on organizational expenses.', num: true },
   { key: 'Rounding_Decimals', note: 'Decimal places for every allocation.', num: true },
   { key: 'Rounding_Plug_LP_ID', note: 'Absorbs the rounding residual.' },
+  { key: 'Signatory_Name', note: 'Who signs the notice. Blank drops the line.' },
+  { key: 'Signatory_Title', note: 'Their title, under the name.' },
   { key: 'Prepared_By', note: 'Traceability.' },
 ];
 

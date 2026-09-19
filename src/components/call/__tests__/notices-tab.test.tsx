@@ -8,6 +8,7 @@
  * investor's name from the detail header.
  */
 
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -156,19 +157,13 @@ describe('the actions on one notice', () => {
     return html.match(/<button/g)?.length ?? 0;
   }
 
-  it('carries its send and nothing else, and only once approved', () => {
-    // Approving and undoing belong to the tile, downloading to the toolbar.
-    expect(buttons(notices(callWith('draft'))), 'draft').toBe(0);
-    expect(buttons(notices(callWith('sent'))), 'sent').toBe(0);
-    expect(buttons(notices(callWith('approved'))), 'approved').toBe(1);
-  });
-
-  it('says Send in a word rather than a glyph', () => {
-    // The one irreversible action on the screen does not get to be an icon.
-    const html = notices(callWith('approved'));
-    const send = /<button[^>]*btn-primary[^>]*>([\s\S]*?)<\/button>/.exec(html);
-    expect(send, 'no primary action on an approved notice').not.toBeNull();
-    expect(send![1]).toContain('Send');
+  it('carries no controls at all', () => {
+    // Every action on a notice is either on the investor's tile or in the
+    // toolbar. This line says which notice is on screen and where it has got
+    // to; nothing floats above the page any more.
+    for (const status of ['draft', 'approved', 'sent'] as const) {
+      expect(buttons(notices(callWith(status))), status).toBe(0);
+    }
   });
 
   it('names every icon, since none of them carry a visible label', () => {
@@ -195,129 +190,41 @@ describe('the actions on an investor tile', () => {
   const approve = `Approve the notice for ${lp}`;
   const undo = `Take the notice for ${lp} back to draft`;
 
-  it('carries both on every tile, in every state', () => {
-    // Hiding them would move the rows around as a call progresses, and would
-    // leave nothing to explain why an investor has no approve on them.
+  it('offers approval on a draft and nothing else', () => {
+    const html = tiles(callWith('draft'));
+    expect(control(html, approve)).not.toBeNull();
+    expect(control(html, undo)).toBeNull();
+  });
+
+  it('offers undo once it is approved and nothing else', () => {
+    const html = tiles(callWith('approved'));
+    expect(control(html, undo)).not.toBeNull();
+    expect(control(html, approve)).toBeNull();
+  });
+
+  it('offers neither once it is issued', () => {
+    const html = tiles(callWith('sent'));
+    expect(control(html, approve)).toBeNull();
+    expect(control(html, undo)).toBeNull();
+  });
+
+  it('leaves the place empty rather than putting a dead icon in it', () => {
+    // A greyed-out icon reads as a button that does not work — somebody will
+    // press it and conclude the screen is broken. The slot is held open so the
+    // column still does not move as a call progresses.
     for (const status of ['draft', 'approved', 'sent'] as const) {
       const html = tiles(callWith(status));
-      expect(control(html, approve), `approve missing on ${status}`).not.toBeNull();
-      expect(control(html, undo), `undo missing on ${status}`).not.toBeNull();
+      const slots = html.match(/class="slot"/g) ?? [];
+      expect(slots, status).toHaveLength(active.length * 2);
     }
   });
 
-  it('enables approve only while the notice is a draft', () => {
-    expect(control(tiles(callWith('draft')), approve)).not.toContain('disabled');
-    expect(control(tiles(callWith('approved')), approve)).toContain('disabled');
-    expect(control(tiles(callWith('sent')), approve)).toContain('disabled');
-  });
-
-  it('enables undo only once the notice is approved', () => {
-    // A draft has nowhere to be taken back to, and an issued notice is frozen.
-    expect(control(tiles(callWith('approved')), undo)).not.toContain('disabled');
-    expect(control(tiles(callWith('draft')), undo)).toContain('disabled');
-    expect(control(tiles(callWith('sent')), undo)).toContain('disabled');
-  });
-
-  it('says why an icon is unavailable rather than just greying it', () => {
-    expect(control(tiles(callWith('approved')), approve)).toContain('Already approved');
-    expect(control(tiles(callWith('draft')), undo)).toContain('still a draft');
-    expect(control(tiles(callWith('sent')), undo)).toContain('cannot be taken back');
-  });
-});
-
-describe('showing that something is happening', () => {
-  it('ships a spinner style the buttons can use', () => {
-    // The markup is static here, so what is checked is that the mechanism
-    // exists and is wired: `loading` puts a .spinner inside the button and
-    // marks it busy for a screen reader.
-    const html = renderToStaticMarkup(
-      <Button variant="primary" loading>
-        Approve
-      </Button>,
-    );
-
-    expect(html).toContain('spinner');
-    expect(html).toContain('aria-busy="true"');
-    // The label stays, so the row does not change width mid-action.
-    expect(html).toContain('Approve');
-  });
-
-  it('disables a loading button without being told to', () => {
-    const html = renderToStaticMarkup(<Button loading>Send</Button>);
-    expect(html).toContain('disabled');
-  });
-
-  it('leaves an idle button alone', () => {
-    const html = renderToStaticMarkup(<Button variant="primary">Approve</Button>);
-    expect(html).not.toContain('spinner');
-    expect(html).not.toContain('aria-busy');
-    expect(html).not.toContain('disabled');
-  });
-
-  it('keeps a label-free button at a fixed width while it works', () => {
-    // Without this the spinner replaces the icon, the button shrinks to fit it,
-    // and every control beside it slides along mid-action.
-    const html = renderToStaticMarkup(
-      <Button iconOnly small variant="ghost" aria-label="Approve" loading />,
-    );
-    expect(html).toContain('btn-icon');
-    expect(html).toContain('btn-sm');
-  });
-});
-
-describe('what the notice says about its own delivery', () => {
-  it('stays quiet when the email arrived', () => {
-    // The address it went to is on the record either way; repeating it under
-    // every notice read as a problem on a notice that is fine.
-    const html = notices(callWith('sent'));
-    expect(html).not.toContain('Emailed to');
-    expect(html).not.toContain('treasury@investor.example');
-  });
-
-  it('says so loudly when it did not', () => {
-    // The quiet line went; this one must not. A notice whose email failed is
-    // the one thing on this screen that needs somebody to act.
-    const html = notices(callWith('sent', undefined, true));
-    expect(html).toContain('Email not delivered');
-    expect(html).toContain('Domain is not verified.');
-    expect(html).toContain('role="alert"');
-  });
-
-  it('does not nag about a missing address on the register', () => {
-    // Built with the address actually removed, so this fails if the line
-    // comes back rather than passing because there was nothing to say.
-    const model = {
-      ...ILLUSTRATIVE_FUND,
-      lps: ILLUSTRATIVE_FUND.lps.map((lp, i) => (i === 0 ? { ...lp, Contact_Email: '' } : lp)),
-    };
-    const own = compute(model);
-    const call = {
-      id: 'call-1',
-      clientId: 'client-1',
-      callNo: 2,
-      stage: 'in_progress',
-      lockedAt: null,
-      sources: { setup: 'template', lps: 'template', components: 'template', fee: 'template', transfers: 'template' },
-      sourceFileName: null,
-      model,
-      notices: own.rows.filter((r) => r.isActive).map((r) => notice(r.LP_ID, 'sent')),
-    } as unknown as CallDetail;
-
-    const html = notices(
-      renderToStaticMarkup(
-        <NoticesTab
-          call={call}
-          result={own}
-          email={{ configured: true, overrideTo: null }}
-          onSelect={() => {}}
-        />,
-      ),
-    );
-
-    expect(html).not.toContain('add one in the LP register');
-    // The register really is missing it — otherwise the assertion above is
-    // checking nothing.
-    expect(model.lps[0].Contact_Email).toBe('');
+  it('never offers an action it would refuse', () => {
+    // Whatever is rendered is pressable: nothing here is disabled.
+    for (const status of ['draft', 'approved', 'sent'] as const) {
+      const html = tiles(callWith(status));
+      expect(html, status).not.toContain('disabled');
+    }
   });
 });
 
@@ -401,5 +308,130 @@ describe('the status tags line up', () => {
     const nav = tiles(callWith('draft'));
     const cells = nav.match(new RegExp(`width:${STATUS_COLUMN}px`, 'g')) ?? [];
     expect(cells).toHaveLength(active.length);
+  });
+});
+
+describe('what the notice says about its own delivery', () => {
+  it('stays quiet when the email arrived', () => {
+    // The address it went to is on the record either way; repeating it under
+    // every notice read as a problem on a notice that is fine.
+    const html = notices(callWith('sent'));
+    expect(html).not.toContain('Emailed to');
+    expect(html).not.toContain('treasury@investor.example');
+  });
+
+  it('says so loudly when it did not', () => {
+    // The quiet line went; this one must not. A notice whose email failed is
+    // the one thing on this screen that needs somebody to act.
+    const html = notices(callWith('sent', undefined, true));
+    expect(html).toContain('Email not delivered');
+    expect(html).toContain('Domain is not verified.');
+    expect(html).toContain('role="alert"');
+  });
+
+  it('does not nag about a missing address on the register', () => {
+    // Built with the address actually removed, so this fails if the line
+    // comes back rather than passing because there was nothing to say.
+    const model = {
+      ...ILLUSTRATIVE_FUND,
+      lps: ILLUSTRATIVE_FUND.lps.map((lp, i) => (i === 0 ? { ...lp, Contact_Email: '' } : lp)),
+    };
+    const own = compute(model);
+    const call = {
+      id: 'call-1',
+      clientId: 'client-1',
+      callNo: 2,
+      stage: 'in_progress',
+      lockedAt: null,
+      sources: { setup: 'template', lps: 'template', components: 'template', fee: 'template', transfers: 'template' },
+      sourceFileName: null,
+      model,
+      notices: own.rows.filter((r) => r.isActive).map((r) => notice(r.LP_ID, 'sent')),
+    } as unknown as CallDetail;
+
+    const html = notices(
+      renderToStaticMarkup(
+        <NoticesTab
+          call={call}
+          result={own}
+          email={{ configured: true, overrideTo: null }}
+          onSelect={() => {}}
+        />,
+      ),
+    );
+
+    expect(html).not.toContain('add one in the LP register');
+    // The register really is missing it — otherwise the assertion above is
+    // checking nothing.
+    expect(model.lps[0].Contact_Email).toBe('');
+  });
+});
+
+describe('showing that something is happening', () => {
+  it('ships a spinner style the buttons can use', () => {
+    // The markup is static here, so what is checked is that the mechanism
+    // exists and is wired: `loading` puts a .spinner inside the button and
+    // marks it busy for a screen reader.
+    const html = renderToStaticMarkup(
+      <Button variant="primary" loading>
+        Approve
+      </Button>,
+    );
+
+    expect(html).toContain('spinner');
+    expect(html).toContain('aria-busy="true"');
+    // The label stays, so the row does not change width mid-action.
+    expect(html).toContain('Approve');
+  });
+
+  it('disables a loading button without being told to', () => {
+    const html = renderToStaticMarkup(<Button loading>Send</Button>);
+    expect(html).toContain('disabled');
+  });
+
+  it('leaves an idle button alone', () => {
+    const html = renderToStaticMarkup(<Button variant="primary">Approve</Button>);
+    expect(html).not.toContain('spinner');
+    expect(html).not.toContain('aria-busy');
+    expect(html).not.toContain('disabled');
+  });
+
+  it('keeps a label-free button at a fixed width while it works', () => {
+    // Without this the spinner replaces the icon, the button shrinks to fit it,
+    // and every control beside it slides along mid-action.
+    const html = renderToStaticMarkup(
+      <Button iconOnly small variant="ghost" aria-label="Approve" loading />,
+    );
+    expect(html).toContain('btn-icon');
+    expect(html).toContain('btn-sm');
+  });
+});
+
+describe('the stylesheet an icon button depends on', () => {
+  // jsdom does no layout, so nothing above can see where a glyph actually
+  // lands. This reads the rule instead. It is a weak test for a real bug: an
+  // icon button has a fixed width and no padding, so without centring the
+  // glyph sat against its left edge and the button looked broken.
+  const css = readFileSync(new URL('../../../app/globals.css', import.meta.url), 'utf8');
+
+  function rule(selector: string) {
+    const found = new RegExp(`\\${selector} \\{([^}]*)\\}`).exec(css);
+    expect(found, `no ${selector} rule`).not.toBeNull();
+    return found![1];
+  }
+
+  it('centres what is inside a button', () => {
+    expect(rule('.btn')).toContain('justify-content: center');
+  });
+
+  it('gives an icon button a width of its own', () => {
+    expect(rule('.btn-icon')).toContain('width:');
+    expect(rule('.btn-icon')).toContain('padding: 0');
+  });
+
+  it('holds a list row open where an action does not apply', () => {
+    // Same width as `.btn-icon.btn-sm`, or the column moves.
+    expect(rule('.slot')).toContain('width: 28px');
+    expect(rule('.btn-icon.btn-sm')).toContain('width: 28px');
   });
 });

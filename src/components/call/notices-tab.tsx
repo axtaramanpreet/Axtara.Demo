@@ -287,6 +287,25 @@ export function NoticesTab({
             </Button>
           )}
 
+          {/* Sending the one notice on screen. It used to hover over the top of
+              the page, which is what made it look like it belonged to nothing.
+              It is not the bold button: the call-wide step is. */}
+          {!showAll && selected && noticeStatusFor(call.notices, selected.LP_ID) === 'approved' && (
+            <Button
+              title={
+                (selected.Contact_Email as string)
+                  ? `Emails the notice to ${selected.Contact_Email}`
+                  : 'No Contact_Email on the register for this investor'
+              }
+              loading={working(`send:${selected.LP_ID}`)}
+              disabled={busy}
+              onClick={() => act('send', [selected.LP_ID], `send:${selected.LP_ID}`)}
+            >
+              {icon(`send:${selected.LP_ID}`, <Send size={15} aria-hidden />)}
+              Send this notice
+            </Button>
+          )}
+
           {/* One bold button, and it is whatever the call actually needs next.
               Sending is irreversible; it should never sit beside Print looking
               equally harmless. */}
@@ -409,49 +428,48 @@ export function NoticesTab({
                   </span>
                 </button>
 
-                {/* Both icons are on every row, enabled only where they mean
-                    something. Showing and hiding them instead would shift the
-                    rows around as a call progresses, and would leave nothing to
-                    explain why an investor has no approve on them. */}
-                <Button
-                  iconOnly
-                  small
-                  variant="ghost"
-                  aria-label={`Approve the notice for ${row.LP_Name}`}
-                  title={
-                    status !== 'draft'
-                      ? status === 'approved'
-                        ? 'Already approved'
-                        : 'Issued — it cannot be changed'
-                      : failing > 0
-                        ? 'Resolve the failing checks first'
-                        : `Approve the notice for ${row.LP_Name}`
-                  }
-                  loading={working(`approve:${row.LP_ID}`)}
-                  disabled={busy || status !== 'draft' || failing > 0}
-                  onClick={() => act('approve', [row.LP_ID], `approve:${row.LP_ID}`)}
-                >
-                  {icon(`approve:${row.LP_ID}`, <Check size={15} aria-hidden />)}
-                </Button>
+                {/* Each action keeps its place in the row whether or not it
+                    applies, so the column does not move as a call progresses.
+                    The slot is left empty rather than filled with a greyed-out
+                    icon: a dead control reads as a broken one, and someone will
+                    click it and conclude the screen does not work. */}
+                <span className="slot">
+                  {status === 'draft' && (
+                    <Button
+                      iconOnly
+                      small
+                      variant="ghost"
+                      aria-label={`Approve the notice for ${row.LP_Name}`}
+                      title={
+                        failing > 0
+                          ? 'Resolve the failing checks first'
+                          : `Approve the notice for ${row.LP_Name}`
+                      }
+                      loading={working(`approve:${row.LP_ID}`)}
+                      disabled={busy || failing > 0}
+                      onClick={() => act('approve', [row.LP_ID], `approve:${row.LP_ID}`)}
+                    >
+                      {icon(`approve:${row.LP_ID}`, <Check size={15} aria-hidden />)}
+                    </Button>
+                  )}
+                </span>
 
-                <Button
-                  iconOnly
-                  small
-                  variant="ghost"
-                  aria-label={`Take the notice for ${row.LP_Name} back to draft`}
-                  title={
-                    status === 'approved'
-                      ? 'Back to draft'
-                      : status === 'draft'
-                        ? 'Nothing to undo — this is still a draft'
-                        : 'Issued — it cannot be taken back'
-                  }
-                  loading={working(`revert:${row.LP_ID}`)}
-                  disabled={busy || status !== 'approved'}
-                  onClick={() => act('revert', [row.LP_ID], `revert:${row.LP_ID}`)}
-                >
-                  {icon(`revert:${row.LP_ID}`, <Undo2 size={15} aria-hidden />)}
-                </Button>
+                <span className="slot">
+                  {status === 'approved' && (
+                    <Button
+                      iconOnly
+                      small
+                      variant="ghost"
+                      aria-label={`Take the notice for ${row.LP_Name} back to draft`}
+                      title="Back to draft"
+                      loading={working(`revert:${row.LP_ID}`)}
+                      disabled={busy}
+                      onClick={() => act('revert', [row.LP_ID], `revert:${row.LP_ID}`)}
+                    >
+                      {icon(`revert:${row.LP_ID}`, <Undo2 size={15} aria-hidden />)}
+                    </Button>
+                  )}
+                </span>
               </div>
             );
           })}
@@ -467,9 +485,6 @@ export function NoticesTab({
           {(showAll ? active : selected ? [selected] : []).map((row) => {
             const status = noticeStatusFor(call.notices, row.LP_ID);
             const record = noticeFor(call.notices, row.LP_ID);
-            // Named apart from the `email` prop, which is the fund-wide
-            // delivery configuration rather than this investor's address.
-            const investorEmail = (row.Contact_Email as string) || '';
 
             return (
               <div key={row.LP_ID}>
@@ -503,31 +518,9 @@ export function NoticesTab({
                       `issued${record?.sentAt ? ` ${new Date(record.sentAt).toLocaleString('en-GB')}` : ''} — cannot be changed`}
                   </span>
 
-                  {/* The only action left on the page itself.
-                      Approving and undoing belong to the investor's tile,
-                      beside the status they change; downloading belongs with
-                      the other actions in the toolbar. Sending stays here
-                      because it is irreversible, and it should be pressed next
-                      to the figures a person is meant to have read first. */}
-                  {status === 'approved' && (
-                    <span style={{ marginLeft: 'auto', display: 'inline-flex' }}>
-                      <Button
-                        small
-                        variant="primary"
-                        title={
-                          investorEmail
-                            ? `Emails the notice to ${investorEmail}`
-                            : 'No Contact_Email on the register for this investor'
-                        }
-                        loading={working(`send:${row.LP_ID}`)}
-                        disabled={busy}
-                        onClick={() => act('send', [row.LP_ID], `send:${row.LP_ID}`)}
-                      >
-                        {icon(`send:${row.LP_ID}`, <Send size={14} aria-hidden />)}
-                        Send
-                      </Button>
-                    </span>
-                  )}
+                  {/* Nothing to press here. Every action on a notice is
+                      either on the investor's tile or in the toolbar; this line
+                      says which notice is on screen and where it has got to. */}
                 </div>
 
                 {record?.delivery === 'failed' && (

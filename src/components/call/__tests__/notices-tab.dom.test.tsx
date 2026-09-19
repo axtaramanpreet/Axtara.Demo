@@ -1,0 +1,163 @@
+// @vitest-environment jsdom
+
+/**
+ * The notices screen, actually clicked.
+ *
+ * Everything else in this folder renders to a string and reads the markup,
+ * which cannot tell whether a button does anything. A control that is present,
+ * named, enabled and wired to nothing looks identical. This drives the real
+ * component in a document and watches what it asks the server for.
+ */
+
+import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const refresh = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh, push: () => {}, replace: () => {} }),
+}));
+
+import { compute } from '@/engine';
+import { ILLUSTRATIVE_FUND } from '@/engine/fixtures/illustrative-fund';
+import type { CallDetail, NoticeState, NoticeStatus } from '@/adapters/storage/types';
+import { NoticesTab } from '../notices-tab';
+
+const result = compute(ILLUSTRATIVE_FUND);
+const active = result.rows.filter((r) => r.isActive);
+/** Approved, so both the undo and the send are live. */
+const approved = active[0];
+/** Still a draft, so the approve is live. */
+const draft = active[1];
+
+/** Every request the component made, newest last. */
+let sent: { url: string; body: Record<string, unknown> }[] = [];
+
+function notice(lpId: string, status: NoticeStatus): NoticeState {
+  return {
+    investorId: `id-${lpId}`,
+    lpId,
+    status,
+    approvedAt: status === 'draft' ? null : '2026-09-30T09:00:00Z',
+    sentAt: null,
+    sentToEmail: null,
+    delivery: null,
+    deliveryError: null,
+    deliveredTo: null,
+  };
+}
+
+function renderTab() {
+  const call = {
+    id: 'call-1',
+    clientId: 'client-1',
+    callNo: 2,
+    stage: 'in_progress',
+    lockedAt: null,
+    sources: { setup: 'template', lps: 'template', components: 'template', fee: 'template', transfers: 'template' },
+    sourceFileName: null,
+    model: ILLUSTRATIVE_FUND,
+    notices: active.map((r) => notice(r.LP_ID, r.LP_ID === approved.LP_ID ? 'approved' : 'draft')),
+  } as unknown as CallDetail;
+
+  return render(
+    <NoticesTab
+      call={call}
+      result={result}
+      email={{ configured: true, overrideTo: null }}
+      selectedLp={approved.LP_ID}
+      onSelect={() => {}}
+    />,
+  );
+}
+
+beforeEach(() => {
+  sent = [];
+  refresh.mockClear();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init?: { body?: string }) => {
+      sent.push({ url, body: init?.body ? JSON.parse(init.body) : {} });
+      return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    }),
+  );
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+/** The one control with this accessible name. */
+function control(name: string) {
+  return screen.getByRole('button', { name }) as HTMLButtonElement;
+}
+
+describe('the tile controls do something', () => {
+  it('takes an approved notice back to draft', async () => {
+    renderTab();
+    const undo = control(`Take the notice for ${approved.LP_Name} back to draft`);
+    expect(undo.disabled, 'undo is greyed out on an approved notice').toBe(false);
+
+    await userEvent.click(undo);
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0].url).toBe('/api/calls/call-1/notices');
+    expect(sent[0].body).toEqual({ action: 'revert', lpIds: [approved.LP_ID] });
+  });
+
+  it('approves a draft', async () => {
+    renderTab();
+    const approve = control(`Approve the notice for ${draft.LP_Name}`);
+    expect(approve.disabled, 'approve is greyed out on a draft').toBe(false);
+
+    await userEvent.click(approve);
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0].body).toEqual({ action: 'approve', lpIds: [draft.LP_ID] });
+  });
+
+  it('shows the result rather than leaving the old figures up', async () => {
+    // The server has recorded it; the page has not caught up until this runs.
+    renderTab();
+    await userEvent.click(control(`Take the notice for ${approved.LP_Name} back to draft`));
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  });
+
+  it('offers nothing to undo on a draft', () => {
+    // Not a greyed-out icon: one of those was read as a button that does not
+    // work, which is how this file came to exist.
+    renderTab();
+    expect(
+      screen.queryByRole('button', { name: `Take the notice for ${draft.LP_Name} back to draft` }),
+    ).toBeNull();
+  });
+});
+
+describe('the toolbar controls do something', () => {
+  it('downloads the notice that is on screen', async () => {
+    renderTab();
+    await userEvent.click(control(`Download the notice for ${approved.LP_Name}`));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0].url).toBe(`/api/calls/call-1/notices/pdf?lpId=${approved.LP_ID}`);
+  });
+
+  it('approves every draft at once', async () => {
+    renderTab();
+    await userEvent.click(screen.getByRole('button', { name: /Approve \d+ drafts?/ }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0].body).toEqual({ action: 'approve', lpIds: undefined });
+  });
+});
+
+describe('sending one notice', () => {
+  it('asks the server to send only the investor on screen', async () => {
+    renderTab();
+    await userEvent.click(screen.getByRole('button', { name: 'Send this notice' }));
+
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0].body).toEqual({ action: 'send', lpIds: [approved.LP_ID] });
+  });
+});

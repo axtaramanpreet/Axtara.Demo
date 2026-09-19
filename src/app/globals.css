@@ -137,6 +137,9 @@ p {
 .btn {
   display: inline-flex;
   align-items: center;
+  /* Icon-only buttons have a fixed width and no padding, so without this the
+     glyph sits against the left edge instead of in the middle. */
+  justify-content: center;
   gap: 6px;
   height: 34px;
   padding: 0 14px;
@@ -199,6 +202,16 @@ p {
 .btn-icon.btn-sm {
   width: 28px;
   padding: 0;
+}
+
+/* One place in a list row for one small icon button, held open whether or not
+   there is a button to put in it. A row's actions therefore stay in the same
+   column as its state changes, without a greyed-out icon sitting there looking
+   like a button that does not work. Same width as `.btn-icon.btn-sm` above. */
+.slot {
+  display: inline-flex;
+  width: 28px;
+  flex: none;
 }
 
 /* --- Tags ----------------------------------------------------------------- */

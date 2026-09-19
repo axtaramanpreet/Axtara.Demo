@@ -181,10 +181,16 @@ describe('deliberate divergence: the fund supplies the letter', () => {
     expect(notice.salutation).toBe(`Dear ${result.rows[0].LP_Name},`);
   });
 
-  it('says how and by when to pay', () => {
+  it('says by when to pay, and does not claim instructions it has not got', () => {
     const text = notice.closing.join(' ');
-    expect(text).toContain('wiring instructions');
     expect(text).toContain(notice.dueDate);
+
+    // The fund's template directed the investor to "the wiring instructions
+    // provided with this notice". None are provided, so the sentence was
+    // removed rather than left saying something untrue in the paragraph that
+    // asks somebody to move money. This fails if it comes back before the
+    // bank details do.
+    expect(text).not.toContain('wiring instructions');
   });
 
   it('is wording the handoff engine never produced', () => {

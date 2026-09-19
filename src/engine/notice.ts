@@ -231,8 +231,11 @@ export function buildNotice(
       gpName,
     ].filter(Boolean),
     closing: [
-      'Please remit the above amount to the Fund’s designated bank account in accordance with ' +
-        'the wiring instructions provided with this notice.',
+      // The fund's template had a sentence here directing the investor to
+      // "the wiring instructions provided with this notice". There are none,
+      // so it was removed rather than left saying something untrue in the one
+      // paragraph that asks somebody to move money. Put it back when the bank
+      // details exist and can actually accompany the notice.
       `Kindly ensure that the funds are received by ${dueDate}. If you have any questions ` +
         'regarding this capital call or require any additional information, please do not ' +
         'hesitate to contact us.',

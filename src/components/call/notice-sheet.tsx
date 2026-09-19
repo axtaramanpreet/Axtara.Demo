@@ -6,10 +6,11 @@ import type { NoticeData } from '@/engine';
  * Laid out as a document rather than a screen: fixed width, generous margins,
  * and `[data-notice]` so the print stylesheet gives each one its own page.
  *
- * The letter refers to wiring instructions "provided with this notice", and
- * there are none. The wording was supplied that way and is being used as given,
- * but until the bank details exist an investor is told to follow instructions
- * that are not there — which is worse than the notice saying nothing at all.
+ * It carries no payment instructions, and the sentence that referred to them
+ * has been removed rather than left pointing at something that does not exist.
+ * So the notice states an amount and a date and nothing about how to pay it:
+ * an investor still cannot act on it alone. That gap is the thing to close
+ * before any of these reach a real limited partner.
  */
 export function NoticeSheet({
   notice,

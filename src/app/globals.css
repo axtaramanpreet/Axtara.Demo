@@ -180,6 +180,14 @@ p {
   color: var(--foreground);
 }
 
+/* A ghost *icon* is not muted. The grey is there to keep a worded ghost button
+   quiet beside a real one, but an icon has no word next to it saying it can be
+   pressed — dimmed, it reads as disabled, which is exactly how it was read.
+   Disabled still looks different: `.btn:disabled` drops it to 45% opacity. */
+.btn-ghost.btn-icon {
+  color: var(--foreground);
+}
+
 /* Sizes. The default is 34px; these are the only two departures from it. */
 .btn-lg {
   height: 38px;

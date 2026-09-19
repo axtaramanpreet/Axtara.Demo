@@ -414,8 +414,14 @@ describe('the stylesheet an icon button depends on', () => {
   // glyph sat against its left edge and the button looked broken.
   const css = readFileSync(new URL('../../../app/globals.css', import.meta.url), 'utf8');
 
+  /**
+   * The body of one rule.
+   *
+   * Anchored to the start of a line, or `.btn-icon` also matches inside
+   * `.btn-ghost.btn-icon` and reads the wrong rule.
+   */
   function rule(selector: string) {
-    const found = new RegExp(`\\${selector} \\{([^}]*)\\}`).exec(css);
+    const found = new RegExp(`\n\\${selector} \\{([^}]*)\\}`).exec(css);
     expect(found, `no ${selector} rule`).not.toBeNull();
     return found![1];
   }
@@ -433,5 +439,23 @@ describe('the stylesheet an icon button depends on', () => {
     // Same width as `.btn-icon.btn-sm`, or the column moves.
     expect(rule('.slot')).toContain('width: 28px');
     expect(rule('.btn-icon.btn-sm')).toContain('width: 28px');
+  });
+});
+
+describe('an icon button does not look disabled when it is not', () => {
+  const css = readFileSync(new URL('../../../app/globals.css', import.meta.url), 'utf8');
+
+  it('gives a ghost icon the full text colour, not the muted one', () => {
+    // Muted grey is for a worded ghost button sitting beside a real one. An
+    // icon has no word to say it can be pressed, so grey reads as off.
+    const rule = /\.btn-ghost\.btn-icon \{([^}]*)\}/.exec(css);
+    expect(rule, 'no .btn-ghost.btn-icon rule').not.toBeNull();
+    expect(rule![1]).toContain('var(--foreground)');
+  });
+
+  it('still dims one that really is disabled', () => {
+    const rule = /\.btn:disabled \{([^}]*)\}/.exec(css);
+    expect(rule, 'no .btn:disabled rule').not.toBeNull();
+    expect(rule![1]).toContain('opacity');
   });
 });

@@ -107,38 +107,6 @@ export function NoticesTab({
 
   return (
     <div style={{ marginTop: 20 }}>
-      {email.overrideTo ? (
-        <p
-          data-noprint="1"
-          style={{
-            margin: '0 0 14px',
-            padding: '10px 14px',
-            border: '1px solid var(--destructive)',
-            borderRadius: 'var(--radius)',
-            fontSize: 13,
-          }}
-        >
-          <strong>Test mode.</strong> Every notice is emailed to{' '}
-          <span className="mono">{email.overrideTo}</span> whatever the register says. No investor
-          will receive anything. Clear <span className="mono">EMAIL_OVERRIDE_TO</span> to go live.
-        </p>
-      ) : !email.configured ? (
-        <p
-          data-noprint="1"
-          style={{
-            margin: '0 0 14px',
-            padding: '10px 14px',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            fontSize: 13,
-          }}
-        >
-          No email provider is configured, so sending will record and freeze each notice but
-          deliver nothing. Download the PDFs and send them yourself, or set{' '}
-          <span className="mono">RESEND_API_KEY</span>.
-        </p>
-      ) : null}
-
       <div
         data-noprint="1"
         style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}
@@ -154,6 +122,24 @@ export function NoticesTab({
         </Button>
 
         <span className="text-muted" style={{ marginLeft: 'auto', fontSize: 12 }}>
+          {/* Quiet rather than absent. Whoever is operating this has to be able
+              to tell whether a send reaches investors, and the red banner that
+              used to say so was too loud to demo in front of anyone. */}
+          {email.overrideTo ? (
+            <>
+              <span title={`Notices are redirected to ${email.overrideTo}; no investor is emailed.`}>
+                Test mode
+              </span>
+              {' · '}
+            </>
+          ) : !email.configured ? (
+            <>
+              <span title="No email provider is configured; sending records a notice but delivers nothing.">
+                No email provider
+              </span>
+              {' · '}
+            </>
+          ) : null}
           {sent} sent · {approved} approved · {draft} draft
         </span>
 

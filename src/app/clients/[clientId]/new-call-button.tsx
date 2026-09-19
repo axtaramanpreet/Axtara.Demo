@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createBrowserSupabase } from '@/adapters/storage/supabase-client';
 import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
-import { emptyCall } from '@/engine';
+import { emptyCall, type CallDefaults } from '@/engine';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -25,11 +25,14 @@ import { Button } from '@/components/ui/button';
 export function NewCallButton({
   clientId,
   clientName,
+  defaults,
   reuseCallId,
 }: {
   clientId: string;
   /** The fund's name, which becomes the new call's Fund_Name. */
   clientName: string;
+  /** The general partner and signatory a new call starts with. */
+  defaults: CallDefaults;
   /** An existing not-started call to open instead of creating another. */
   reuseCallId?: string;
 }) {
@@ -48,7 +51,7 @@ export function NewCallButton({
     setBusy(true);
     try {
       const repo = createSupabaseRepository(createBrowserSupabase());
-      const created = await repo.createCall(clientId, emptyCall(clientName), {
+      const created = await repo.createCall(clientId, emptyCall(clientName, defaults), {
         setup: 'empty',
         lps: 'empty',
         components: 'empty',

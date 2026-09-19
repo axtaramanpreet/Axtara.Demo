@@ -107,6 +107,23 @@ export function emailStatusForClient() {
   };
 }
 
+/**
+ * Defaults a new, blank call starts with.
+ *
+ * The signatory is the same person on every call a firm issues, and typing it
+ * again each time is how it ends up wrong. Configuration rather than a literal
+ * in the engine, so changing who signs is a setting and not a deployment.
+ *
+ * An uploaded workbook always wins: these only fill a field nobody has set.
+ */
+export function noticeDefaults() {
+  return {
+    gpName: process.env.NOTICE_GP_NAME || '',
+    signatoryName: process.env.NOTICE_SIGNATORY_NAME || '',
+    signatoryTitle: process.env.NOTICE_SIGNATORY_TITLE || '',
+  };
+}
+
 function required(name: string, value: string | undefined): string {
   if (!value) {
     throw new Error(`Missing ${name}. Copy .env.example to .env.local and fill it in.`);

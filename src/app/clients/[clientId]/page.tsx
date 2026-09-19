@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { compute, fmt, fmtDate } from '@/engine';
 import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
 import type { SupabaseClient } from '@/adapters/storage/supabase-client';
+import type { CallDefaults } from '@/engine';
 import type { CallSummary } from '@/adapters/storage/types';
 import { getServerSupabase } from '@/lib/supabase/server';
 import { AppHeader } from '@/components/app-header';
@@ -10,6 +11,7 @@ import { Card, CardGrid } from '@/components/ui/card';
 import { StageTag } from '@/components/ui/tag';
 import { DrawdownChart, type DrawdownColumn } from '@/components/home/drawdown-chart';
 import { NewCallButton } from './new-call-button';
+import { noticeDefaults } from '@/lib/env';
 
 /**
  * Home: every capital call for one fund, its position, and how much has been
@@ -33,6 +35,7 @@ export default async function ClientHomePage({
     repo.listCalls(clientId),
   ]);
 
+  const defaults = noticeDefaults();
   const client = clients.find((c) => c.id === clientId);
   if (!client) notFound();
 
@@ -52,12 +55,17 @@ export default async function ClientHomePage({
             <p className="text-muted">{homeHint(calls, openCall)}</p>
           </div>
           <div style={{ marginLeft: 'auto' }}>
-            <NewCallButton clientId={clientId} clientName={client.name} reuseCallId={notStarted?.id} />
+            <NewCallButton
+              clientId={clientId}
+              clientName={client.name}
+              defaults={defaults}
+              reuseCallId={notStarted?.id}
+            />
           </div>
         </div>
 
         {calls.length === 0 ? (
-          <EmptyState clientId={clientId} clientName={client.name} />
+          <EmptyState clientId={clientId} clientName={client.name} defaults={defaults} />
         ) : (
           <>
             <CardGrid style={{ marginTop: 24 }}>
@@ -193,7 +201,15 @@ function CallRow({
   );
 }
 
-function EmptyState({ clientId, clientName }: { clientId: string; clientName: string }) {
+function EmptyState({
+  clientId,
+  clientName,
+  defaults,
+}: {
+  clientId: string;
+  clientName: string;
+  defaults: CallDefaults;
+}) {
   return (
     <Card style={{ maxWidth: 560, marginTop: 24 }} bodyPadding="28px">
       <h3>No capital calls yet</h3>
@@ -202,7 +218,7 @@ function EmptyState({ clientId, clientName }: { clientId: string; clientName: st
         hand, or loading the illustrative template to see how it works.
       </p>
       <div style={{ marginTop: 18 }}>
-        <NewCallButton clientId={clientId} clientName={clientName} />
+        <NewCallButton clientId={clientId} clientName={clientName} defaults={defaults} />
       </div>
     </Card>
   );

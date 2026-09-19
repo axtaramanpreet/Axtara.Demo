@@ -2,7 +2,8 @@
  * A new, empty capital call.
  *
  * Everything is blank except the fund's own name, which is a fact the app
- * already knows rather than a guess. Currency, dates, the fee, the rounding
+ * already knows, and whatever `defaults` carries — the general partner and who
+ * signs, which a firm sets once and reuses rather than retyping per call. Currency, dates, the fee, the rounding
  * policy and the plug investor are all decisions belonging to this fund, and
  * they arrive from the uploaded workbook, from carrying the previous call
  * forward, or from being typed in.
@@ -19,11 +20,18 @@
 
 import type { CallModel } from './types';
 
-export function emptyCall(fundName: string): CallModel {
+/** Fields a firm sets once and reuses on every call. */
+export interface CallDefaults {
+  gpName?: string;
+  signatoryName?: string;
+  signatoryTitle?: string;
+}
+
+export function emptyCall(fundName: string, defaults: CallDefaults = {}): CallModel {
   return {
     setup: {
       Fund_Name: fundName,
-      GP_Name: '',
+      GP_Name: defaults.gpName ?? '',
       Reporting_Currency: '',
       Call_Number: '',
       Call_Date: '',
@@ -34,8 +42,8 @@ export function emptyCall(fundName: string): CallModel {
       Org_Expense_Cap: '',
       Rounding_Decimals: '',
       Rounding_Plug_LP_ID: '',
-      Signatory_Name: '',
-      Signatory_Title: '',
+      Signatory_Name: defaults.signatoryName ?? '',
+      Signatory_Title: defaults.signatoryTitle ?? '',
       Prepared_By: '',
     },
     lps: [],

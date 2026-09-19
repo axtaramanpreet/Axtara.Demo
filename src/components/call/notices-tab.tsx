@@ -458,53 +458,32 @@ export function NoticesTab({
                       `issued${record?.sentAt ? ` ${new Date(record.sentAt).toLocaleString('en-GB')}` : ''} — cannot be changed`}
                   </span>
 
-                  {/* One notice's own actions, as icons.
-                      A row of worded buttons repeated down a stacked list
-                      drowned out the figures they belong to. Each icon still
-                      has an `aria-label` and a `title`, so nothing is hidden —
-                      only shortened.
-
-                      Approving is not here: it lives on the investor's tile in
-                      the list, beside the status it changes. Sending does live
-                      here, because it is irreversible and belongs next to the
-                      figures a person is meant to have read first. */}
+                  {/* What is left to do with this one notice.
+                      Approving and undoing live on the investor's tile in the
+                      list, beside the status they change. Sending stays here,
+                      because it is irreversible and belongs next to the figures
+                      a person is meant to have read before pressing it — and it
+                      keeps its word for the same reason. The download is a bare
+                      icon: it changes nothing. */}
                   <span
                     style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, alignItems: 'center' }}
                   >
                     <Button
                       iconOnly
+                      small
                       variant="ghost"
                       aria-label={`Download the notice for ${row.LP_Name}`}
                       title="Download this notice as a PDF"
                       loading={working(`download:${row.LP_ID}`)}
                       onClick={() => download(row.LP_ID)}
                     >
-                      {icon(`download:${row.LP_ID}`, <FileDown size={16} aria-hidden />)}
+                      {icon(`download:${row.LP_ID}`, <FileDown size={15} aria-hidden />)}
                     </Button>
 
-                    {/* There is no "rejected" state to move a draft into, so
-                        undo is only offered on something already approved:
-                        it takes the approval back, it does not refuse the
-                        investor. */}
                     {status === 'approved' && (
                       <Button
-                        iconOnly
-                        variant="ghost"
-                        aria-label={`Take the notice for ${row.LP_Name} back to draft`}
-                        title="Back to draft"
-                        loading={working(`revert:${row.LP_ID}`)}
-                        disabled={busy}
-                        onClick={() => act('revert', [row.LP_ID], `revert:${row.LP_ID}`)}
-                      >
-                        {icon(`revert:${row.LP_ID}`, <Undo2 size={16} aria-hidden />)}
-                      </Button>
-                    )}
-
-                    {status === 'approved' && (
-                      <Button
-                        iconOnly
+                        small
                         variant="primary"
-                        aria-label={`Send the notice to ${row.LP_Name}`}
                         title={
                           investorEmail
                             ? `Emails the notice to ${investorEmail}`
@@ -514,7 +493,8 @@ export function NoticesTab({
                         disabled={busy}
                         onClick={() => act('send', [row.LP_ID], `send:${row.LP_ID}`)}
                       >
-                        {icon(`send:${row.LP_ID}`, <Send size={16} aria-hidden />)}
+                        {icon(`send:${row.LP_ID}`, <Send size={14} aria-hidden />)}
+                        Send
                       </Button>
                     )}
                   </span>
@@ -528,23 +508,6 @@ export function NoticesTab({
                   >
                     Email not delivered — {record.deliveryError}. The notice itself is issued and
                     its figures are frozen; sending the email again does not reissue it.
-                  </p>
-                )}
-
-                {record?.delivery === 'delivered' && (
-                  <p data-noprint="1" className="text-muted" style={{ fontSize: 12, marginTop: 0 }}>
-                    Emailed to <span className="mono">{record.deliveredTo}</span>
-                    {record.deliveredTo !== record.sentToEmail && record.sentToEmail
-                      ? ` (redirected from ${record.sentToEmail})`
-                      : ''}
-                    .
-                  </p>
-                )}
-
-                {status !== 'draft' && !investorEmail && (
-                  <p data-noprint="1" className="text-muted" style={{ fontSize: 12, marginTop: 0 }}>
-                    No Contact_Email for {row.LP_ID} — add one in the LP register to email this
-                    notice.
                   </p>
                 )}
 

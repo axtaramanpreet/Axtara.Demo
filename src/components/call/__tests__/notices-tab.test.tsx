@@ -25,7 +25,7 @@ import { NoticesTab } from '../notices-tab';
 const result = compute(ILLUSTRATIVE_FUND);
 const active = result.rows.filter((r) => r.isActive);
 
-function notice(lpId: string, status: NoticeStatus): NoticeState {
+function notice(lpId: string, status: NoticeStatus, failed = false): NoticeState {
   return {
     investorId: `id-${lpId}`,
     lpId,
@@ -33,14 +33,18 @@ function notice(lpId: string, status: NoticeStatus): NoticeState {
     approvedAt: status === 'draft' ? null : '2026-09-30T09:00:00Z',
     sentAt: status === 'sent' ? '2026-09-30T10:00:00Z' : null,
     sentToEmail: status === 'sent' ? 'treasury@investor.example' : null,
-    delivery: status === 'sent' ? 'delivered' : null,
-    deliveryError: null,
-    deliveredTo: status === 'sent' ? 'treasury@investor.example' : null,
+    delivery: status !== 'sent' ? null : failed ? 'failed' : 'delivered',
+    deliveryError: failed ? 'Domain is not verified.' : null,
+    deliveredTo: status === 'sent' && !failed ? 'treasury@investor.example' : null,
   };
 }
 
 /** The call, with every investor's notice at `status`. */
-function callWith(status: NoticeStatus, email = { configured: true, overrideTo: null as string | null }) {
+function callWith(
+  status: NoticeStatus,
+  email = { configured: true, overrideTo: null as string | null },
+  failed = false,
+) {
   const call = {
     id: 'call-1',
     clientId: 'client-1',
@@ -50,7 +54,7 @@ function callWith(status: NoticeStatus, email = { configured: true, overrideTo: 
     sources: { setup: 'template', lps: 'template', components: 'template', fee: 'template', transfers: 'template' },
     sourceFileName: null,
     model: ILLUSTRATIVE_FUND,
-    notices: active.map((r) => notice(r.LP_ID, status)),
+    notices: active.map((r) => notice(r.LP_ID, status, failed)),
   } as unknown as CallDetail;
 
   return renderToStaticMarkup(
@@ -155,22 +159,28 @@ describe('the actions on one notice', () => {
     const html = notices(callWith('draft'));
     expect(html).toContain(`aria-label="Download the notice for ${lp}"`);
     expect(html).not.toContain(`aria-label="Approve the notice for ${lp}"`);
-    expect(html).not.toContain(`aria-label="Send the notice to ${lp}"`);
+    expect(html).not.toContain('btn-primary');
   });
 
-  it('offers sending and undo once it is approved', () => {
+  it('offers sending once it is approved, and says so in a word', () => {
+    // The one irreversible action on the screen does not get to be a glyph.
     const html = notices(callWith('approved'));
-    expect(html).toContain(`aria-label="Send the notice to ${lp}"`);
-    expect(html).toContain(`aria-label="Take the notice for ${lp} back to draft"`);
+    const send = /<button[^>]*btn-primary[^>]*>([\s\S]*?)<\/button>/.exec(html);
+    expect(send, 'no primary action on an approved notice').not.toBeNull();
+    expect(send![1]).toContain('Send');
+  });
+
+  it('leaves approving and undoing to the tile', () => {
+    const html = notices(callWith('approved'));
     expect(html).not.toContain(`aria-label="Approve the notice for ${lp}"`);
+    expect(html).not.toContain('back to draft');
   });
 
   it('offers nothing but the download once it is sent', () => {
     // An issued notice is frozen; there is no control that could change it.
     const html = notices(callWith('sent'));
     expect(html).toContain(`aria-label="Download the notice for ${lp}"`);
-    expect(html).not.toContain(`aria-label="Approve the notice for ${lp}"`);
-    expect(html).not.toContain(`aria-label="Send the notice to ${lp}"`);
+    expect(html).not.toContain('btn-primary');
     expect(html).not.toContain('back to draft');
   });
 
@@ -265,5 +275,61 @@ describe('showing that something is happening', () => {
     );
     expect(html).toContain('btn-icon');
     expect(html).toContain('btn-sm');
+  });
+});
+
+describe('what the notice says about its own delivery', () => {
+  it('stays quiet when the email arrived', () => {
+    // The address it went to is on the record either way; repeating it under
+    // every notice read as a problem on a notice that is fine.
+    const html = notices(callWith('sent'));
+    expect(html).not.toContain('Emailed to');
+    expect(html).not.toContain('treasury@investor.example');
+  });
+
+  it('says so loudly when it did not', () => {
+    // The quiet line went; this one must not. A notice whose email failed is
+    // the one thing on this screen that needs somebody to act.
+    const html = notices(callWith('sent', undefined, true));
+    expect(html).toContain('Email not delivered');
+    expect(html).toContain('Domain is not verified.');
+    expect(html).toContain('role="alert"');
+  });
+
+  it('does not nag about a missing address on the register', () => {
+    // Built with the address actually removed, so this fails if the line
+    // comes back rather than passing because there was nothing to say.
+    const model = {
+      ...ILLUSTRATIVE_FUND,
+      lps: ILLUSTRATIVE_FUND.lps.map((lp, i) => (i === 0 ? { ...lp, Contact_Email: '' } : lp)),
+    };
+    const own = compute(model);
+    const call = {
+      id: 'call-1',
+      clientId: 'client-1',
+      callNo: 2,
+      stage: 'in_progress',
+      lockedAt: null,
+      sources: { setup: 'template', lps: 'template', components: 'template', fee: 'template', transfers: 'template' },
+      sourceFileName: null,
+      model,
+      notices: own.rows.filter((r) => r.isActive).map((r) => notice(r.LP_ID, 'sent')),
+    } as unknown as CallDetail;
+
+    const html = notices(
+      renderToStaticMarkup(
+        <NoticesTab
+          call={call}
+          result={own}
+          email={{ configured: true, overrideTo: null }}
+          onSelect={() => {}}
+        />,
+      ),
+    );
+
+    expect(html).not.toContain('add one in the LP register');
+    // The register really is missing it — otherwise the assertion above is
+    // checking nothing.
+    expect(model.lps[0].Contact_Email).toBe('');
   });
 });

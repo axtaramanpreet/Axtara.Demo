@@ -4,7 +4,9 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { buildNotice, type ComputeResult } from '@/engine';
 import type { CallDetail } from '@/adapters/storage/types';
+import { CheckCheck, FileArchive, FileDown, Printer, Rows3, Send, Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Menu, MenuItem } from '@/components/ui/menu';
 import { Tag } from '@/components/ui/tag';
 import { NOTICE_DISPLAY, noticeFor, noticeStatusFor } from './notice-status';
 import { NoticeSheet } from './notice-sheet';
@@ -78,6 +80,27 @@ export function NoticesTab({
   const approved = statuses.filter((s) => s === 'approved').length;
   const draft = statuses.filter((s) => s === 'draft').length;
 
+  /**
+   * What the call needs next.
+   *
+   * Approving comes before sending, so drafts win while any remain; then the
+   * approved ones are waiting to go; then there is nothing left to do. This
+   * decides what is *bold* — the other step stays available in the menu, since
+   * an accountant may well want to approve a late addition to a call that is
+   * already part-approved.
+   */
+  const next: 'approve' | 'send' | 'done' =
+    draft > 0 ? 'approve' : approved > 0 ? 'send' : 'done';
+
+  /** Only the states that exist, so a finished call does not read "0 draft". */
+  const counts = [
+    draft > 0 ? `${draft} draft` : null,
+    approved > 0 ? `${approved} approved` : null,
+    sent > 0 ? `${sent} sent` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   async function act(action: 'approve' | 'revert' | 'send', lpIds?: string[]) {
     setBusy(true);
     setError(null);
@@ -109,55 +132,97 @@ export function NoticesTab({
     <div style={{ marginTop: 20 }}>
       <div
         data-noprint="1"
-        style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}
+        style={{
+          display: 'flex',
+          gap: 12,
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          marginBottom: 16,
+        }}
       >
-        <Button variant="secondary" onClick={() => download()}>
-          Download all as .zip
-        </Button>
-        <Button variant="ghost" onClick={() => window.print()}>
-          Print
-        </Button>
-        <Button variant="ghost" onClick={() => setShowAll((v) => !v)}>
-          {showAll ? 'Show one investor' : `Show all ${active.length} notices`}
-        </Button>
-
-        <span className="text-muted" style={{ marginLeft: 'auto', fontSize: 12 }}>
-          {/* Quiet rather than absent. Whoever is operating this has to be able
-              to tell whether a send reaches investors, and the red banner that
-              used to say so was too loud to demo in front of anyone. */}
+        <span className="text-muted" style={{ fontSize: 12 }}>
+          {active.length} notice{active.length === 1 ? '' : 's'} · {counts}
+          {/* Quiet rather than absent. Whoever operates this has to be able to
+              tell whether a send reaches investors; the red banner that used to
+              say so was too loud to demo in front of anyone. */}
           {email.overrideTo ? (
             <>
+              {' · '}
               <span title={`Notices are redirected to ${email.overrideTo}; no investor is emailed.`}>
                 Test mode
               </span>
-              {' · '}
             </>
           ) : !email.configured ? (
             <>
+              {' · '}
               <span title="No email provider is configured; sending records a notice but delivers nothing.">
                 No email provider
               </span>
-              {' · '}
             </>
           ) : null}
-          {sent} sent · {approved} approved · {draft} draft
         </span>
 
-        <Button
-          variant="secondary"
-          disabled={busy || draft === 0 || failing > 0}
-          onClick={() => act('approve')}
-          title={failing > 0 ? 'Resolve the failing checks first' : undefined}
-        >
-          Approve all drafts
-        </Button>
-        <Button
-          variant="primary"
-          disabled={busy || approved === 0}
-          onClick={() => act('send')}
-        >
-          Send all approved
-        </Button>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+          <Menu label="Other notice actions">
+            <MenuItem icon={<FileArchive size={15} />} onClick={() => download()}>
+              Download all as .zip
+            </MenuItem>
+            <MenuItem icon={<Printer size={15} />} onClick={() => window.print()}>
+              Print all
+            </MenuItem>
+            <MenuItem icon={<Rows3 size={15} />} onClick={() => setShowAll((v) => !v)}>
+              {showAll ? 'Show one investor' : `Show all ${active.length} notices`}
+            </MenuItem>
+            {/* The step that is not currently the primary one stays reachable,
+                so an accountant who wants to approve while some are already
+                approved is not forced through the toolbar's idea of order. */}
+            {next === 'send' && (
+              <MenuItem
+                icon={<CheckCheck size={15} />}
+                disabled={busy || draft === 0 || failing > 0}
+                title={failing > 0 ? 'Resolve the failing checks first' : undefined}
+                onClick={() => act('approve')}
+              >
+                Approve {draft} draft{draft === 1 ? '' : 's'}
+              </MenuItem>
+            )}
+            {next === 'approve' && approved > 0 && (
+              <MenuItem
+                icon={<Send size={15} />}
+                disabled={busy}
+                onClick={() => act('send')}
+              >
+                Send {approved} approved
+              </MenuItem>
+            )}
+          </Menu>
+
+          {/* One bold button, and it is whatever the call actually needs next.
+              Sending is irreversible; it should never sit beside Print looking
+              equally harmless. */}
+          {next === 'approve' && (
+            <Button
+              variant="primary"
+              disabled={busy || draft === 0 || failing > 0}
+              title={failing > 0 ? 'Resolve the failing checks first' : undefined}
+              onClick={() => act('approve')}
+            >
+              <CheckCheck size={15} aria-hidden />
+              Approve {draft} draft{draft === 1 ? '' : 's'}
+            </Button>
+          )}
+          {next === 'send' && (
+            <Button variant="primary" disabled={busy} onClick={() => act('send')}>
+              <Send size={15} aria-hidden />
+              Send {approved} notice{approved === 1 ? '' : 's'}
+            </Button>
+          )}
+          {next === 'done' && (
+            <span className="text-muted" style={{ fontSize: 13 }}>
+              Every notice has been issued.
+            </span>
+          )}
+        </span>
       </div>
 
       {failing > 0 && (
@@ -235,51 +300,61 @@ export function NoticesTab({
                     fontSize: 13,
                   }}
                 >
+                  {/* The investor's name, because the list beside this shows a
+                      different one whenever the selection is further down it —
+                      a status tag with no name reads as a contradiction. */}
+                  <strong style={{ fontSize: 14 }}>{row.LP_Name}</strong>
                   <Tag tone={NOTICE_DISPLAY[status].tone}>{NOTICE_DISPLAY[status].label}</Tag>
                   <span className="text-muted">
                     {status === 'draft' && 'review, then approve'}
                     {status === 'approved' &&
                       `approved${record?.approvedAt ? ` ${new Date(record.approvedAt).toLocaleString('en-GB')}` : ''} — ready to send`}
                     {status === 'sent' &&
-                      `sent${record?.sentAt ? ` ${new Date(record.sentAt).toLocaleString('en-GB')}` : ''}${record?.sentToEmail ? ` to ${record.sentToEmail}` : ''}`}
+                      `issued${record?.sentAt ? ` ${new Date(record.sentAt).toLocaleString('en-GB')}` : ''} — cannot be changed`}
                   </span>
 
-                  <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-                    {status === 'draft' && (
-                      <Button
-                        variant="primary"
-                        disabled={busy || failing > 0}
-                        onClick={() => act('approve', [row.LP_ID])}
-                      >
-                        Approve
-                      </Button>
-                    )}
-                    {status === 'approved' && (
-                      <>
-                        <Button
-                          variant="ghost"
+                  <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                    <Menu label={`Other actions for ${row.LP_Name}`}>
+                      <MenuItem icon={<FileDown size={15} />} onClick={() => download(row.LP_ID)}>
+                        Download PDF
+                      </MenuItem>
+                      {status === 'approved' && (
+                        <MenuItem
+                          icon={<Undo2 size={15} />}
                           disabled={busy}
                           onClick={() => act('revert', [row.LP_ID])}
                         >
                           Back to draft
-                        </Button>
-                        <Button
-                          variant="primary"
-                          disabled={busy}
-                          onClick={() => act('send', [row.LP_ID])}
-                        >
-                          Send to {investorEmail || row.LP_Name}
-                        </Button>
-                      </>
+                        </MenuItem>
+                      )}
+                    </Menu>
+
+                    {status === 'draft' && (
+                      <Button
+                        variant="primary"
+                        disabled={busy || failing > 0}
+                        title={failing > 0 ? 'Resolve the failing checks first' : undefined}
+                        onClick={() => act('approve', [row.LP_ID])}
+                      >
+                        <CheckCheck size={15} aria-hidden />
+                        Approve
+                      </Button>
                     )}
-                    {status === 'sent' && (
-                      <span className="text-muted" style={{ fontSize: 12 }}>
-                        This notice has been issued and cannot be changed.
-                      </span>
+                    {status === 'approved' && (
+                      <Button
+                        variant="primary"
+                        disabled={busy}
+                        title={
+                          investorEmail
+                            ? `Emails the notice to ${investorEmail}`
+                            : 'No Contact_Email on the register for this investor'
+                        }
+                        onClick={() => act('send', [row.LP_ID])}
+                      >
+                        <Send size={15} aria-hidden />
+                        Send
+                      </Button>
                     )}
-                    <Button variant="ghost" onClick={() => download(row.LP_ID)}>
-                      Download PDF
-                    </Button>
                   </span>
                 </div>
 

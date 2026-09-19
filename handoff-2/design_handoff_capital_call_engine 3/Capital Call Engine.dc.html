@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    :root { --card: oklch(1 0 0); --input: oklch(0.94 0 0); --muted: oklch(0.97 0 0); --accent: oklch(0.94 0 0); --border: oklch(0.92 0 0); --radius: 0.5rem; --chart-1: oklch(0.81 0.17 75.35); --chart-2: oklch(0.55 0.22 264.53); --chart-3: oklch(0.72 0 0); --chart-4: oklch(0.92 0 0); --chart-5: oklch(0.56 0 0); --primary: oklch(0 0 0); --primary-foreground: oklch(1 0 0); --background: oklch(0.99 0 0); --foreground: oklch(0 0 0); --muted-foreground: oklch(0.44 0 0); --destructive: oklch(0.63 0.19 23.03); --ring: oklch(0 0 0); --shadow: 0 1px 2px hsl(0 0% 0% / 0.06); }
+    .dark { --card: oklch(0.14 0 0); --input: oklch(0.32 0 0); --muted: oklch(0.23 0 0); --accent: oklch(0.32 0 0); --border: oklch(0.26 0 0); --chart-2: oklch(0.58 0.21 260.84); --chart-3: oklch(0.56 0 0); --chart-4: oklch(0.44 0 0); --chart-5: oklch(0.92 0 0); --primary: oklch(1 0 0); --primary-foreground: oklch(0 0 0); --background: oklch(0 0 0); --foreground: oklch(1 0 0); --muted-foreground: oklch(0.72 0 0); --destructive: oklch(0.69 0.20 23.91); --ring: oklch(0.72 0 0); --shadow: 0 1px 2px hsl(0 0% 0% / 0.6); }
+    body { margin: 0; font-family: Geist, system-ui, sans-serif; font-size: 14px; -webkit-font-smoothing: antialiased; }
+    .app { background: var(--background); color: var(--foreground); min-height: 100vh; display: grid; grid-template-columns: 232px minmax(0, 1fr); color-scheme: light; }
+    .app.rail { grid-template-columns: 64px minmax(0, 1fr); }
+    .side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; background: var(--card); border-right: 1px solid var(--border); padding: 18px 12px 14px; box-sizing: border-box; overflow: visible; z-index: 20; }
+    .side .nav-item, .side .nav-group { overflow: hidden; }
+    .ws { position: relative; margin-bottom: 8px; }
+    .ws-btn { width: 100%; display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 10px; border: 0; background: transparent; color: var(--foreground); font: inherit; cursor: pointer; text-align: left; } .ws-btn:hover { background: var(--muted); }
+    .ws-tile { width: 30px; height: 30px; border-radius: 8px; flex: none; display: grid; place-items: center; background: var(--muted); border: 1px solid var(--border); color: var(--foreground); font-weight: 600; font-size: 11px; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
+    .ws-btn b { display: block; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ws-btn small { display: block; font-size: 11.5px; color: var(--muted-foreground); margin-top: 2px; }
+    .ws-btn svg { width: 14px; height: 14px; margin-left: auto; flex: none; stroke: var(--muted-foreground); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .ws-menu { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 30; background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 16px 40px -16px hsl(0 0% 0% / 0.35), 0 1px 2px hsl(0 0% 0% / 0.06); padding: 6px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; animation: msgin .2s ease both; }
+    .ws-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; border: 0; background: transparent; color: var(--foreground); font: inherit; font-size: 13.5px; cursor: pointer; text-align: left; width: 100%; min-width: 0; overflow: hidden; } .ws-item small { flex: none; } .ws-item:hover { background: var(--muted); } .ws-item.on { background: var(--accent); font-weight: 500; }
+    .ws-item .ws-tile { width: 26px; height: 22px; border-radius: 6px; font-size: 10px; } .ws-item.on .ws-tile { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+    .ws-sep { height: 1px; background: var(--border); margin: 4px 6px; }
+    .ws-item.add { color: var(--muted-foreground); } .ws-item.add:hover { color: var(--foreground); }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; text-decoration: none; color: var(--foreground); }
+    .brand b { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; } .brand small { display: block; font-size: 11px; color: var(--muted-foreground); margin-top: 3px; font-weight: 400; }
+    .nav-group { font-size: 10.5px; font-weight: 500; color: var(--muted-foreground); letter-spacing: 0.08em; text-transform: uppercase; padding: 16px 10px 6px; white-space: nowrap; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 13.5px; text-decoration: none; color: var(--muted-foreground); white-space: nowrap; position: relative; }
+    .nav-item:hover { background: var(--muted); color: var(--foreground); }
+    .nav-item.on { background: var(--muted); color: var(--foreground); font-weight: 500; }
+    .nav-item.on::before { content: ""; position: absolute; left: -12px; top: 8px; bottom: 8px; width: 3px; border-radius: 0 2px 2px 0; background: var(--foreground); }
+    .nav-item svg { width: 17px; height: 17px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .nav-item .soon { margin-left: auto; font-size: 10px; padding: 2px 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted-foreground); font-weight: 400; }
+    .nav-item .chev { margin-left: auto; width: 14px; height: 14px; opacity: .55; } .nav-item .soon + .chev { margin-left: 6px; }
+    .rail .ws-btn b, .rail .ws-btn small, .rail .ws-btn svg, .rail .nav-item .chev { display: none; } .rail .ws-btn { display: grid; place-items: center; padding: 0; width: 40px; height: 40px; margin: 0 auto; line-height: 0; } .rail .ws-btn > span:not(.ws-tile) { display: none; } .rail .ws-tile { width: 30px; height: 30px; margin: 0; line-height: 1; } .rail .ws { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); } .rail .ws-menu { left: calc(100% + 10px); top: 0; width: 260px; right: auto; z-index: 45; }
+    .crumb { display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0; } .crumb span { color: var(--muted-foreground); } .crumb b { font-weight: 500; } .crumb i { color: var(--border); font-style: normal; }
+    .icon-btn { width: 32px; height: 32px; border-radius: 8px; border: 0; background: transparent; color: var(--muted-foreground); cursor: pointer; display: grid; place-items: center; flex: none; } .icon-btn:hover { background: var(--muted); color: var(--foreground); } .icon-btn svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--muted); border: 1px solid var(--border); display: grid; place-items: center; font-size: 11.5px; font-weight: 500; color: var(--muted-foreground); flex: none; }
+    .nav-item.dim { color: var(--muted-foreground); opacity: 0.7; cursor: default; } .nav-item.dim:hover { background: transparent; color: var(--muted-foreground); }
+    .rail .nav-group, .rail .nav-item span, .rail .nav-item .soon, .rail .side-foot span { display: none; } .rail .side-foot .wordmark { display: inline; }
+    .rail .side-foot .ax-trigger { justify-content: center; padding: 0; }
+    .rail .nav-item { justify-content: center; padding: 0; width: 40px; height: 40px; margin: 0 auto; border-radius: 10px; } .rail .nav-item.on { background: var(--muted); } .rail .nav-item.on::before { display: none; } .rail .nav-item svg:not(.chev) { width: 18px; height: 18px; } .rail .brand { justify-content: center; padding-left: 0; padding-right: 0; }
+    .side-foot { margin-top: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; width: 100%; }
+    .side-brand { display: flex; align-items: baseline; gap: 6px; padding: 6px 10px 0; min-width: 0; }
+    .rail .side-brand { justify-content: center; padding: 6px 0 0; } .rail .side-brand .wordmark { font-size: 10px; letter-spacing: 0; }
+    .collapse { border: 0; background: transparent; color: var(--muted-foreground); cursor: pointer; padding: 8px 10px; border-radius: 8px; font: inherit; font-size: 12px; display: flex; gap: 10px; align-items: center; } .collapse:hover { background: var(--muted); color: var(--foreground); }
+    .collapse svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+    .rail .collapse { justify-content: center; }
+    .content { min-width: 0; display: flex; flex-direction: column; }
+    .topbar { display: flex; align-items: center; gap: 12px; padding: 10px 20px 10px 14px; border-bottom: 1px solid var(--border); background: var(--background); position: sticky; top: 0; z-index: 5; min-height: 54px; }
+    .placeholder { max-width: 560px; margin: 60px auto; text-align: center; }
+    .app.dark { color-scheme: dark; }
+    a { color: var(--foreground); text-decoration-color: var(--chart-3); } a:hover { color: var(--muted-foreground); }
+    h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.01em; } h1 { font-size: 24px; letter-spacing: -0.02em; } h2 { font-size: 20px; } h3 { font-size: 16px; } h4 { font-size: 14px; }
+    p { margin: 6px 0 0; }
+    .text-muted { color: var(--muted-foreground); }
+    .btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; font: inherit; font-size: 13px; font-weight: 500; border-radius: 0.5rem; border: 1px solid transparent; cursor: pointer; white-space: nowrap; }
+    .btn:disabled { opacity: 0.45; cursor: default; }
+    .btn-primary { background: var(--primary); color: var(--primary-foreground); } .btn-primary:hover:not(:disabled) { opacity: 0.85; }
+    .btn-secondary { background: var(--card); color: var(--foreground); border-color: var(--border); box-shadow: var(--shadow); } .btn-secondary:hover:not(:disabled) { background: var(--muted); }
+    .btn-ghost { background: transparent; color: var(--muted-foreground); } .btn-ghost:hover:not(:disabled) { background: var(--accent); color: var(--foreground); }
+    .tag { display: inline-flex; align-items: center; gap: 6px; height: 20px; font-size: 12px; white-space: nowrap; color: var(--muted-foreground); }
+    .tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--chart-3); flex: none; }
+    .tag-accent { color: var(--foreground); } .tag-accent::before { background: var(--chart-2); }
+    .tag-accent-2 { color: var(--destructive); } .tag-accent-2::before { background: var(--destructive); }
+    .tag-warn { color: var(--foreground); } .tag-warn::before { background: var(--chart-1); }
+    .table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .table th { text-align: left; font-weight: 500; font-size: 12px; color: var(--muted-foreground); padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--muted); white-space: nowrap; }
+    .table td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .table tbody tr:last-child td { border-bottom: 0; }
+    .table tbody tr:hover td { background: var(--muted); }
+    .table th:first-child, .table td:first-child { padding-left: 16px; } .table th:last-child, .table td:last-child { padding-right: 16px; }
+    .mono, .num { font-family: "Geist Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+    .num { text-align: right; white-space: nowrap; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+    .card-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; }
+    .card-h small { font-weight: 400; color: var(--muted-foreground); font-size: 12px; }
+    .kv { display: grid; grid-template-columns: max-content 1fr; gap: 8px 20px; font-size: 13px; align-items: baseline; margin: 0; } .kv dt { color: var(--muted-foreground); } .kv dd { margin: 0; }
+    .crumb { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted-foreground); text-decoration: none; } .crumb:hover { color: var(--foreground); }
+    .tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--border); font-size: 14px; }
+    .tabs a { text-decoration: none; padding: 8px 0 10px; border-bottom: 2px solid transparent; color: var(--muted-foreground); margin-bottom: -1px; } .tabs a.on { color: var(--foreground); border-color: var(--foreground); font-weight: 600; }
+    .step { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 6px; text-decoration: none; font-size: 13px; color: var(--foreground); }
+    .step:hover { background: var(--muted); } .step.on { background: var(--accent); }
+    .step i { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border); display: inline-flex; align-items: center; justify-content: center; font-style: normal; font-size: 11px; color: var(--muted-foreground); background: var(--card); }
+    .step.done i { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
+    .step small { display: block; color: var(--muted-foreground); font-size: 11px; margin-top: 1px; }
+    input.cell { width: 100%; min-height: 30px; padding: 4px 8px; font: inherit; font-size: 13px; color: var(--foreground); background: transparent; border: 1px solid transparent; border-radius: 4px; font-variant-numeric: tabular-nums; }
+    input.cell:hover { border-color: var(--border); background: var(--card); }
+    input.cell:focus-visible { border-color: var(--ring); background: var(--card); outline: none; }
+    select.client { font: inherit; font-size: 14px; font-weight: 500; color: var(--foreground); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 6px 30px 6px 10px; cursor: pointer; box-shadow: var(--shadow); max-width: 320px; }
+    select.client option { background: var(--card); color: var(--foreground); }
+    select.client:focus-visible { outline: none; border-bottom-color: var(--ring); }
+    .toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 2px; gap: 2px; }
+    .toggle button { font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 0; background: transparent; color: var(--muted-foreground); cursor: pointer; }
+    .toggle button.on { background: var(--primary); color: var(--primary-foreground); }
+    .drop { padding: 34px 30px; border: 1.5px dashed var(--chart-3); border-radius: var(--radius); text-align: center; cursor: pointer; background: var(--card); }
+    .drop:hover { border-color: var(--foreground); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+    .spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--foreground); animation: spin .8s linear infinite; flex: none; }
+    .pstep { display: grid; grid-template-columns: 16px 1fr auto; gap: 10px; align-items: center; font-size: 13px; color: var(--muted-foreground); }
+    .pstep i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--border); box-sizing: border-box; }
+    .pstep.active { color: var(--foreground); } .pstep.active i { border-color: var(--foreground); border-top-color: transparent; animation: spin .8s linear infinite; }
+    .pstep.done i { background: var(--foreground); border-color: var(--foreground); }
+    .pstep small { font-size: 11px; color: var(--muted-foreground); }
+    .mark { position: relative; display: inline-block; flex: none; background: var(--foreground); border-radius: 30%; }
+    .mark.ax-avatar, .mark.brand-mark { display: none; }
+    .wordmark { font-weight: 600; letter-spacing: -0.02em; color: var(--foreground); }
+    .mark::before { content: none; position: absolute; inset: 22%; background: var(--background); -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 1c.7 6 5 10.3 11 11-6 .7-10.3 5-11 11-.7-6-5-10.3-11-11 6-.7 10.3-5 11-11z'/></svg>") center / contain no-repeat; mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 1c.7 6 5 10.3 11 11-6 .7-10.3 5-11 11-.7-6-5-10.3-11-11 6-.7 10.3-5 11-11z'/></svg>") center / contain no-repeat; animation: breathe 5s ease-in-out infinite; }
+    .mark.live::before { animation: think 1.1s ease-in-out infinite; }
+    .brand-mark { width: 30px; height: 30px; } .ax-avatar { width: 22px; height: 22px; margin-bottom: 2px; } .placeholder .ws-tile { width: 44px; height: 44px; border-radius: 12px; margin: 0 auto 18px; font-size: 15px; }
+    .ax-trigger { position: relative; display: inline-flex; align-items: center; gap: 9px; height: 32px; padding: 0 8px 0 12px; border-radius: 0.5rem; border: 1px solid transparent; background: var(--card); color: var(--foreground); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; box-shadow: var(--shadow); background-clip: padding-box; }
+    .ax-trigger::before { content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; background: conic-gradient(from var(--ax-angle, 0deg), var(--border) 0%, var(--border) 55%, var(--foreground) 72%, var(--border) 90%, var(--border) 100%); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: .7; animation: ax-spin 6s linear infinite; z-index: 0; pointer-events: none; }
+    .ax-trigger:hover::before { opacity: 1; animation-duration: 2.5s; }
+    @property --ax-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+    @keyframes ax-spin { to { --ax-angle: 360deg; } }
+    .ax-trigger > * { position: relative; z-index: 1; }
+    .ax-beta { font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; line-height: 1.3; }
+    .ax-trigger { padding-right: 6px; }
+    .ax-badge { font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1; padding: 4px 6px; border-radius: 4px; background: var(--foreground); color: var(--background); } .ax-trigger kbd { font: inherit; font-size: 10.5px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; line-height: 1.3; }
+    
+    
+
+
+    .ax-backdrop { position: fixed; inset: 0; z-index: 40; opacity: 0; pointer-events: none; transition: opacity .5s ease; background: oklch(from var(--background) l c h / 0.55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); overflow: hidden; }
+    .dark .ax-backdrop { background: oklch(0 0 0 / 0.45); }
+    .ax-thread.arrive { animation: arrive 1.1s ease-out both; }
+    @keyframes arrive { 0% { border-color: var(--foreground); box-shadow: 0 0 0 1px var(--foreground), 0 30px 80px -30px hsl(0 0% 0% / 0.45); } 100% { border-color: var(--border); box-shadow: 0 30px 80px -30px hsl(0 0% 0% / 0.45), 0 1px 2px hsl(0 0% 0% / 0.06); } }
+    .ax-dock::before { content: ""; position: absolute; left: 50%; bottom: -60px; width: 1px; height: 60px; background: linear-gradient(to top, transparent, var(--border)); pointer-events: none; }
+    .ax-backdrop.open { opacity: 1; pointer-events: auto; }
+    .ax-dock { position: fixed; left: 50%; bottom: 26px; z-index: 41; width: min(760px, calc(100vw - 40px)); transform: translate(-50%, 28px) scale(0.98); opacity: 0; pointer-events: none; transition: transform .45s cubic-bezier(.2,.8,.2,1), opacity .35s ease; display: flex; flex-direction: column; gap: 12px; }
+    .ax-dock.open { transform: translate(-50%, 0) scale(1); opacity: 1; pointer-events: auto; }
+    .ax-thread { background: oklch(from var(--card) l c h / 0.92); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 30px 80px -30px hsl(0 0% 0% / 0.45), 0 1px 2px hsl(0 0% 0% / 0.06); max-height: 56vh; overflow-y: auto; padding: 20px 22px 14px; display: flex; flex-direction: column; gap: 22px; }
+    .ax-greet { text-align: center; padding: 6px 20px 8px; text-shadow: 0 1px 12px var(--background), 0 0 2px var(--background); } .ax-greet h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; } .ax-greet p { margin: 6px 0 0; font-size: 13px; color: var(--muted-foreground); }
+    .ax-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+    .chip { font: inherit; font-size: 12.5px; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--border); background: oklch(from var(--card) l c h / 0.85); backdrop-filter: blur(12px); color: var(--foreground); cursor: pointer; line-height: 1.3; transition: border-color .15s, background .15s; animation: rise-in .5s cubic-bezier(.16,1,.3,1) both; } .chip:hover { background: var(--card); border-color: var(--chart-3); }
+    .ax-chips .chip:nth-child(2) { animation-delay: .06s; } .ax-chips .chip:nth-child(3) { animation-delay: .12s; }
+    .ax-bar { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px; border-radius: 18px; background: oklch(from var(--card) l c h / 0.9); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid var(--border); box-shadow: 0 30px 80px -30px hsl(0 0% 0% / 0.45), 0 1px 2px hsl(0 0% 0% / 0.08); }
+    .ax-bar .wordmark { font-size: 13px; line-height: 1; padding: 4px 12px 4px 2px; border-right: 1px solid var(--border); }
+    .ax-bar .wordmark.live { animation: shimmer-w 1.6s linear infinite; background: linear-gradient(90deg, var(--muted-foreground), var(--foreground) 50%, var(--muted-foreground)); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; }
+    @keyframes shimmer-w { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+    .chat-input { flex: 1; font: inherit; font-size: 15px; padding: 8px 0; border: 0; background: transparent; color: var(--foreground); resize: none; min-height: 24px; max-height: 120px; line-height: 1.4; } .chat-input:focus-visible { outline: none; } .chat-input::placeholder { color: var(--muted-foreground); }
+    .ax-hint { font-size: 11px; color: var(--muted-foreground); white-space: nowrap; display: flex; gap: 6px; align-items: center; } .ax-hint kbd { font: inherit; font-size: 10px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+    .ax-send { width: 34px; height: 34px; border-radius: 10px; border: 0; background: var(--primary); color: var(--primary-foreground); cursor: pointer; display: grid; place-items: center; flex: none; } .ax-send svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; } .ax-send:disabled { opacity: .3; cursor: default; }
+    .ax-x { width: 30px; height: 30px; border-radius: 9px; border: 0; background: transparent; color: var(--muted-foreground); cursor: pointer; font-size: 16px; flex: none; } .ax-x:hover { background: var(--muted); color: var(--foreground); }
+    .ax-thread .ax-foot { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: var(--muted-foreground); } .ax-foot button { border: 0; background: transparent; color: var(--muted-foreground); font: inherit; font-size: 11.5px; cursor: pointer; padding: 0; } .ax-foot button:hover { color: var(--foreground); }
+    .ax-wait { position: relative; padding-left: 16px; display: grid; gap: 10px; } .ax-wait .ax-think { padding-left: 0; }
+    .ax-wait .line { position: relative; height: 1px; background: var(--border); overflow: hidden; width: min(100%, 420px); border-radius: 1px; }
+    .ax-wait .line::after { content: ""; position: absolute; inset: 0; width: 35%; background: linear-gradient(90deg, transparent, var(--foreground), transparent); animation: travel 1.6s cubic-bezier(.4,0,.2,1) infinite; }
+    @keyframes travel { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+    .ax-wait .ghost { display: grid; gap: 8px; width: min(100%, 520px); } .ax-wait .ghost i { display: block; height: 10px; border-radius: 3px; background: linear-gradient(90deg, var(--muted) 0%, var(--accent) 50%, var(--muted) 100%); background-size: 200% 100%; animation: shimmer 1.8s linear infinite; } .ax-wait .ghost i:nth-child(2) { width: 88%; animation-delay: .15s; } .ax-wait .ghost i:nth-child(3) { width: 64%; animation-delay: .3s; }
+    @keyframes breathe-b { 0%, 100% { box-shadow: 0 0 0 0 oklch(from var(--foreground) l c h / 0); } 50% { box-shadow: 0 0 0 5px oklch(from var(--foreground) l c h / 0.05); } }
+    @keyframes rise-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .ax-turn { display: grid; gap: 8px; animation: rise-in .45s cubic-bezier(.16,1,.3,1) both; }
+    .ax-q { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--foreground); padding-left: 14px; border-left: 2px solid var(--foreground); line-height: 1.4; }
+    .ax-a { font-size: 14px; line-height: 1.6; color: var(--foreground); white-space: pre-wrap; text-wrap: pretty; padding-left: 16px; max-width: 62ch; }
+    .ax-a a { font-size: 13px; font-weight: 500; color: var(--foreground); text-decoration: none; border-bottom: 1px solid var(--chart-3); } .ax-a a:hover { border-color: var(--foreground); }
+    .cite { display: inline; font-family: "Geist Mono", ui-monospace, monospace; font-size: 11.5px; color: var(--muted-foreground); background: var(--muted); padding: 1px 5px; border-radius: 3px; margin: 0 1px; white-space: nowrap; }
+    .ax-think { display: inline-block; font-size: 14px; padding-left: 16px; background: linear-gradient(90deg, var(--muted-foreground) 0%, var(--foreground) 45%, var(--muted-foreground) 60%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 1.8s linear infinite; }
+    @keyframes shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+    .ax-cursor { display: inline-block; width: 2px; height: 15px; background: var(--foreground); vertical-align: -2px; margin-left: 1px; animation: blink 1s steps(2) infinite; }
+    .bar-seg { transform-origin: bottom; animation: rise .6s cubic-bezier(.2,.7,.2,1) both; }
+    @media print { .side, .topbar, [data-noprint] { display: none !important; } .app { display: block; } [data-notice] { box-shadow: none !important; border: 0 !important; margin: 0 !important; page-break-after: always; } .app { background: #fff; color: #000; } }
+  </style>
+</helmet>
+<datalist id="dl-yn"><option value="Y"></option><option value="N"></option></datalist>
+<datalist id="dl-basis"><option value="Commitment"></option><option value="UCC"></option><option value="Invested_Capital"></option><option value="NAV"></option></datalist>
+<datalist id="dl-lptype"><option value="LP"></option><option value="GP"></option><option value="Feeder"></option></datalist>
+<datalist id="dl-status"><option value="Active"></option><option value="Transferred"></option><option value="Defaulted"></option><option value="Withdrawn"></option></datalist>
+<datalist id="dl-category"><option value="Deal"></option><option value="Partnership Expense"></option><option value="Organizational Expense"></option><option value="Other Expense"></option></datalist>
+<datalist id="dl-ttype"><option value="Full"></option><option value="Partial"></option></datalist>
+<datalist id="dl-offmethod"><option value="Pro-rata to gross fee"></option><option value="Commitment"></option><option value="Invested_Capital"></option></datalist>
+
+<div class="app {{ themeClass }} {{ railCls }} {{ axAppCls }}">
+  <aside class="side" data-noprint="1">
+    <div class="ws">
+      <button class="ws-btn" onClick="{{ toggleWs }}" title="Switch client">
+        <span class="ws-tile">{{ clientInitial }}</span>
+        <span style="min-width: 0; flex: 1;"><b>{{ fundName }}</b><small>{{ clientMeta }}</small></span>
+        <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <sc-if value="{{ wsOpen }}" hint-placeholder-val="{{ false }}">
+        <div class="ws-menu">
+          <sc-for list="{{ wsItems }}" as="w" hint-placeholder-count="2"><button class="ws-item {{ w.cls }}" onClick="{{ w.pick }}"><span class="ws-tile">{{ w.initial }}</span><span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ w.name }}</span><small class="text-muted" style="font-size: 11px;">{{ w.meta }}</small></button></sc-for>
+          <div class="ws-sep"></div>
+          <button class="ws-item add" onClick="{{ addClient }}"><span style="width: 22px; text-align: center; font-size: 16px; line-height: 1;">+</span>New client</button>
+        </div>
+      </sc-if>
+    </div>
+    <sc-for list="{{ navGroups }}" as="g" hint-placeholder-count="3">
+      <div class="nav-group">{{ g.label }}</div>
+      <sc-for list="{{ g.items }}" as="i" hint-placeholder-count="3">
+        <a href="#" class="nav-item {{ i.cls }}" onClick="{{ i.onClick }}" title="{{ i.label }}"><svg viewBox="0 0 24 24" dangerouslySetInnerHTML="{{ i.icon }}"></svg><span>{{ i.label }}</span><sc-if value="{{ i.soon }}" hint-placeholder-val="{{ false }}"><em class="soon">Soon</em></sc-if><sc-if value="{{ i.chev }}" hint-placeholder-val="{{ false }}"><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></sc-if></a>
+      </sc-for>
+    </sc-for>
+    <div class="side-foot">
+      <div class="side-brand"><span class="wordmark" style="font-size: 13px;">Axtara</span><span style="font-size: 11.5px; color: var(--muted-foreground);">Fund administration</span></div>
+    </div>
+  </aside>
+
+  <div class="content">
+  <div class="topbar" data-noprint="1">
+    <button class="icon-btn" onClick="{{ toggleRail }}" title="Toggle sidebar"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/><path d="M15.5 10l-2 2 2 2"/></svg></button>
+    <div class="crumb"><span>{{ fundName }}</span><i>/</i><sc-if value="{{ crumbHasMid }}" hint-placeholder-val="{{ false }}"><a href="#" onClick="{{ goModuleHome }}" style="color: var(--muted-foreground); text-decoration: none;">{{ moduleLabel }}</a><i>/</i></sc-if><b>{{ crumbLeaf }}</b></div>
+    <input type="file" accept=".xlsx,.xlsm,.xls" ref="{{ fileRef }}" onChange="{{ onFile }}" style="display: none;">
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+      <button class="ax-trigger" onClick="{{ toggleChat }}" title="Ask Axtara (Ctrl/⌘ K)"><span>Ask Axtara</span><span class="ax-badge">Beta</span></button>
+      <button class="icon-btn" onClick="{{ toggleTheme }}" title="{{ themeLabel }}"><svg viewBox="0 0 24 24" dangerouslySetInnerHTML="{{ themeIcon }}"></svg></button>
+      <span class="avatar" title="Signed in">{{ userInitials }}</span>
+    </div>
+  </div>
+
+  <main style="padding: 28px 32px 60px; flex: 1;">
+    <sc-if value="{{ showPlaceholder }}" hint-placeholder-val="{{ false }}">
+      <div class="placeholder">
+        <span class="ws-tile">{{ clientInitial }}</span>
+        <h1>{{ phTitle }}</h1>
+        <p class="text-muted" style="text-wrap: pretty; margin-top: 10px;">{{ phText }}</p>
+        <button class="btn btn-secondary" onClick="{{ goCapitalCalls }}" style="margin-top: 20px;">Back to capital calls</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ showStatus }}" hint-placeholder-val="{{ false }}">
+      <div data-noprint="1" style="display: flex; gap: 10px; align-items: center; margin-bottom: 20px; font-size: 13px;">
+        <span class="tag {{ statusTag }}">{{ statusHead }}</span><span>{{ statusText }}</span><a href="#" onClick="{{ dismissStatus }}" style="font-size: 12px;">dismiss</a>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ procOn }}" hint-placeholder-val="{{ false }}">
+      <div data-noprint="1" style="position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;">
+        <div style="position: absolute; inset: 0; background: var(--background); opacity: 0.75;"></div>
+        <div class="card" style="position: relative; width: 440px; max-width: calc(100vw - 40px); padding: 24px 26px;">
+          <div style="display: flex; align-items: center; gap: 12px;"><span class="spin"></span><h3>{{ procTitle }}</h3></div>
+          <div style="height: 3px; background: var(--muted); margin: 18px 0 20px; border-radius: 2px; overflow: hidden;"><div style="height: 100%; background: var(--foreground); transition: width .45s ease; width: {{ procPct }};"></div></div>
+          <div style="display: grid; gap: 11px;">
+            <sc-for list="{{ procSteps }}" as="s" hint-placeholder-count="5"><div class="pstep {{ s.cls }}"><i></i><span>{{ s.label }}</span><small>{{ s.note }}</small></div></sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- HOME: all calls for this client -->
+    <sc-if value="{{ showHome }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; max-width: 1200px;">
+        <div>
+          <h1>{{ fundName }}</h1>
+          <p class="text-muted">{{ homeHint }}</p>
+        </div>
+        <button class="btn btn-primary" onClick="{{ newCall }}" style="margin-left: auto; height: 38px; padding: 0 18px;">New capital call</button>
+      </div>
+
+      <sc-if value="{{ hasCalls }}" hint-placeholder-val="{{ true }}">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 16px; max-width: 1200px; margin-top: 24px; align-items: start;">
+          <section class="card">
+            <div class="card-h"><span>Capital calls</span><small>{{ callCountLabel }}</small></div>
+            <div style="overflow-x: auto;">
+              <table class="table">
+                <thead><tr><th>No.</th><th>Notice date</th><th style="text-align: right;">Amount called</th><th style="text-align: right;">Notices</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ callRows }}" as="c" hint-placeholder-count="3">
+                    <tr onClick="{{ c.open }}" style="cursor: pointer; font-weight: {{ c.weight }};">
+                      <td class="mono">{{ c.no }}</td><td style="white-space: nowrap;">{{ c.date }}<div class="text-muted" style="font-size: 12px; font-weight: 400;">due {{ c.due }}</div></td><td class="num">{{ c.total }}</td><td class="num text-muted">{{ c.notices }}</td><td style="white-space: nowrap;"><span class="tag {{ c.tag }}">{{ c.status }}</span></td><td style="text-align: right; color: var(--muted-foreground); white-space: nowrap;">{{ c.action }} ›</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-h"><span>Fund position</span><small>{{ positionAsOf }}</small></div>
+            <dl class="kv" style="grid-template-columns: 1fr max-content; padding: 14px 16px;">
+              <dt>Total commitments</dt><dd class="num">{{ agg.commitment }}</dd>
+              <dt>Called to date ({{ agg.issuedCount }} calls)</dt><dd class="num">{{ agg.called }}</dd>
+              <dt>Paid-in capital</dt><dd class="num">{{ agg.paidIn }}</dd>
+              <dt style="color: var(--foreground); font-weight: 600; border-top: 1px solid var(--foreground); padding-top: 8px;">Unfunded commitment</dt><dd class="num" style="font-weight: 600; border-top: 1px solid var(--foreground); padding-top: 8px;">{{ agg.unfunded }}</dd>
+              <dt>Investors</dt><dd class="num">{{ agg.investors }}</dd>
+              <dt>Next payment due</dt><dd style="font-size: 13px; text-align: right;">{{ agg.nextDue }}</dd>
+            </dl>
+          </section>
+        </div>
+        <sc-if value="{{ hasDraw }}" hint-placeholder-val="{{ true }}">
+          <section class="card" style="max-width: 1200px; margin-top: 16px;">
+            <div class="card-h"><span>Drawdown history</span><small>amount called per notice · cumulative % of commitments drawn</small></div>
+            <div style="padding: 20px 16px 14px; display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 24px; align-items: end;">
+              <div style="display: flex; gap: 18px; align-items: flex-end; height: 190px;">
+                <sc-for list="{{ drawCols }}" as="d" hint-placeholder-count="3">
+                  <div style="flex: 1; min-width: 0; max-width: 120px; display: flex; flex-direction: column; align-items: stretch; height: 100%; opacity: {{ d.opacity }};">
+                    <div class="num" style="text-align: center; font-size: 11px; color: var(--muted-foreground); margin-bottom: 6px;">{{ d.total }}</div>
+                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end;">
+                      <div class="bar-seg" style="height: {{ d.hFee }}px; background: var(--chart-5);" title="Management fee, net"></div>
+                      <div class="bar-seg" style="height: {{ d.hOutside }}px; background: var(--chart-1);" title="Outside commitment"></div>
+                      <div class="bar-seg" style="height: {{ d.hReduces }}px; background: var(--chart-2); border-radius: 0 0 3px 3px;" title="Against commitment"></div>
+                      <div style="height: {{ d.hEmpty }}px; border: 1.5px dashed var(--border); border-bottom: 0; border-radius: 3px 3px 0 0;"></div>
+                    </div>
+                    <div style="border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px; text-align: center; font-size: 12px;">Call {{ d.no }}<div class="text-muted" style="font-size: 11px;">{{ d.cum }}</div></div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display: grid; gap: 8px; font-size: 12px; padding-bottom: 36px;">
+                <div style="display: flex; gap: 8px; align-items: center;"><span style="width: 10px; height: 10px; background: var(--chart-2);"></span>Against commitment</div>
+                <div style="display: flex; gap: 8px; align-items: center;"><span style="width: 10px; height: 10px; background: var(--chart-1);"></span>Outside commitment</div>
+                <div style="display: flex; gap: 8px; align-items: center;"><span style="width: 10px; height: 10px; background: var(--chart-5);"></span>Management fee, net</div>
+                <div style="display: flex; gap: 8px; align-items: center;"><span style="width: 10px; height: 10px; border: 1.5px dashed var(--border); box-sizing: border-box;"></span>Planned, not yet allocated</div>
+                <div class="text-muted" style="margin-top: 6px;">{{ drawSummary }}</div>
+              </div>
+            </div>
+          </section>
+        </sc-if>
+      </sc-if>
+
+      <sc-if value="{{ noCalls }}" hint-placeholder-val="{{ false }}">
+        <div class="card" style="max-width: 640px; margin-top: 24px; padding: 36px 32px;">
+          <h3>No capital calls yet</h3>
+          <p class="text-muted" style="max-width: 50ch; text-wrap: pretty;">Start a call, then fill it from the accountant's Excel template or by hand. Once notices are sent it appears here as issued and the fund position updates.</p>
+          <button class="btn btn-primary" onClick="{{ newCall }}" style="margin-top: 18px;">New capital call</button>
+        </div>
+      </sc-if>
+    </sc-if>
+
+    <!-- SETUP: inputs for one call -->
+    <sc-if value="{{ showSetup }}" hint-placeholder-val="{{ false }}">
+      <a href="#" class="crumb" onClick="{{ goHome }}">‹ All calls</a>
+      <div style="display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; max-width: 1200px; margin-top: 8px;">
+        <div>
+          <h1>Set up Capital Call No. {{ callNo }}</h1>
+          <p class="text-muted">Fill the five input tabs, then review the allocation. {{ setupTotalsLine }}</p>
+        </div>
+        <span style="margin-left: auto; display: flex; gap: 8px;">
+          <sc-if value="{{ canDelete }}" hint-placeholder-val="{{ false }}"><button class="btn btn-ghost" onClick="{{ deleteCall }}">Delete call</button></sc-if>
+          <button class="btn btn-primary" onClick="{{ goReview }}" style="height: 38px; padding: 0 18px;">Review allocation ›</button>
+        </span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 32px; margin-top: 24px; max-width: 1200px; align-items: start;">
+        <nav style="display: grid; gap: 2px; position: sticky; top: 20px;">
+          <sc-for list="{{ steps }}" as="s" hint-placeholder-count="6">
+            <a href="#" class="step {{ s.cls }}" onClick="{{ s.onClick }}"><i>{{ s.n }}</i><span>{{ s.label }}<small>{{ s.detail }}</small></span></a>
+          </sc-for>
+        </nav>
+
+        <div>
+          <sc-if value="{{ stepSource }}" hint-placeholder-val="{{ true }}">
+            <h2>Where do the inputs come from?</h2>
+            <p class="text-muted" style="max-width: 60ch;">Most calls start from the Excel template your accounting team already fills. Upload it to populate every tab at once; anything can still be edited afterwards.</p>
+            <div class="drop" onDragOver="{{ onDragOver }}" onDrop="{{ onDrop }}" onClick="{{ pickFile }}" style="margin-top: 20px; max-width: 640px;">
+              <div style="font-size: 16px; font-weight: 600;">Drop the input workbook (.xlsx)</div>
+              <div class="text-muted" style="font-size: 13px; margin-top: 4px;">or click to browse · tabs Fund_Setup, LP_Register, Call_Components, Management_Fee, Transfers{{ lastFileLine }}</div>
+            </div>
+            <div style="display: flex; gap: 16px; margin-top: 18px; align-items: center; flex-wrap: wrap; font-size: 13px;">
+              <button class="btn btn-secondary" onClick="{{ startManual }}">Enter inputs manually</button>
+              <sc-if value="{{ canCarry }}" hint-placeholder-val="{{ false }}"><a href="#" onClick="{{ carryForward }}">Carry forward the register from Call No. {{ prevCallNo }}</a></sc-if>
+              <a href="#" onClick="{{ loadTemplate }}" class="text-muted">Load illustrative template data</a>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ stepSetup }}" hint-placeholder-val="{{ false }}">
+            <h2>Fund setup</h2>
+            <p class="text-muted" style="max-width: 60ch;">Per-call fund parameters. Every generated notice reads from these fields.</p>
+            <div class="card" style="margin-top: 16px; max-width: 900px;">
+              <table class="table">
+                <thead><tr><th style="width: 240px;">Field</th><th style="width: 260px;">Value</th><th>Notes</th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ setupRows }}" as="r" hint-placeholder-count="12">
+                    <tr><td>{{ r.key }}</td><td style="padding: 3px 6px;"><input class="cell" type="{{ r.type }}" list="{{ r.list }}" value="{{ r.value }}" onChange="{{ r.onChange }}" style="text-align: {{ r.align }}; border-color: var(--border);"></td><td class="text-muted" style="font-size: 12px;">{{ r.note }}</td></tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ stepLps }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;"><h2>LP register</h2><button class="btn btn-ghost" onClick="{{ addLp }}">+ Add investor</button></div>
+            <p class="text-muted" style="max-width: 70ch;">Opening balances are as at the start of this call. Side-letter rates go in Mgmt_Fee_Rate_Override; Fee_Exempt = Y charges 0% regardless.</p>
+            <div class="card" style="margin-top: 16px; overflow-x: auto;">
+              <table class="table" style="width: max-content; min-width: 100%;">
+                <thead><tr><sc-for list="{{ lpHeaders }}" as="h" hint-placeholder-count="13"><th>{{ h }}</th></sc-for><th></th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ lpRows }}" as="row" hint-placeholder-count="6">
+                    <tr>
+                      <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="13"><td style="padding: 3px 4px; width: {{ c.width }}px;"><input class="cell" list="{{ c.list }}" value="{{ c.value }}" onChange="{{ c.onChange }}" style="text-align: {{ c.align }};"></td></sc-for>
+                      <td style="padding: 3px 4px;"><button class="btn btn-ghost" onClick="{{ row.remove }}" title="Remove row" style="color: var(--destructive);">×</button></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ stepComps }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;"><h2>Call components</h2><button class="btn btn-ghost" onClick="{{ addComp }}">+ Add line item</button></div>
+            <p class="text-muted" style="max-width: 70ch;">One row per deal and per expense for this call. Reduces_Unfunded = N for capital raised outside commitment. The management fee has its own step.</p>
+            <div class="card" style="margin-top: 16px; overflow-x: auto;">
+              <table class="table" style="width: max-content; min-width: 100%;">
+                <thead><tr><sc-for list="{{ compHeaders }}" as="h" hint-placeholder-count="8"><th>{{ h }}</th></sc-for><th></th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ compRows }}" as="row" hint-placeholder-count="5">
+                    <tr>
+                      <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="8"><td style="padding: 3px 4px; width: {{ c.width }}px;"><input class="cell" list="{{ c.list }}" value="{{ c.value }}" onChange="{{ c.onChange }}" style="text-align: {{ c.align }};"></td></sc-for>
+                      <td style="padding: 3px 4px;"><button class="btn btn-ghost" onClick="{{ row.remove }}" title="Remove row" style="color: var(--destructive);">×</button></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+            <p style="margin-top: 14px; font-size: 13px;">Total before management fee: <strong class="mono">{{ cur }} {{ compTotal }}</strong></p>
+          </sc-if>
+
+          <sc-if value="{{ stepFee }}" hint-placeholder-val="{{ false }}">
+            <h2>Management fee</h2>
+            <p class="text-muted" style="max-width: 70ch;">Gross fee = fee-basis value × rate × period fraction. Each offset is spread by its method and netted off the gross fee.</p>
+            <div class="card" style="margin-top: 16px; max-width: 900px;">
+              <table class="table">
+                <thead><tr><th style="width: 240px;">Field</th><th style="width: 260px;">Value</th><th>Notes</th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ feeRows }}" as="r" hint-placeholder-count="5">
+                    <tr><td>{{ r.key }}</td><td style="padding: 3px 6px;"><input class="cell" list="{{ r.list }}" value="{{ r.value }}" onChange="{{ r.onChange }}" style="text-align: {{ r.align }}; border-color: var(--border);"></td><td class="text-muted" style="font-size: 12px;">{{ r.note }}</td></tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+            <div style="display: flex; align-items: baseline; gap: 16px; margin-top: 28px; flex-wrap: wrap;"><h3>Offsets</h3><button class="btn btn-ghost" onClick="{{ addOffset }}">+ Add offset</button></div>
+            <div class="card" style="margin-top: 12px; max-width: 900px;">
+              <table class="table">
+                <thead><tr><sc-for list="{{ offsetHeaders }}" as="h" hint-placeholder-count="4"><th>{{ h }}</th></sc-for><th></th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ offsetRows }}" as="row" hint-placeholder-count="1">
+                    <tr>
+                      <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="4"><td style="padding: 3px 4px; width: {{ c.width }}px;"><input class="cell" list="{{ c.list }}" value="{{ c.value }}" onChange="{{ c.onChange }}" style="text-align: {{ c.align }};"></td></sc-for>
+                      <td style="padding: 3px 4px;"><button class="btn btn-ghost" onClick="{{ row.remove }}" title="Remove row" style="color: var(--destructive);">×</button></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+            <p style="margin-top: 14px; font-size: 13px;">Gross <strong class="mono">{{ cur }} {{ feeGrossTotal }}</strong> · offsets <strong class="mono">{{ cur }} {{ feeOffsetTotal }}</strong> · net <strong class="mono">{{ cur }} {{ feeNetTotal }}</strong></p>
+          </sc-if>
+
+          <sc-if value="{{ stepTransfers }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;"><h2>Transfers</h2><button class="btn btn-ghost" onClick="{{ addTransfer }}">+ Add transfer</button></div>
+            <p class="text-muted" style="max-width: 70ch;">Applied before allocation when Effective_Date is on or before the Call_Date. Partial transfers split every flagged balance by Transfer_Pct; a Full transfer marks the transferor as Transferred.</p>
+            <div class="card" style="margin-top: 16px; overflow-x: auto;">
+              <table class="table" style="width: max-content; min-width: 100%;">
+                <thead><tr><th>Applied</th><sc-for list="{{ transferHeaders }}" as="h" hint-placeholder-count="11"><th>{{ h }}</th></sc-for><th></th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ transferRows }}" as="row" hint-placeholder-count="1">
+                    <tr>
+                      <td><span class="tag {{ row.tag }}">{{ row.status }}</span></td>
+                      <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="11"><td style="padding: 3px 4px; width: {{ c.width }}px;"><input class="cell" list="{{ c.list }}" value="{{ c.value }}" onChange="{{ c.onChange }}" style="text-align: {{ c.align }};"></td></sc-for>
+                      <td style="padding: 3px 4px;"><button class="btn btn-ghost" onClick="{{ row.remove }}" title="Remove row" style="color: var(--destructive);">×</button></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- CALL: summary / allocation / checks / notices -->
+    <sc-if value="{{ showCall }}" hint-placeholder-val="{{ false }}">
+      <a href="#" class="crumb" onClick="{{ goHome }}">‹ All calls</a>
+      <div style="display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; max-width: 1200px; margin-top: 8px;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;"><h1 style="white-space: nowrap;">Capital Call No. {{ callNo }}</h1><span class="tag {{ stageTag }}">{{ stageLabel }}</span></div>
+          <p class="text-muted">Notice date {{ callDateLabel }} · payment due {{ dueDateLabel }} · {{ investorCount }} investors</p>
+        </div>
+        <span data-noprint="1" style="margin-left: auto; display: flex; gap: 8px;">
+          <button class="btn btn-secondary" onClick="{{ goSetup }}">Edit inputs</button>
+          <button class="btn btn-secondary" onClick="{{ exportXlsx }}">Export .xlsx</button>
+        </span>
+      </div>
+      <nav class="tabs" data-noprint="1" style="margin-top: 22px; max-width: 1200px;">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4"><a href="#" class="{{ t.cls }}" onClick="{{ t.onClick }}">{{ t.label }}</a></sc-for>
+      </nav>
+
+      <sc-if value="{{ tabSummary }}" hint-placeholder-val="{{ true }}">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 16px; max-width: 1200px; margin-top: 24px; align-items: start;">
+          <section class="card">
+            <div class="card-h"><span>Call summary</span><small>{{ cur }}</small></div>
+            <dl class="kv" style="grid-template-columns: 1fr max-content; padding: 14px 16px;">
+              <dt>Called against commitment</dt><dd class="num">{{ sumReduces }}</dd>
+              <dt>Called outside commitment</dt><dd class="num">{{ sumOutside }}</dd>
+              <dt>Management fee, net of offsets</dt><dd class="num">{{ sumFeeNet }}</dd>
+              <dt style="color: var(--foreground); font-weight: 600; border-top: 1px solid var(--foreground); padding-top: 8px;">Total amount called</dt><dd class="num" style="font-weight: 600; border-top: 1px solid var(--foreground); padding-top: 8px;">{{ sumTotal }}</dd>
+              <dt style="padding-top: 10px;">Unfunded before → after</dt><dd class="num" style="padding-top: 10px;">{{ sumOpenUCC }} → {{ sumClosingUCC }}</dd>
+              <dt>Paid-in before → after</dt><dd class="num">{{ sumOpenPaid }} → {{ sumClosingPaid }}</dd>
+            </dl>
+            <div style="padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 13px;">
+              <span class="tag tag-accent">{{ okCount }} checks passed</span><span class="tag tag-warn">{{ warnCount }} warnings</span><span class="tag {{ failTag }}">{{ failCount }} failing</span>
+              <a href="#" onClick="{{ goChecks }}" style="margin-left: auto; font-size: 13px;">View checks</a>
+            </div>
+            <div style="padding: 12px 16px; border-top: 1px solid var(--border); font-size: 13px;">{{ readiness }} <a href="#" onClick="{{ goNoticesLink }}">Open notices</a></div>
+          </section>
+          <section class="card">
+            <div class="card-h"><span>Purpose of call</span><small>{{ cur }}</small></div>
+            <div style="overflow-x: auto;">
+            <table class="table">
+              <thead><tr><th>Line item</th><th>Basis</th><th>Commitment</th><th style="text-align: right;">Amount</th><th style="text-align: right;">%</th></tr></thead>
+              <tbody>
+                <sc-for list="{{ mix }}" as="m" hint-placeholder-count="6">
+                  <tr><td>{{ m.name }}</td><td class="text-muted">{{ m.basis }}</td><td class="text-muted">{{ m.inside }}</td><td class="num">{{ m.amt }}</td><td class="num text-muted">{{ m.pct }}</td></tr>
+                </sc-for>
+                <tr style="font-weight: 600;"><td>Total</td><td></td><td></td><td class="num">{{ sumTotal }}</td><td class="num">100.0%</td></tr>
+              </tbody>
+            </table>
+            </div>
+          </section>
+        </div>
+        <section class="card" style="margin-top: 16px; max-width: 1200px;">
+          <div class="card-h"><span>Allocation by investor</span><small>click a row to open its notice</small></div>
+          <div style="overflow-x: auto;">
+            <table class="table">
+              <thead><tr><th>ID</th><th>Investor</th><th style="text-align: right;">Commitment</th><th style="text-align: right;">Against commitment</th><th style="text-align: right;">Outside</th><th style="text-align: right;">Fee, net</th><th style="text-align: right;">Total call</th><th style="width: 22%;">Share of call</th><th style="text-align: right;">Unfunded after</th><th>Notice</th></tr></thead>
+              <tbody>
+                <sc-for list="{{ dashRows }}" as="r" hint-placeholder-count="6">
+                  <tr onClick="{{ r.onClick }}" style="cursor: pointer;">
+                    <td class="text-muted mono">{{ r.id }}</td><td>{{ r.name }}</td>
+                    <td class="num">{{ r.commitment }}</td><td class="num">{{ r.reduces }}</td><td class="num">{{ r.outside }}</td><td class="num">{{ r.feeNet }}</td><td class="num" style="font-weight: 600;">{{ r.total }}</td><td><div style="display: flex; align-items: center; gap: 8px;"><div style="height: 10px; width: {{ r.barW }}; background: {{ r.barColor }}; border-radius: 2px;"></div><span class="text-muted mono" style="font-size: 11px;">{{ r.pct }}</span></div></td><td class="num">{{ r.closingUCC }}</td><td><span class="tag {{ r.wfTag }}">{{ r.wfStatus }}</span></td>
+                  </tr>
+                </sc-for>
+                <tr style="font-weight: 600;"><td></td><td>Total</td><td class="num">{{ sumCommitment }}</td><td class="num">{{ sumReduces }}</td><td class="num">{{ sumOutside }}</td><td class="num">{{ sumFeeNet }}</td><td class="num">{{ sumTotal }}</td><td></td><td class="num">{{ sumClosingUCC }}</td><td></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{ tabOutput }}" hint-placeholder-val="{{ false }}">
+        <p class="text-muted" style="max-width: 70ch; margin-top: 20px;">Per-LP allocation of every component and the net management fee, with capital-account roll-forward. Same shape as the Expected_Output tab. Amounts in {{ cur }}.</p>
+        <div class="card" style="margin-top: 14px; overflow-x: auto;">
+          <table class="table" style="width: max-content; min-width: 100%;">
+            <thead>
+              <tr>
+                <th>LP_ID</th><th>LP_Name</th><th style="text-align: right;">Commitment</th><th style="text-align: right;">Opening_UCC</th><th style="text-align: right;">Opening_Paid_In</th>
+                <sc-for list="{{ outCompHeaders }}" as="h" hint-placeholder-count="5"><th style="text-align: right;">{{ h }}</th></sc-for>
+                <th style="text-align: right;">Fee_Rate</th><th style="text-align: right;">Fee_Gross</th><th style="text-align: right;">Fee_Offset</th><th style="text-align: right;">Fee_Net</th><th style="text-align: right;">Total_Call</th><th style="text-align: right;">Reduces_Unfunded</th><th style="text-align: right;">Closing_UCC</th><th style="text-align: right;">Closing_Paid_In</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ outRows }}" as="r" hint-placeholder-count="6">
+                <tr style="opacity: {{ r.opacity }};">
+                  <td class="mono">{{ r.id }}</td><td style="white-space: nowrap;">{{ r.name }}</td><td class="num">{{ r.commitment }}</td><td class="num">{{ r.openUCC }}</td><td class="num">{{ r.openPaid }}</td>
+                  <sc-for list="{{ r.comps }}" as="c" hint-placeholder-count="5"><td class="num">{{ c }}</td></sc-for>
+                  <td class="num">{{ r.feeRate }}</td><td class="num">{{ r.feeGross }}</td><td class="num">{{ r.feeOffset }}</td><td class="num">{{ r.feeNet }}</td><td class="num" style="font-weight: 600;">{{ r.total }}</td><td class="num">{{ r.reduces }}</td><td class="num">{{ r.closingUCC }}</td><td class="num">{{ r.closingPaid }}</td>
+                </tr>
+              </sc-for>
+              <tr style="font-weight: 600;">
+                <td></td><td>TOTAL</td><td class="num">{{ tot.commitment }}</td><td class="num">{{ tot.openUCC }}</td><td class="num">{{ tot.openPaid }}</td>
+                <sc-for list="{{ tot.comps }}" as="c" hint-placeholder-count="5"><td class="num">{{ c }}</td></sc-for>
+                <td></td><td class="num">{{ tot.feeGross }}</td><td class="num">{{ tot.feeOffset }}</td><td class="num">{{ tot.feeNet }}</td><td class="num">{{ tot.total }}</td><td class="num">{{ tot.reduces }}</td><td class="num">{{ tot.closingUCC }}</td><td class="num">{{ tot.closingPaid }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tabChecks }}" hint-placeholder-val="{{ false }}">
+        <p class="text-muted" style="max-width: 70ch; margin-top: 20px;">Tie-outs, roll-forwards, cap tests and the regression against the Expected_Output fixture ({{ goldenSource }}).</p>
+        <div class="card" style="margin-top: 14px; max-width: 900px;">
+          <sc-for list="{{ checkRows }}" as="c" hint-placeholder-count="10">
+            <div style="display: grid; grid-template-columns: 80px minmax(0,1fr); gap: 15px; align-items: start; font-size: 13px; padding: 10px 16px; border-bottom: 1px solid var(--border);"><span class="tag {{ c.tag }}">{{ c.label }}</span><span>{{ c.text }}</span></div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ hasGoldenDiffs }}" hint-placeholder-val="{{ false }}">
+          <h3 style="margin: 32px 0 10px;">Differences vs Expected_Output</h3>
+          <div class="card" style="max-width: 700px;">
+            <table class="table">
+              <thead><tr><th>LP</th><th>Field</th><th style="text-align: right;">Expected</th><th style="text-align: right;">Engine</th></tr></thead>
+              <tbody>
+                <sc-for list="{{ goldenDiffs }}" as="g" hint-placeholder-count="3">
+                  <tr><td class="mono">{{ g.lp }}</td><td>{{ g.field }}</td><td class="num">{{ g.expected }}</td><td class="num" style="color: var(--destructive);">{{ g.actual }}</td></tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </sc-if>
+      </sc-if>
+
+      <sc-if value="{{ tabNotices }}" hint-placeholder-val="{{ false }}">
+        <div data-noprint="1" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 20px; max-width: 1200px; font-size: 13px;">
+          <button class="btn btn-secondary" onClick="{{ printCurrent }}">Print / save PDF</button>
+          <button class="btn btn-ghost" onClick="{{ toggleAll }}">{{ toggleAllLabel }}</button>
+          <span style="margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <span class="text-muted">{{ wfSummary }}</span>
+            <button class="btn btn-secondary" onClick="{{ approveAll }}" disabled="{{ noDrafts }}">Approve all drafts</button>
+            <button class="btn btn-primary" onClick="{{ sendAll }}" disabled="{{ noApproved }}">Send all approved</button>
+          </span>
+        </div>
+        <sc-if value="{{ hasFails }}" hint-placeholder-val="{{ false }}"><p style="font-size: 13px; color: var(--destructive); margin-top: 10px;">{{ failCount }} check(s) failing — approval is disabled until they clear.</p></sc-if>
+        <div style="display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 32px; margin-top: 20px;">
+          <div data-noprint="1" class="card" style="align-self: start; padding: 6px;">
+            <sc-for list="{{ noticeLps }}" as="l" hint-placeholder-count="6">
+              <a href="#" onClick="{{ l.onClick }}" style="text-decoration: none; padding: 8px 10px; border-radius: 6px; background: {{ l.bg }}; display: flex; justify-content: space-between; gap: 10px; font-size: 13px;"><span style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ l.name }}</span><span class="tag {{ l.tag }}" style="flex: none;">{{ l.status }}</span></a>
+            </sc-for>
+          </div>
+          <div style="display: grid; gap: 40px;">
+            <sc-for list="{{ notices }}" as="n" hint-placeholder-count="1">
+              <div>
+                <div data-noprint="1" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; max-width: 820px; margin-bottom: 10px; font-size: 13px;">
+                  <span class="tag {{ n.wfTag }}">{{ n.wfStatus }}</span><span class="text-muted">{{ n.wfDetail }}</span>
+                  <span style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
+                    <sc-if value="{{ n.canApprove }}" hint-placeholder-val="{{ true }}"><button class="btn btn-secondary" onClick="{{ n.approve }}" disabled="{{ hasFails }}">Approve</button></sc-if>
+                    <sc-if value="{{ n.canSend }}" hint-placeholder-val="{{ false }}"><button class="btn btn-ghost" onClick="{{ n.unapprove }}">Back to draft</button><button class="btn btn-primary" onClick="{{ n.send }}">Send to {{ n.recipient }}</button></sc-if>
+                    <sc-if value="{{ n.isSent }}" hint-placeholder-val="{{ false }}"><button class="btn btn-ghost" onClick="{{ n.unsend }}">Mark unsent</button><button class="btn btn-ghost" onClick="{{ n.resend }}">Resend</button></sc-if>
+                    <sc-if value="{{ n.noEmail }}" hint-placeholder-val="{{ false }}"><a href="#" onClick="{{ n.goRegister }}" class="text-muted" style="font-size: 12px;">Add Contact_Email in LP register to email this notice</a></sc-if>
+                  </span>
+                </div>
+                <article data-notice="1" data-screen-label="Notice {{ n.id }}" class="card" style="padding: 56px 64px; max-width: 820px; font-size: 14px; line-height: 1.5; position: relative;">
+                  <sc-if value="{{ n.showDraft }}" hint-placeholder-val="{{ true }}"><div style="position: absolute; top: 20px; right: 24px; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--destructive);">Draft — for review only</div></sc-if>
+                  <sc-if value="{{ n.isSent }}" hint-placeholder-val="{{ false }}"><div style="position: absolute; top: 20px; right: 24px; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted-foreground);">Issued {{ n.sentAt }}</div></sc-if>
+                  <div style="font-size: 20px; font-weight: 600; line-height: 1.15; letter-spacing: -0.01em;">{{ n.fund }}</div>
+                  <div style="font-size: 12px; color: var(--muted-foreground); margin-top: 4px;">c/o the General Partner</div>
+                  <h3 style="margin: 30px 0 15px; font-size: 26px; letter-spacing: -0.02em;">Capital Call Notice</h3>
+                  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 30px; font-size: 13px;">
+                    <div><div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground);">Notice No.</div><div>{{ n.callNo }}</div></div>
+                    <div><div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground);">Notice date</div><div>{{ n.callDate }}</div></div>
+                    <div><div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground);">Payment due</div><div>{{ n.dueDate }}</div></div>
+                    <div><div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground);">Investor</div><div>{{ n.name }}</div></div>
+                    <div><div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground);">Investor ID</div><div>{{ n.id }}</div></div>
+                    <div><div style="font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground);">Currency</div><div>{{ n.cur }}</div></div>
+                  </div>
+                  <p style="margin: 30px 0 0;">Re: Capital Call No. {{ n.callNo }} — {{ n.fund }}</p>
+                  <p style="margin: 15px 0 0;">Dear Limited Partner,</p>
+                  <p style="margin: 10px 0 0; text-wrap: pretty;">Pursuant to the Amended and Restated Limited Partnership Agreement of {{ n.fund }} (the “Partnership”), notice is hereby given that the General Partner is calling capital from you in connection with the investments and expenses set out below. Please arrange payment of the amount due, in immediately available funds, so as to be received by the Payment Due date above.</p>
+                  <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 20px; margin: 30px 0; padding: 12px 0; border-top: 2px solid var(--foreground); border-bottom: 1px solid var(--border);">
+                    <span style="font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600;">Total amount due</span>
+                    <span class="mono" style="font-size: 22px; font-weight: 600;">{{ n.cur }} {{ n.total }}</span>
+                  </div>
+                  <h4 style="font-size: 16px; margin: 0 0 8px;">A. Purpose of this Capital Call</h4>
+                  <table class="mono" style="width: 100%; border-collapse: collapse;">
+                    <thead><tr><th style="text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); padding: 6px 0; border-bottom: 1px solid var(--border); font-weight: 500;">Purpose of capital call</th><th style="text-align: right; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); padding: 6px 0; border-bottom: 1px solid var(--border); font-weight: 500;">Amount ({{ n.cur }})</th></tr></thead>
+                    <tbody>
+                      <sc-for list="{{ n.inside }}" as="l" hint-placeholder-count="6"><tr><td style="padding: 5px 0; border-bottom: 1px solid var(--muted);">{{ l.label }} <sup style="color: var(--muted-foreground);">{{ l.mark }}</sup></td><td style="padding: 5px 0; text-align: right; border-bottom: 1px solid var(--muted);">{{ l.amt }}</td></tr></sc-for>
+                      <tr><td style="padding: 6px 0; font-weight: 600;">Subtotal — called against capital commitment</td><td style="padding: 6px 0; text-align: right; font-weight: 600;">{{ n.subtotalInside }}</td></tr>
+                      <sc-for list="{{ n.outside }}" as="l" hint-placeholder-count="1"><tr><td style="padding: 5px 0; border-bottom: 1px solid var(--muted);">{{ l.label }} <sup style="color: var(--muted-foreground);">{{ l.mark }}</sup></td><td style="padding: 5px 0; text-align: right; border-bottom: 1px solid var(--muted);">{{ l.amt }}</td></tr></sc-for>
+                      <tr><td style="padding: 8px 0; font-weight: 600; border-top: 1px solid var(--foreground);">Total Amount Called</td><td style="padding: 8px 0; text-align: right; font-weight: 600; border-top: 1px solid var(--foreground);">{{ n.total }}</td></tr>
+                    </tbody>
+                  </table>
+                  <h4 style="font-size: 16px; margin: 30px 0 8px;">B. Your Capital Account Summary</h4>
+                  <table class="mono" style="width: 100%; border-collapse: collapse;">
+                    <thead><tr><th style="text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); padding: 6px 0; border-bottom: 1px solid var(--border); font-weight: 500;">Capital account summary</th><th style="text-align: right; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); padding: 6px 0; border-bottom: 1px solid var(--border); font-weight: 500;">Amount ({{ n.cur }})</th></tr></thead>
+                    <tbody>
+                      <sc-for list="{{ n.account }}" as="l" hint-placeholder-count="8"><tr><td style="padding: 5px 0; border-bottom: 1px solid var(--muted); font-weight: {{ l.weight }};">{{ l.label }}</td><td style="padding: 5px 0; text-align: right; border-bottom: 1px solid var(--muted); font-weight: {{ l.weight }};">{{ l.amt }}</td></tr></sc-for>
+                    </tbody>
+                  </table>
+                  <h4 style="font-size: 14px; margin: 30px 0 6px;">Notes</h4>
+                  <ol style="margin: 0; padding-left: 20px; font-size: 12px; color: var(--muted-foreground); display: grid; gap: 4px;">
+                    <sc-for list="{{ n.notes }}" as="x" hint-placeholder-count="4"><li style="text-wrap: pretty;">{{ x.text }}</li></sc-for>
+                  </ol>
+                  <div style="margin-top: 40px; font-size: 13px;">
+                    <div>For and on behalf of the General Partner of {{ n.fund }}</div>
+                    <div style="margin-top: 36px; width: 240px; border-top: 1px solid var(--foreground); padding-top: 6px;">Authorized Signatory</div>
+                  </div>
+                </article>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </sc-if>
+  </main>
+  </div>
+
+  <div class="ax-backdrop {{ chatOpenCls }}" data-noprint="1" onClick="{{ closeChat }}"></div>
+  <div class="ax-dock {{ chatOpenCls }}" data-noprint="1" role="dialog" aria-label="Ask Axtara">
+    <sc-if value="{{ chatHasMsgs }}" hint-placeholder-val="{{ false }}">
+      <div class="ax-thread {{ axArriveCls }}" ref="{{ chatScrollRef }}">
+        <sc-for list="{{ chatTurns }}" as="t" hint-placeholder-count="0">
+          <div class="ax-turn">
+            <div class="ax-q">{{ t.q }}</div>
+            <sc-if value="{{ t.thinking }}" hint-placeholder-val="{{ false }}"><div class="ax-wait"><span class="ax-think">{{ axThinking }}</span><span class="line"></span><span class="ghost"><i></i><i></i><i></i></span></div></sc-if>
+            <sc-if value="{{ t.hasA }}" hint-placeholder-val="{{ false }}">
+              <div class="ax-a"><sc-for list="{{ t.parts }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.cite }}" hint-placeholder-val="{{ false }}"><span class="cite">{{ p.text }}</span></sc-if><sc-if value="{{ p.plain }}" hint-placeholder-val="{{ true }}"><span>{{ p.text }}</span></sc-if></sc-for><sc-if value="{{ t.streaming }}" hint-placeholder-val="{{ false }}"><span class="ax-cursor"></span></sc-if><sc-if value="{{ t.hasLink }}" hint-placeholder-val="{{ false }}"><div style="margin-top: 10px;"><a href="#" onClick="{{ t.go }}">{{ t.linkLabel }} →</a></div></sc-if></div>
+            </sc-if>
+          </div>
+        </sc-for>
+        <div class="ax-foot"><span>Answers only from this client's data · read-only</span><button type="button" onClick="{{ clearChat }}">Clear conversation</button></div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ chatEmpty }}" hint-placeholder-val="{{ true }}">
+      <div class="ax-greet"><h2>{{ axGreeting }}</h2><p>Grounded in {{ fundName }} · every figure cited to its row · read-only</p></div>
+      <div class="ax-chips"><sc-for list="{{ chatSuggestions }}" as="s" hint-placeholder-count="3"><button class="chip" type="button" onClick="{{ s.ask }}">{{ s.text }}</button></sc-for></div>
+    </sc-if>
+    <form onSubmit="{{ chatSubmit }}" class="ax-bar">
+      <span class="wordmark {{ axBusyCls }}">Axtara</span>
+      <textarea class="chat-input" rows="1" placeholder="Ask Axtara about this fund…" ref="{{ chatInputRef }}" value="{{ chatDraft }}" onChange="{{ chatType }}" onKeyDown="{{ chatKey }}"></textarea>
+      <span class="ax-hint"><kbd>↵</kbd> ask <kbd>esc</kbd> close</span>
+      <button class="ax-send" type="submit" disabled="{{ chatBusy }}" title="Ask"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+      <button class="ax-x" type="button" onClick="{{ closeChat }}" title="Close">×</button>
+    </form>
+  </div>
+
+  </div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;light&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;tsType&quot;:&quot;'light' | 'dark'&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;draftWatermark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Notice&quot;}}">
+const LS_KEY = 'capcall.clients.v2', LS_OLD = 'capcall.clients.v1';
+const TAB_KEYS = [['setup', 'Fund_Setup', 'Fund setup'], ['lps', 'LP_Register', 'LP register'], ['components', 'Call_Components', 'Call components'], ['fee', 'Management_Fee', 'Management fee'], ['transfers', 'Transfers', 'Transfers']];
+const SRC = { excel: ['From Excel', 'tag-accent'], manual: ['Manual', 'tag-accent-2'], template: ['Template', 'tag-neutral'], carried: ['Carried forward', 'tag-neutral'], empty: ['Empty', 'tag-neutral'] };
+const WF = { draft: ['Draft', 'tag-warn'], approved: ['Approved', 'tag-accent'], sent: ['Sent', 'tag-neutral'] };
+const STAGE = { scheduled: ['Not started', 'tag-neutral'], progress: ['In progress', 'tag-warn'], sending: ['Partially sent', 'tag-warn'], issued: ['Issued', 'tag-accent'] };
+const deep = x => JSON.parse(JSON.stringify(x));
+class Component extends DCLogic {
+  state = { clients: null, clientId: null, module: 'capital-calls', rail: localStorage.getItem('capcall.rail') === '1' && window.innerWidth < 1100, view: 'home', callId: null, tab: 'summary', step: 'source', noticeLp: null, showAll: false, status: null, theme: localStorage.getItem('capcall.theme') || null };
+  fileRef = React.createRef();
+  chatScrollRef = React.createRef(); chatInputRef = React.createRef();
+  openChat(open) { if (!open && this.chatInputRef.current) this.chatInputRef.current.blur(); this.chatState.open = open; this.forceUpdate(); if (open) setTimeout(() => { const el = this.chatInputRef.current; if (el) el.focus({ preventScroll: true }); this.scrollChat(); }, 120); }
+  chatState = { open: false, msgs: {}, draft: '', busy: false };
+  fundCode(name) {
+    const clean = String(name || '').replace(/,?\s*(L\.?P\.?|LLC|Ltd\.?|Limited|Inc\.?)\s*$/i, '').trim();
+    const toks = clean.split(/\s+/).filter(Boolean);
+    const rom = toks.filter(t => /^(X{0,3})(IX|IV|V?I{0,3})$/i.test(t) && t.length <= 4).pop();
+    const num = toks.filter(t => /^\d{1,3}$/.test(t)).pop();
+    if (rom || num) { const stem = toks.find(t => !/^(the|illustrative|fund|capital|partners|opportunities|growth|ventures)$/i.test(t) && t !== rom && t !== num); return ((stem ? stem[0] : '') + (rom || num)).toUpperCase().slice(0, 4); }
+    const sig = toks.filter(t => !/^(the|illustrative|fund|capital|partners)$/i.test(t));
+    return (sig.length >= 2 ? sig[0][0] + sig[1][0] : (sig[0] || toks[0] || '?').slice(0, 2)).toUpperCase();
+  }
+  fundContext() {
+    const f = this.eng, c = this.client;
+    const calls = c.calls.map(k => { const res = f.compute(k.model); const stage = this.stageOf(k, res); const wf = k.workflow || {};
+      return { call_number: k.model.setup.Call_Number, stage: STAGE[stage][0], notice_date: f.serialToISO(k.model.setup.Call_Date), payment_due: f.serialToISO(k.model.setup.Payment_Due_Date), input_source: k.lastFile || 'manual', setup: k.model.setup, fee_config: k.model.fee, components: k.model.components, transfers: k.model.transfers,
+        allocation: res.rows.map(r => ({ LP_ID: r.LP_ID, LP_Name: r.LP_Name, Status: r.Status, Commitment: f.num(r.Commitment), Opening_UCC: r.openUCC, Opening_Paid_In: r.openPaid, Fee_Exempt: r.Fee_Exempt, Mgmt_Fee_Rate_Override: r.Mgmt_Fee_Rate_Override, Side_Letter_Ref: r.Side_Letter_Ref, Contact_Email: r.Contact_Email, Notes: r.Notes, components: Object.fromEntries(r.comps.map(x => [x.name, x.excused ? 'excused' : x.amt])), Fee_Rate: r.feeRate, Fee_Gross: r.feeGross, Fee_Offset: r.feeOffset, Fee_Net: r.feeNet, Total_Call: r.total, Reduces_Unfunded: r.reduces, Closing_UCC: r.closingUCC, Closing_Paid_In: r.closingPaid, notice_status: (wf[r.LP_ID] || {}).status || 'draft', notice_sent_at: (wf[r.LP_ID] || {}).sentAt || null })),
+        totals: res.totals, checks: res.checks, expected_output_differences: res.goldenDiffs }; });
+    return { client: c.name, today: new Date().toISOString().slice(0, 10), calls };
+  }
+  async askChat(q) {
+    const text = (q || '').trim(); if (!text || this.chatState.busy) return;
+    const cid = this.client.id; const list = this.chatState.msgs[cid] = this.chatState.msgs[cid] || [];
+    list.push({ role: 'user', text }); this.chatState.draft = ''; this.chatState.busy = true; this.chatState.thinkIdx = 0; this.forceUpdate(); this.scrollChat();
+    const phrases = ['Reading the register', 'Checking the allocation', 'Tracing the figures to their rows', 'Composing the answer'];
+    const ticker = setInterval(() => { this.chatState.thinkIdx = Math.min(phrases.length - 1, (this.chatState.thinkIdx || 0) + 1); this.forceUpdate(); }, 1400);
+    this.chatState.phrases = phrases;
+    const system = `You are the analyst for a private-equity fund administration tool. Answer ONLY from the JSON fund data provided; if the answer is not in the data, say so briefly. Be concise (2-5 sentences or a short list). Plain text only: no Markdown, no asterisks, no headings, no tables; use a simple "- " dash for list items. Cite every figure to its source in brackets, e.g. [LP03 · Mgmt_Fee_Rate_Override 0.01 · SL-2024-03] or [Call 2 · Deal Z · Allocation_Basis UCC]. Use the reporting currency with thousands separators. Never invent data, never give investment or legal advice, and never claim to have changed anything — this is read-only. If useful, end with one line 'GOTO: <call_number>|<tab>' where tab is summary, output, checks or notices, to point the user at the relevant screen; otherwise omit it.\n\nFUND DATA:\n${JSON.stringify(this.fundContext())}`;
+    const history = list.slice(-8).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
+    let reply;
+    try {
+      if (!window.claude || !window.claude.complete) throw new Error('no-model');
+      reply = await window.claude.complete({ system, messages: history, max_tokens: 700, model: 'claude-sonnet-4-5' });
+    } catch (e) {
+      reply = e.message === 'no-model' ? 'Axtara is not connected in this environment yet. Once plugged in, it will answer from this client\'s register, allocations, checks and notice status — with every figure cited to its row.' : `Could not reach Axtara (${e.message}). Try again in a moment.`;
+    }
+    reply = String(reply || '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/^#{1,6}\s+/gm, '').replace(/^\s*[\*•]\s+/gm, '- ').replace(/`/g, '');
+    let go = null; const m = /GOTO:\s*(\d+)\s*\|\s*(summary|output|checks|notices)/i.exec(reply || '');
+    if (m) { reply = reply.replace(m[0], '').trim(); const k = this.client.calls.find(x => String(x.model.setup.Call_Number) === m[1]); if (k) go = { callId: k.id, tab: m[2].toLowerCase(), label: `Open Call No. ${m[1]} · ${m[2][0].toUpperCase() + m[2].slice(1).toLowerCase()}` }; }
+    clearInterval(ticker);
+    const msg = { role: 'ai', text: '', go: null, streaming: true }; list.push(msg); this.chatState.busy = false; this.chatState.arrive = true; this.forceUpdate(); this.scrollChat();
+    setTimeout(() => { this.chatState.arrive = false; this.forceUpdate(); }, 1100);
+    const words = (reply || '').split(/(\s+)/); let i = 0;
+    await new Promise(done => { const tick = () => { if (i >= words.length) { msg.streaming = false; msg.go = go; this.forceUpdate(); this.scrollChat(); return done(); } const n = 1 + Math.floor(Math.random() * 2); msg.text += words.slice(i, i + n).join(''); i += n; this.forceUpdate(); this.scrollChat(); setTimeout(tick, 18 + Math.random() * 30); }; tick(); });
+  }
+  scrollChat() { requestAnimationFrame(() => { const el = this.chatScrollRef.current; if (el) el.scrollTop = el.scrollHeight; }); }
+  onGlobalKey = e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.openChat(!this.chatState.open); } else if (e.key === 'Escape' && this.chatState.open) this.openChat(false); };
+  componentWillUnmount() { window.removeEventListener('keydown', this.onGlobalKey); }
+  async componentDidMount() {
+    window.addEventListener('keydown', this.onGlobalKey);
+    const [eng, def] = await Promise.all([import('./engine.js'), import('./defaults.js')]);
+    this.eng = eng; this.def = def;
+    let clients = null;
+    try { clients = JSON.parse(localStorage.getItem(LS_KEY)); } catch (e) { clients = null; }
+    if (!clients) { try { const old = JSON.parse(localStorage.getItem(LS_OLD)); if (old && old.length) clients = old.map(c => ({ id: c.id, name: c.name, calls: (c.model && (c.model.lps.length || c.model.components.length)) ? [{ id: 'k' + c.id, model: c.model, sources: c.sources || this.allSources('excel'), lastFile: c.lastFile || '', workflow: (c.workflow || {})[`call${c.model.setup.Call_Number || 0}`] || {} }] : [] })); } catch (e) { clients = null; } }
+    if (clients && localStorage.getItem(LS_KEY) === null) { // fresh v1 migration: surround the illustrative fund's call with seeded history
+      const seeded = this.seed()[0];
+      clients.forEach(c => { if (c.calls.length === 1 && c.calls[0].model.setup.Fund_Name === seeded.name) { const cur = c.calls[0]; cur.model.setup.Call_Number = 2; c.calls = [seeded.calls[0], cur, seeded.calls[2]]; } });
+    }
+    if (!clients || !clients.length) clients = this.seed();
+    // one-time repair for the illustrative fund: ensure Call 1 (issued) + Call 3 (planned) exist around Call 2, drop duplicate/empty leftovers
+    const seeded = this.seed()[0];
+    clients.forEach(c => {
+      if (c.seededHistory || c.name !== seeded.name) return;
+      const two = c.calls.find(k => eng.num(k.model.setup.Call_Number) === 2 && k.model.lps.length) || c.calls.find(k => k.model.lps.length);
+      if (!two) return;
+      two.model.setup.Call_Number = 2;
+      const others = c.calls.filter(k => k !== two && !(k.model.lps.length === 0 && k.model.components.length === 0) && eng.num(k.model.setup.Call_Number) !== 2 && eng.num(k.model.setup.Call_Number) !== 1);
+      c.calls = [seeded.calls[0], two, ...others, ...(others.some(k => eng.num(k.model.setup.Call_Number) === 3) ? [] : [seeded.calls[2]])];
+      c.seededHistory = true;
+    });
+    clients.forEach(c => { if (c.name !== seeded.name) return; if (!c.calls.some(k => !k.model.lps.length && !k.model.components.length) && !c.calls.some(k => eng.num(k.model.setup.Call_Number) === 3)) c.calls.push(JSON.parse(JSON.stringify(seeded.calls[2]))); });
+    clients.forEach(c => { const sig = k => JSON.stringify([k.model.setup.Call_Date, k.model.components, k.model.lps.map(l => [l.LP_ID, l.Commitment])]); const seen = {}; const sorted = [...c.calls].sort((a, b) => Object.keys(b.workflow || {}).length - Object.keys(a.workflow || {}).length); sorted.forEach(k => { if (!k.model.lps.length) return; const s = sig(k); if (seen[s]) c.calls = c.calls.filter(x => x !== k); else seen[s] = k; }); });
+    clients.forEach(c => { const byNo = {}; c.calls.forEach(k => { const n = eng.num(k.model.setup.Call_Number); (byNo[n] = byNo[n] || []).push(k); });
+      Object.values(byNo).forEach(list => { if (list.length < 2) return; list.sort((a, b) => Object.keys(b.workflow || {}).length - Object.keys(a.workflow || {}).length); list.slice(1).forEach(dup => { const same = JSON.stringify(dup.model.components) === JSON.stringify(list[0].model.components) && JSON.stringify(dup.model.lps) === JSON.stringify(list[0].model.lps); if (same) c.calls = c.calls.filter(k => k !== dup); else dup.model.setup.Call_Number = c.calls.reduce((m, k) => Math.max(m, eng.num(k.model.setup.Call_Number)), 0) + 1; }); }); });
+    clients.forEach(c => c.calls.forEach(k => k.model.lps.forEach(l => { if (l.Contact_Email == null) { const s = def.DEFAULT_MODEL.lps.find(x => x.LP_ID === l.LP_ID && x.LP_Name === l.LP_Name); l.Contact_Email = s ? s.Contact_Email : ''; } })));
+    this.setState({ clients, clientId: clients[0].id });
+  }
+  componentDidUpdate() { if (this.state.clients) { try { localStorage.setItem(LS_KEY, JSON.stringify(this.state.clients)); } catch (e) { /* quota */ } } }
+  allSources(v) { return Object.fromEntries(TAB_KEYS.map(([k]) => [k, v])); }
+  emptyModel(name, no) {
+    const d = this.def.DEFAULT_MODEL;
+    return { setup: { ...Object.fromEntries(Object.keys(d.setup).map(k => [k, ''])), Fund_Name: name, Reporting_Currency: 'USD', Call_Number: no, Rounding_Decimals: 2, Default_Mgmt_Fee_Basis: 'Commitment' }, lps: [], components: [], fee: { Fee_Basis: 'Commitment', Default_Fee_Rate_Annual: '', Fee_Period_Fraction: '', Reduces_Unfunded: 'Y', Fee_Exempt_LP_IDs: '', offsets: [] }, transfers: [], golden: null, goldenSource: '' };
+  }
+  seed() {
+    const t = this.def.DEFAULT_MODEL, name = t.setup.Fund_Name;
+    const c1 = deep(t); Object.assign(c1.setup, { Call_Number: 1, Call_Date: '2026-03-31', Payment_Due_Date: '2026-04-14' });
+    c1.lps.forEach(l => { l.Opening_Paid_In = 0; l.Opening_UCC = l.Commitment; l.Opening_Invested_Capital = 0; });
+    c1.components = [{ Component_ID: 'C1', Component_Name: 'Deal V', Category: 'Deal', Total_Amount: 6000000, Allocation_Basis: 'Commitment', Reduces_Unfunded: 'Y', Excused_LP_IDs: '', Notes: '' }, { Component_ID: 'C2', Component_Name: 'Deal W', Category: 'Deal', Total_Amount: 3000000, Allocation_Basis: 'Commitment', Reduces_Unfunded: 'Y', Excused_LP_IDs: '', Notes: '' }, { Component_ID: 'C3', Component_Name: 'Organizational Expense', Category: 'Organizational Expense', Total_Amount: 300000, Allocation_Basis: 'Commitment', Reduces_Unfunded: 'N', Excused_LP_IDs: '', Notes: 'First close formation costs.' }];
+    c1.fee.Fee_Period_Fraction = 0.5; c1.fee.offsets = []; c1.transfers = []; c1.golden = null; c1.goldenSource = '';
+    const wf1 = Object.fromEntries(c1.lps.map(l => [l.LP_ID, { status: 'sent', approvedAt: '2026-03-30T15:00:00Z', sentAt: '2026-03-31T09:00:00Z' }]));
+    const c3 = this.emptyModel(name, 3); Object.assign(c3.setup, { Call_Date: '2026-12-31', Payment_Due_Date: '2027-01-14', Default_Mgmt_Fee_Rate_Annual: 0.02, Mgmt_Fee_Period_Fraction: 0.25, Org_Expense_Cap: 1500000, Rounding_Plug_LP_ID: 'LP04', Prepared_By: 'Ops Team' });
+    return [
+      { id: 'c1', name, calls: [
+        { id: 'k1', model: c1, sources: this.allSources('excel'), lastFile: 'Capital_Call_Input_Call1.xlsx', workflow: wf1 },
+        { id: 'k2', model: deep(t), sources: this.allSources('excel'), lastFile: 'Capital_Call_Input_Template (2).xlsx', workflow: {} },
+        { id: 'k3', model: c3, sources: this.allSources('empty'), lastFile: '', workflow: {} },
+      ] },
+      { id: 'c2', name: 'Illustrative Fund III, L.P.', calls: [] },
+    ];
+  }
+  async process(title, labels, workAt, work) {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    let result;
+    for (let i = 0; i < labels.length; i++) {
+      this.setState({ proc: { title, labels, idx: i } });
+      if (i === workAt && work) result = await work();
+      await wait(i === 0 ? 700 : 520);
+    }
+    this.setState({ proc: { title, labels, idx: labels.length } });
+    await wait(350);
+    this.setState({ proc: null });
+    return result;
+  }
+  get client() { return this.state.clients.find(c => c.id === this.state.clientId) || this.state.clients[0]; }
+  get call() { return this.client.calls.find(k => k.id === this.state.callId) || null; }
+  updClient(fn) { this.setState(s => { const clients = deep(s.clients); const c = clients.find(x => x.id === s.clientId) || clients[0]; fn(c, s); return { clients }; }); }
+  updCall(fn) { this.updClient((c, s) => { const k = c.calls.find(x => x.id === s.callId); if (k) fn(k, c); }); }
+  upd(fn, sourceKey) { this.updCall((k, c) => { fn(k.model); if (sourceKey) k.sources[sourceKey] = 'manual'; if (k.model.setup.Fund_Name) c.name = k.model.setup.Fund_Name; }); }
+  setWf(lpIds, patch) { this.updCall(k => { k.workflow = k.workflow || {}; lpIds.forEach(id => { k.workflow[id] = { ...(k.workflow[id] || {}), ...patch }; }); }); }
+  listOf(m, key) { return key === 'offsets' ? m.fee.offsets : m[key]; }
+  cells(list, listKey, idx, cols) {
+    const src = listKey === 'offsets' ? 'fee' : listKey;
+    return cols.map(c => ({ key: c.key, width: c.w, list: c.list || '', align: c.num ? 'right' : 'left', value: list[idx][c.key] ?? '', onChange: e => { const v = e.target.value; this.upd(m => { this.listOf(m, listKey)[idx][c.key] = v; }, src); } }));
+  }
+  rows(listKey, cols) {
+    const list = this.listOf(this.call.model, listKey), src = listKey === 'offsets' ? 'fee' : listKey;
+    return list.map((_, i) => ({ cells: this.cells(list, listKey, i, cols), remove: e => { e.preventDefault(); this.upd(m => { this.listOf(m, listKey).splice(i, 1); }, src); } }));
+  }
+  kvRows(obj, objKey, fields) {
+    return fields.map(f => ({ key: f.key, note: f.note, list: f.list || '', type: f.type || 'text', align: f.num ? 'right' : 'left', value: obj[f.key] ?? '', onChange: e => { const v = e.target.value; this.upd(m => { m[objKey][f.key] = v; }, objKey); } }));
+  }
+  stageOf(k, res) {
+    if (!k.model.lps.length && !k.model.components.length) return 'scheduled';
+    const active = res.rows.filter(r => r.isActive), wf = k.workflow || {};
+    const sent = active.filter(r => (wf[r.LP_ID] || {}).status === 'sent').length;
+    return active.length && sent === active.length ? 'issued' : sent ? 'sending' : 'progress';
+  }
+  newCall = () => {
+    const c = this.client, def = this.def;
+    const empty = c.calls.find(k => !k.model.lps.length && !k.model.components.length);
+    if (empty) { this.setState({ view: 'setup', callId: empty.id, step: 'source', status: { level: 'info', head: 'Resumed', text: `Capital Call No. ${empty.model.setup.Call_Number} was already created but not started — continuing with it.` }, noticeLp: null }); return; }
+    const no = c.calls.reduce((m, k) => Math.max(m, this.eng.num(k.model.setup.Call_Number)), 0) + 1;
+    const last = c.calls.slice().sort((a, b) => this.eng.num(b.model.setup.Call_Number) - this.eng.num(a.model.setup.Call_Number))[0];
+    const model = this.emptyModel(c.name, no);
+    if (last) { const s = last.model.setup; Object.assign(model.setup, { Reporting_Currency: s.Reporting_Currency, Default_Mgmt_Fee_Rate_Annual: s.Default_Mgmt_Fee_Rate_Annual, Default_Mgmt_Fee_Basis: s.Default_Mgmt_Fee_Basis, Mgmt_Fee_Period_Fraction: s.Mgmt_Fee_Period_Fraction, Org_Expense_Cap: s.Org_Expense_Cap, Rounding_Decimals: s.Rounding_Decimals, Rounding_Plug_LP_ID: s.Rounding_Plug_LP_ID, Prepared_By: s.Prepared_By }); model.fee = { ...deep(last.model.fee), offsets: [] }; }
+    const id = 'k' + Date.now();
+    this.updClient(cc => cc.calls.push({ id, model, sources: this.allSources('empty'), lastFile: '', workflow: {} }));
+    this.setState({ view: 'setup', callId: id, step: 'source', status: null, noticeLp: null });
+  };
+  carryForward = e => {
+    e.preventDefault();
+    const c = this.client, cur = this.call, f = this.eng;
+    const prev = c.calls.filter(k => k.id !== cur.id && k.model.lps.length && f.num(k.model.setup.Call_Number) < f.num(cur.model.setup.Call_Number)).sort((a, b) => f.num(b.model.setup.Call_Number) - f.num(a.model.setup.Call_Number))[0];
+    if (!prev) return;
+    const res = f.compute(prev.model);
+    const lps = res.rows.map(r => { const src = prev.model.lps.find(l => l.LP_ID === r.LP_ID) || {}; const deals = r.comps.filter(x => x.category === 'Deal').reduce((s, x) => s + x.amt, 0); return { ...src, LP_ID: r.LP_ID, LP_Name: r.LP_Name, LP_Type: r.LP_Type, Commitment: f.num(r.Commitment), Opening_Paid_In: r.closingPaid, Opening_UCC: r.closingUCC, Opening_Invested_Capital: f.round(f.num(r.Opening_Invested_Capital) + deals, 2), Mgmt_Fee_Rate_Override: r.Mgmt_Fee_Rate_Override ?? '', Fee_Exempt: r.Fee_Exempt || 'N', Status: r.Status || 'Active', Side_Letter_Ref: r.Side_Letter_Ref || '', Contact_Email: r.Contact_Email || '', Notes: r.Notes || '' }; });
+    this.updCall(k => { k.model.lps = lps; k.sources.lps = 'carried'; k.sources.setup = k.sources.setup === 'empty' ? 'carried' : k.sources.setup; k.sources.fee = k.sources.fee === 'empty' ? 'carried' : k.sources.fee; });
+    this.setState({ step: 'lps', status: { level: 'ok', head: 'Carried forward', text: `${lps.length} investors with closing balances from Call No. ${prev.model.setup.Call_Number}.` } });
+  };
+  loadFile = async f => {
+    if (!f) return;
+    try {
+      const out = await this.process(`Reading ${f.name}`, ['Opening workbook', 'Extracting Fund_Setup', 'Extracting LP_Register', 'Extracting Call_Components and Management_Fee', 'Reading Transfers and Expected_Output', 'Mapping fields to the engine'], 0, async () => {
+        const wb = window.XLSX.read(new Uint8Array(await f.arrayBuffer()), { type: 'array' });
+        return { wb, model: this.def.parseWorkbook(window.XLSX, wb) };
+      });
+      const { wb, model } = out;
+      const present = Object.fromEntries(TAB_KEYS.map(([k, sheet]) => [k, wb.Sheets[sheet] ? 'excel' : 'empty']));
+      const keepNo = this.call.model.setup.Call_Number, ownId = this.call.id;
+      const taken = this.client.calls.some(k => k.id !== ownId && this.eng.num(k.model.setup.Call_Number) === this.eng.num(model.setup.Call_Number));
+      let note = '';
+      if (!model.setup.Call_Number || taken) { if (taken) note = ` Workbook says Call No. ${model.setup.Call_Number}, which already exists — kept as Call No. ${keepNo}.`; model.setup.Call_Number = keepNo; }
+      this.updCall((k, c) => { k.model = model; k.sources = present; k.lastFile = f.name; if (model.setup.Fund_Name) c.name = model.setup.Fund_Name; });
+      this.setState({ status: { level: 'ok', head: 'Loaded', text: `${f.name}: ${model.lps.length} investors, ${model.components.length} components, ${model.transfers.length} transfer(s)${model.golden ? ', Expected_Output fixture found' : ''}.${note}` }, view: 'setup', step: 'setup', noticeLp: null });
+    } catch (err) { this.setState({ proc: null, status: { level: 'fail', head: 'Failed', text: `Could not read ${f.name}: ${err.message}` } }); }
+  };
+  review = async () => {
+    await this.process(`Preparing Capital Call No. ${this.call.model.setup.Call_Number}`, ['Applying transfers to the register', 'Allocating components pro-rata', 'Computing management fee and offsets', 'Running tie-out checks', 'Drafting investor notices'], null, null);
+    this.setState({ view: 'call', tab: 'summary' });
+  };
+  onFile = async e => { await this.loadFile(e.target.files[0]); e.target.value = ''; };
+  onDrop = e => { e.preventDefault(); e.stopPropagation(); this.loadFile(e.dataTransfer.files[0]); };
+  sendNotices(model, rows) {
+    const stamp = new Date().toISOString(), f = this.eng;
+    const to = rows.map(r => r.Contact_Email).filter(Boolean).join(',');
+    const subj = encodeURIComponent(`${model.setup.Fund_Name} — Capital Call Notice No. ${model.setup.Call_Number}`);
+    const body = encodeURIComponent(rows.map(r => `${r.LP_Name}: total amount due ${model.setup.Reporting_Currency || 'USD'} ${f.fmt(r.total)}, payable by ${f.fmtDate(f.serialToISO(model.setup.Payment_Due_Date))}.`).join('\n') + '\n\nThe capital call notice is attached.');
+    this.setWf(rows.map(r => r.LP_ID), { status: 'sent', sentAt: stamp });
+    this.setState({ status: { level: 'ok', head: 'Sent', text: `${rows.length} notice(s) marked as sent ${new Date(stamp).toLocaleString()}${to ? ' — email draft opened' : ' — no Contact_Email on register, record only'}.` } });
+    if (to) window.open(`mailto:${to}?subject=${subj}&body=${body}`, '_self');
+  }
+  exportXlsx(res) {
+    const m = this.call.model, X = window.XLSX, f = this.eng;
+    const data = res.rows.map(r => { const o = { LP_ID: r.LP_ID, LP_Name: r.LP_Name, Commitment: f.num(r.Commitment), Opening_UCC: r.openUCC, Opening_Paid_In: r.openPaid }; r.comps.forEach(c => o[c.name] = c.amt); Object.assign(o, { Fee_Rate: r.feeRate, Fee_Gross: r.feeGross, Fee_Offset: r.feeOffset, Fee_Net: r.feeNet, Total_Call: r.total, Reduces_Unfunded_Amt: r.reduces, Closing_UCC: r.closingUCC, Closing_Paid_In: r.closingPaid }); return o; });
+    const wb = X.utils.book_new();
+    X.utils.book_append_sheet(wb, X.utils.json_to_sheet(data), 'Allocation');
+    X.utils.book_append_sheet(wb, X.utils.json_to_sheet(res.checks.map(c => ({ Level: c.level, Check: c.text }))), 'Checks');
+    X.writeFile(wb, `${(m.setup.Fund_Name || 'Fund').replace(/[^\w]+/g, '_')}_Call_${m.setup.Call_Number}_Allocation.xlsx`);
+  }
+  renderVals() {
+    const { clients, view, tab, step } = this.state;
+    if (!clients) return { fundName: 'Loading…', showHome: false, clientOptions: [], callRows: [], clientInitial: '', clientMeta: '', crumbLeaf: '', crumbHasMid: false, userInitials: '', wsOpen: false, wsItems: [], chatTurns: [], axArriveCls: '', hasCalls: false, noCalls: false, homeHint: '', callCountLabel: '', hasDraw: false, showSetup: false, showCall: false, navGroups: [], moduleLabel: '', themeLabel: '', themeIcon: { __html: '' }, railIcon: { __html: '' }, railCls: '', themeClass: '', chatOpenCls: '', chatSuggestions: [], chatMsgs: [], axGreeting: '', axBusyCls: '', chatEmpty: false, chatHasMsgs: false, showPlaceholder: false };
+    const f = this.eng, def = this.def, client = this.client;
+    const theme = this.state.theme || this.props.theme || 'light';
+    const setTheme = t => { localStorage.setItem('capcall.theme', t); this.setState({ theme: t }); };
+    const st = this.state.status;
+    const tagFor = l => l === 'ok' ? 'tag-accent' : l === 'fail' ? 'tag-accent-2' : l === 'warn' ? 'tag-warn' : 'tag-neutral';
+    const cc = this.state.module === 'capital-calls';
+    const I = { home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>', calls: '<path d="M4 6h16M4 12h10M4 18h7"/><circle cx="18" cy="16" r="3"/><path d="M18 14.5v1.5l1 1"/>', waterfall: '<path d="M3 6h5v12H3zM10 10h5v8h-5zM17 14h4v4h-4z"/>', variance: '<path d="M3 17l5-6 4 3 5-8 4 5"/><path d="M3 21h18"/>', reports: '<path d="M6 3h9l5 5v13H6z"/><path d="M15 3v5h5M9 13h6M9 17h6"/>', lps: '<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14a5 5 0 0 1 5.5 5"/>', ledger: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>', settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>', sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>', moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>', left: '<path d="M15 6l-6 6 6 6"/>', right: '<path d="M9 6l6 6-6 6"/>' };
+    const MODULES = { 'capital-calls': 'Capital calls', waterfalls: 'Distribution waterfalls', variance: 'Variance analysis', reporting: 'Investor reporting', investors: 'Investors', ledger: 'General ledger', settings: 'Settings' };
+    const mod = this.state.module;
+    const navItem = (id, label, icon, soon, chev) => ({ label, soon: !!soon, chev: !!chev, icon: { __html: icon }, cls: (mod === id ? 'on' : '') + (soon ? ' dim' : ''), onClick: e => { e.preventDefault(); this.setState({ module: id, status: null, wsOpen: false }); } });
+    const navGroups = [
+      { label: 'Fund operations', items: [navItem('capital-calls', 'Capital calls', I.calls, false, true)] },
+      { label: 'Administration', items: [navItem('investors', 'Investors', I.lps, true), navItem('settings', 'Settings', I.settings, true)] },
+    ];
+    const common = {
+      railCls: this.state.rail ? 'rail' : '', toggleRail: () => { const v = !this.state.rail; localStorage.setItem('capcall.rail', v ? '1' : '0'); this.setState({ rail: v }); }, railIcon: { __html: this.state.rail ? I.right : I.left },
+      toggleTheme: () => setTheme(theme === 'dark' ? 'light' : 'dark'), themeIcon: { __html: theme === 'dark' ? I.sun : I.moon }, themeLabel: theme === 'dark' ? 'Light mode' : 'Dark mode',
+      navGroups, moduleLabel: MODULES[mod],
+      clientInitial: this.fundCode(client.name), clientMeta: `${client.calls.length} capital call${client.calls.length === 1 ? '' : 's'}`, userInitials: (this.call && this.call.model.setup.Prepared_By || 'Fund Admin').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+      wsOpen: !!this.state.wsOpen, toggleWs: () => this.setState({ wsOpen: !this.state.wsOpen }),
+      wsItems: clients.map(c => ({ name: c.name, initial: this.fundCode(c.name), meta: c.calls.length ? `${c.calls.length} call${c.calls.length === 1 ? '' : 's'}` : 'empty', cls: c.id === client.id ? 'on' : '', pick: () => this.setState({ clientId: c.id, view: 'home', callId: null, wsOpen: false, status: null, noticeLp: null }) })),
+      crumbHasMid: cc && view !== 'home', crumbLeaf: !cc ? MODULES[mod] : view === 'home' ? 'Capital calls' : view === 'setup' ? `Set up Call No. ${this.call ? this.call.model.setup.Call_Number : ''}` : `Capital Call No. ${this.call ? this.call.model.setup.Call_Number : ''}`, goModuleHome: e => { e.preventDefault(); this.setState({ module: 'capital-calls', view: 'home' }); }, goCapitalCalls: () => this.setState({ module: 'capital-calls' }),
+      showPlaceholder: !cc, phTitle: MODULES[mod], phText: mod === 'investors' ? 'A single register across all calls: contact details, side letters, transfers and each investor\'s capital account history.' : 'Fund defaults, users and approval roles, notice templates and e-mail sending.',
+      themeClass: theme === 'dark' ? 'dark' : '', lightOn: theme === 'dark' ? '' : 'on', darkOn: theme === 'dark' ? 'on' : '', setLight: () => setTheme('light'), setDark: () => setTheme('dark'),
+      clientId: client.id, clientOptions: clients.map(c => ({ id: c.id, name: c.name })),
+      onClient: e => this.setState({ clientId: e.target.value, view: 'home', callId: null, noticeLp: null, status: null }),
+      addClient: () => { this.setState({ wsOpen: false }); const name = window.prompt('Client / fund name'); if (!name) return; const id = 'c' + Date.now(); this.setState(s => ({ clients: [...s.clients, { id, name, calls: [] }], clientId: id, view: 'home', callId: null, status: null })); },
+      fileRef: this.fileRef, onFile: this.onFile, pickFile: () => this.fileRef.current && this.fileRef.current.click(), onDragOver: e => e.preventDefault(), onDrop: this.onDrop,
+      showStatus: !!st, statusTag: st ? tagFor(st.level) : '', statusHead: st ? st.head : '', statusText: st ? st.text : '', dismissStatus: e => { e.preventDefault(); this.setState({ status: null }); },
+      goHome: e => { e.preventDefault(); this.setState({ view: 'home', status: null }); },
+      newCall: this.newCall, fundName: client.name,
+      procOn: !!this.state.proc, procTitle: this.state.proc ? this.state.proc.title : '', procPct: this.state.proc ? `${Math.round(this.state.proc.idx / this.state.proc.labels.length * 100)}%` : '0%',
+      procSteps: this.state.proc ? this.state.proc.labels.map((label, i) => ({ label, cls: i < this.state.proc.idx ? 'done' : i === this.state.proc.idx ? 'active' : '', note: i < this.state.proc.idx ? 'done' : i === this.state.proc.idx ? 'working…' : '' })) : [],
+      chatOpenCls: this.chatState.open ? 'open' : '', axAppCls: this.chatState.open ? 'ax-open' : '', toggleChat: () => this.openChat(!this.chatState.open), closeChat: () => this.openChat(false), chatInputRef: this.chatInputRef,
+      clearChat: () => { this.chatState.msgs[client.id] = []; this.forceUpdate(); },
+      chatScrollRef: this.chatScrollRef, chatEmpty: !(this.chatState.msgs[client.id] || []).length && !this.chatState.busy, chatBusy: this.chatState.busy, chatDraft: this.chatState.draft,
+      axBusyCls: this.chatState.busy ? 'live' : '', axThinking: (this.chatState.phrases || ['Thinking'])[this.chatState.thinkIdx || 0] + '…', chatHasMsgs: (this.chatState.msgs[client.id] || []).length > 0,
+      axGreeting: view === 'home' ? `What would you like to know about ${client.name.replace(/,?\s*L\.?P\.?$/i, '')}?` : this.state.tab === 'notices' ? 'Anything about the notices for this call?' : this.state.tab === 'checks' ? 'Want a check explained?' : 'Anything about this call\'s allocation?',
+      chatTurns: (() => { const list = this.chatState.msgs[client.id] || []; const turns = []; list.forEach(m => { if (m.role === 'user') turns.push({ q: m.text, a: null }); else if (turns.length) turns[turns.length - 1].a = m; }); return turns.map((t, i) => { const m = t.a; return { q: t.q, thinking: !m && this.chatState.busy && i === turns.length - 1, hasA: !!m, streaming: !!(m && m.streaming), parts: m ? m.text.split(/(\[[^\]\n]{3,80}\])/g).filter(Boolean).map(x => { if (!/^\[.*\]$/.test(x)) return { cite: false, plain: true, text: x }; const txt = x.slice(1, -1); return { cite: true, plain: false, text: txt }; }) : [], hasLink: !!(m && m.go), linkLabel: m && m.go ? m.go.label : '', go: e => { e.preventDefault(); if (m && m.go) { this.openChat(false); this.setState({ view: 'call', callId: m.go.callId, tab: m.go.tab, noticeLp: null }); } } }; }); })(),
+      chatType: e => { this.chatState.draft = e.target.value; this.forceUpdate(); },
+      axArriveCls: this.chatState.arrive ? 'arrive' : '',
+      chatKey: e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.askChat(this.chatState.draft); } else if (e.key === 'Escape') { this.openChat(false); } },
+      chatSubmit: e => { e.preventDefault(); this.askChat(this.chatState.draft); },
+      chatSuggestions: (view === 'home' ? ['How much of total commitments has been drawn so far?', 'Which investors have the largest unfunded commitment?', 'When is the next payment due and for how much?'] : this.state.tab === 'notices' ? ['Which notices are still unsent?', 'Summarise what LP01 is being asked to pay and why.', 'Who has no contact email on file?'] : this.state.tab === 'checks' ? ['Are any checks failing and what do they mean?', 'Does the engine tie to Expected_Output?', 'Was the organisational expense cap respected?'] : ['Why is Gamma Family Office\'s fee lower than the others?', 'How was Deal Z allocated differently from Deal X?', 'Which items are called outside commitment?']).map(text => ({ text, ask: () => this.askChat(text) })),
+      showHome: cc && view === 'home', showSetup: cc && view === 'setup' && !!this.call, showCall: cc && view === 'call' && !!this.call,
+    };
+    // ---- per-call computations (cheap) for the home list & aggregate
+    const computed = client.calls.map(k => { const res = f.compute(k.model); return { k, res, stage: this.stageOf(k, res), no: f.num(k.model.setup.Call_Number) }; }).sort((a, b) => a.no - b.no);
+    const cur0 = x => x.k.model.setup.Reporting_Currency || 'USD';
+    if (view === 'home' || !this.call) {
+      const issued = computed.filter(x => x.stage === 'issued');
+      const withLps = computed.filter(x => x.k.model.lps.length);
+      const latest = withLps[withLps.length - 1];
+      const inProg = computed.find(x => x.stage === 'progress' || x.stage === 'sending');
+      const pos = latest ? (latest.stage === 'issued' ? { paid: latest.res.totals.closingPaid, ucc: latest.res.totals.closingUCC, asOf: `after Call No. ${latest.no}` } : { paid: latest.res.totals.openPaid, ucc: latest.res.totals.openUCC, asOf: `before Call No. ${latest.no}` }) : null;
+      return { ...common,
+        homeHint: client.calls.length ? (inProg ? `Call No. ${inProg.no} is ${STAGE[inProg.stage][0].toLowerCase()} — open it to continue, or start a new call.` : 'All calls issued. Start a new call when the next drawdown is due.') : 'No calls yet. Start one below.',
+        hasCalls: client.calls.length > 0, noCalls: client.calls.length === 0, callCountLabel: `${issued.length} issued · ${computed.length - issued.length} open`,
+        callRows: computed.slice().reverse().map(x => ({ no: String(x.no).padStart(2, '0'), date: f.fmtDate(f.serialToISO(x.k.model.setup.Call_Date)), due: f.fmtDate(f.serialToISO(x.k.model.setup.Payment_Due_Date)), total: x.stage === 'scheduled' ? '—' : f.fmt(x.res.totals.total), notices: x.stage === 'scheduled' ? '' : `${x.res.rows.filter(r => r.isActive && ((x.k.workflow || {})[r.LP_ID] || {}).status === 'sent').length} / ${x.res.rows.filter(r => r.isActive).length} sent`, status: STAGE[x.stage][0], tag: STAGE[x.stage][1], weight: x.stage === 'progress' || x.stage === 'sending' ? 600 : 400, action: x.stage === 'scheduled' ? 'Set up' : x.stage === 'issued' ? 'View' : 'Continue',
+          open: () => this.setState({ view: x.stage === 'scheduled' ? 'setup' : 'call', callId: x.k.id, tab: 'summary', step: 'source', noticeLp: null, status: null }) })),
+        hasDraw: withLps.length > 0,
+        drawCols: (() => { const H = 130; const plannedAmt = latest ? latest.res.totals.total : 0; const vals = computed.map(x => x.stage === 'scheduled' ? plannedAmt : x.res.totals.total); const max = Math.max(1, ...vals); const commit = latest ? latest.res.totals.Commitment : 0; let cum = 0;
+          return computed.map((x, i) => { const t = x.res.totals; const sched = x.stage === 'scheduled'; if (!sched) cum += t.total; const px = v => Math.round(v / max * H);
+            return { no: String(x.no).padStart(2, '0'), opacity: sched ? 0.7 : 1, total: sched ? 'planned' : f.fmt(t.total, 0), hReduces: sched ? 0 : px(t.reduces), hOutside: sched ? 0 : px(t.total - t.reduces - t.feeNet), hFee: sched ? 0 : px(t.feeNet), hEmpty: sched ? px(vals[i]) : 0, cum: sched ? f.fmtDate(f.serialToISO(x.k.model.setup.Call_Date)) : (commit ? `${(cum / commit * 100).toFixed(1)}% drawn` : '') }; }); })(),
+        drawSummary: latest ? `${((computed.filter(x => x.stage !== 'scheduled').reduce((s, x) => s + x.res.totals.total, 0)) / Math.max(1, latest.res.totals.Commitment) * 100).toFixed(1)}% of ${cur0(latest)} ${f.fmt(latest.res.totals.Commitment, 0)} drawn across ${computed.filter(x => x.stage !== 'scheduled').length} calls.` : '',
+        positionAsOf: pos ? pos.asOf : 'no register yet',
+        agg: { commitment: latest ? f.fmt(latest.res.totals.Commitment, 0) : '—', called: f.fmt(issued.reduce((s, x) => s + x.res.totals.total, 0), 0), issuedCount: issued.length, paidIn: pos ? f.fmt(pos.paid, 0) : '—', unfunded: pos ? f.fmt(pos.ucc, 0) : '—', investors: latest ? String(latest.res.rows.filter(r => r.isActive).length) : '—', nextDue: inProg ? f.fmtDate(f.serialToISO(inProg.k.model.setup.Payment_Due_Date)) : '—' },
+      };
+    }
+    // ---- one call selected
+    const call = this.call, model = call.model, res = f.compute(model), cur = model.setup.Reporting_Currency || 'USD';
+    const stage = this.stageOf(call, res);
+    const fails = res.checks.filter(c => c.level === 'fail').length, warns = res.checks.filter(c => c.level === 'warn').length, oks = res.checks.filter(c => c.level === 'ok').length;
+    const activeRows = res.rows.filter(r => r.isActive);
+    const wf = call.workflow || {};
+    const wfCount = { draft: 0, approved: 0, sent: 0 }; activeRows.forEach(r => wfCount[(wf[r.LP_ID] || {}).status || 'draft']++);
+    const detailOf = k => k === 'setup' ? (model.setup.Call_Date ? `${f.fmtDate(f.serialToISO(model.setup.Call_Date))}` : 'dates, fee defaults, rounding') : k === 'lps' ? `${model.lps.length} investors` : k === 'components' ? (model.components.length ? `${model.components.length} items · ${cur} ${f.fmt(model.components.reduce((s, c) => s + f.num(c.Total_Amount), 0), 0)}` : 'deals and expenses') : k === 'fee' ? (res.fee.grossTotal ? `${f.pct(res.fee.defRate)} p.a. · net ${cur} ${f.fmt(res.fee.grossTotal - res.fee.offsetTotal, 0)}` : 'rate, period, offsets') : `${model.transfers.length} row(s) · ${res.transfers.applied.length} applied`;
+    const anySrc = Object.values(call.sources).some(v => v !== 'empty');
+    const steps = [{ id: 'source', label: 'Source', detail: call.lastFile ? `from ${call.lastFile}` : anySrc ? 'entered manually' : 'upload or enter manually', done: anySrc }, ...TAB_KEYS.map(([k, , label]) => ({ id: k, label, detail: `${SRC[call.sources[k] || 'empty'][0]} · ${detailOf(k)}`, done: (call.sources[k] || 'empty') !== 'empty' }))]
+      .map((s, i) => ({ n: s.done ? '✓' : String(i + 1), label: s.label, detail: s.detail, cls: (step === s.id ? 'on ' : '') + (s.done ? 'done' : ''), onClick: e => { e.preventDefault(); this.setState({ step: s.id }); } }));
+    const prevCall = computed.filter(x => x.k.id !== call.id && x.k.model.lps.length && x.no < f.num(model.setup.Call_Number)).pop();
+    const outsideTotal = res.totals.total - res.totals.reduces;
+    const mixItems = model.components.filter(c => c.Component_ID).map((c, i) => ({ name: c.Component_Name || c.Component_ID, basis: c.Allocation_Basis || 'Commitment', inside: String(c.Reduces_Unfunded || 'Y').toUpperCase() === 'Y' ? 'Inside' : 'Outside', amt: res.totals.comps[i] || 0 }));
+    if (res.totals.feeNet) mixItems.push({ name: 'Management fee, net of offsets', basis: res.fee.basis, inside: res.fee.reduces ? 'Inside' : 'Outside', amt: res.totals.feeNet });
+    const noticeLpId = this.state.noticeLp && activeRows.some(r => r.LP_ID === this.state.noticeLp) ? this.state.noticeLp : (activeRows[0] || {}).LP_ID;
+    const noticeRows = this.state.showAll ? activeRows : activeRows.filter(r => r.LP_ID === noticeLpId);
+    const trStatus = t => res.transfers.applied.some(a => a.t.Transfer_ID === t.Transfer_ID) ? ['Applied', 'tag-accent'] : ['Not applied', 'tag-neutral'];
+    const TABS = [['summary', 'Summary'], ['output', 'Allocation'], ['checks', fails ? `Checks (${fails} failing)` : warns ? `Checks (${warns} warnings)` : 'Checks'], ['notices', `Notices (${wfCount.sent}/${activeRows.length} sent)`]];
+    return { ...common,
+      callNo: model.setup.Call_Number || '—', cur, callDateLabel: f.fmtDate(res.callDate), dueDateLabel: f.fmtDate(f.serialToISO(model.setup.Payment_Due_Date)), investorCount: activeRows.length,
+      stageLabel: STAGE[stage][0], stageTag: STAGE[stage][1],
+      goSetup: () => this.setState({ view: 'setup', step: anySrc ? 'setup' : 'source' }), goReview: this.review,
+      canDelete: stage !== 'issued', deleteCall: () => { if (!window.confirm(`Delete Capital Call No. ${model.setup.Call_Number}? This cannot be undone.`)) return; this.updClient(c => { c.calls = c.calls.filter(k => k.id !== call.id); }); this.setState({ view: 'home', callId: null }); },
+      setupTotalsLine: model.components.length ? `Currently ${cur} ${f.fmt(res.totals.total)} across ${activeRows.length} investors.` : '',
+      steps, stepSource: step === 'source', stepSetup: step === 'setup', stepLps: step === 'lps', stepComps: step === 'components', stepFee: step === 'fee', stepTransfers: step === 'transfers',
+      lastFileLine: call.lastFile ? ` · last loaded ${call.lastFile}` : '',
+      startManual: () => { this.updCall(k => { if (!k.model.lps.length) k.model.lps.push({ LP_ID: 'LP01', LP_Name: '', LP_Type: 'LP', Commitment: '', Opening_Paid_In: '', Opening_UCC: '', Opening_Invested_Capital: '', Mgmt_Fee_Rate_Override: '', Fee_Exempt: 'N', Status: 'Active', Side_Letter_Ref: '', Contact_Email: '', Notes: '' }); if (!k.model.components.length) k.model.components.push({ Component_ID: 'C1', Component_Name: '', Category: 'Deal', Total_Amount: '', Allocation_Basis: 'Commitment', Reduces_Unfunded: 'Y', Excused_LP_IDs: '', Notes: '' }); Object.keys(k.sources).forEach(s => { if (k.sources[s] === 'empty') k.sources[s] = 'manual'; }); }); this.setState({ step: 'setup' }); },
+      canCarry: !!prevCall, prevCallNo: prevCall ? prevCall.no : '', carryForward: this.carryForward,
+      loadTemplate: e => { e.preventDefault(); const no = model.setup.Call_Number; this.updCall((k, c) => { k.model = deep(def.DEFAULT_MODEL); k.model.setup.Fund_Name = c.name; k.model.setup.Call_Number = no; k.sources = this.allSources('template'); k.lastFile = ''; }); this.setState({ view: 'call', tab: 'summary' }); },
+      setupRows: this.kvRows(model.setup, 'setup', def.SETUP_FIELDS), feeRows: this.kvRows(model.fee, 'fee', def.FEE_FIELDS),
+      lpHeaders: def.LP_COLS.map(c => c.key), lpRows: this.rows('lps', def.LP_COLS),
+      addLp: () => this.upd(m => m.lps.push({ LP_ID: `LP${String(m.lps.length + 1).padStart(2, '0')}`, LP_Name: '', LP_Type: 'LP', Commitment: '', Opening_Paid_In: '', Opening_UCC: '', Opening_Invested_Capital: '', Mgmt_Fee_Rate_Override: '', Fee_Exempt: 'N', Status: 'Active', Side_Letter_Ref: '', Contact_Email: '', Notes: '' }), 'lps'),
+      compHeaders: def.COMP_COLS.map(c => c.key), compRows: this.rows('components', def.COMP_COLS),
+      addComp: () => this.upd(m => m.components.push({ Component_ID: `C${m.components.length + 1}`, Component_Name: '', Category: 'Deal', Total_Amount: '', Allocation_Basis: 'Commitment', Reduces_Unfunded: 'Y', Excused_LP_IDs: '', Notes: '' }), 'components'),
+      compTotal: f.fmt(model.components.reduce((s, c) => s + f.num(c.Total_Amount), 0)),
+      offsetHeaders: def.OFFSET_COLS.map(c => c.key), offsetRows: this.rows('offsets', def.OFFSET_COLS),
+      addOffset: () => this.upd(m => m.fee.offsets.push({ Offset_ID: `O${m.fee.offsets.length + 1}`, Description: '', Amount: '', Allocation_Method: 'Pro-rata to gross fee' }), 'fee'),
+      feeGrossTotal: f.fmt(res.fee.grossTotal), feeOffsetTotal: f.fmt(res.fee.offsetTotal), feeNetTotal: f.fmt(res.fee.grossTotal - res.fee.offsetTotal),
+      transferHeaders: def.TRANSFER_COLS.map(c => c.key), transferRows: this.rows('transfers', def.TRANSFER_COLS).map((r, i) => { const [status, tag] = trStatus(model.transfers[i]); return { ...r, status, tag }; }),
+      addTransfer: () => this.upd(m => m.transfers.push({ Transfer_ID: `T${m.transfers.length + 1}`, Effective_Date: m.setup.Call_Date, From_LP_ID: '', To_LP_ID: '', To_LP_Name_if_new: '', Transfer_Type: 'Partial', Transfer_Pct: '', Transfers_Commitment: 'Y', Transfers_Paid_In: 'Y', Transfers_UCC: 'Y', Notes: '' }), 'transfers'),
+      tabs: TABS.map(([id, label]) => ({ label, cls: tab === id ? 'on' : '', onClick: e => { e.preventDefault(); this.setState({ tab: id }); } })),
+      tabSummary: tab === 'summary', tabOutput: tab === 'output', tabChecks: tab === 'checks', tabNotices: tab === 'notices',
+      sumTotal: f.fmt(res.totals.total), sumReduces: f.fmt(res.totals.reduces), sumOutside: f.fmt(outsideTotal), sumFeeNet: f.fmt(res.totals.feeNet), sumCommitment: f.fmt(res.totals.Commitment), sumOpenPaid: f.fmt(res.totals.openPaid, 0), sumClosingPaid: f.fmt(res.totals.closingPaid, 0), sumOpenUCC: f.fmt(res.totals.openUCC, 0), sumClosingUCC: f.fmt(res.totals.closingUCC),
+      okCount: oks, warnCount: warns, failCount: fails, failTag: fails ? 'tag-accent-2' : 'tag-neutral', hasFails: fails > 0,
+      readiness: fails ? `${fails} check(s) failing — resolve before issuing notices.` : stage === 'issued' ? `All ${activeRows.length} notices sent.` : `${wfCount.sent} of ${activeRows.length} notices sent, ${wfCount.approved} approved, ${wfCount.draft} in draft.`,
+      goChecks: e => { e.preventDefault(); this.setState({ tab: 'checks' }); }, goNoticesLink: e => { e.preventDefault(); this.setState({ tab: 'notices' }); },
+      mix: mixItems.map(m => ({ ...m, pct: res.totals.total ? `${(m.amt / res.totals.total * 100).toFixed(1)}%` : '—', amt: f.fmt(m.amt) })),
+      dashRows: activeRows.map(r => { const s = (wf[r.LP_ID] || {}).status || 'draft'; const maxCall = Math.max(1, ...activeRows.map(x => x.total)); return { barW: `${Math.max(2, r.total / maxCall * 100)}%`, barColor: s === 'sent' ? 'var(--chart-3)' : s === 'approved' ? 'var(--chart-2)' : 'var(--chart-1)', pct: res.totals.total ? `${(r.total / res.totals.total * 100).toFixed(1)}%` : '', id: r.LP_ID, name: r.LP_Name || r.LP_ID, commitment: f.fmt(f.num(r.Commitment)), total: f.fmt(r.total), reduces: f.fmt(r.reduces), outside: f.fmt(r.outside), feeNet: f.fmt(r.feeNet), closingUCC: f.fmt(r.closingUCC), wfStatus: WF[s][0], wfTag: WF[s][1], onClick: () => this.setState({ tab: 'notices', noticeLp: r.LP_ID, showAll: false }) }; }),
+      outCompHeaders: model.components.filter(c => c.Component_ID).map(c => c.Component_Name || c.Component_ID),
+      outRows: res.rows.map(r => ({ id: r.LP_ID, name: r.LP_Name, opacity: r.isActive ? 1 : 0.45, commitment: f.fmt(f.num(r.Commitment)), openUCC: f.fmt(r.openUCC), openPaid: f.fmt(r.openPaid), comps: r.comps.map(c => c.excused ? 'excused' : f.fmt(c.amt)), feeRate: r.isActive ? f.pct(r.feeRate) : '', feeGross: f.fmt(r.feeGross), feeOffset: f.fmt(r.feeOffset), feeNet: f.fmt(r.feeNet), total: f.fmt(r.total), reduces: f.fmt(r.reduces), closingUCC: f.fmt(r.closingUCC), closingPaid: f.fmt(r.closingPaid) })),
+      tot: { commitment: f.fmt(res.totals.Commitment), openUCC: f.fmt(res.totals.openUCC), openPaid: f.fmt(res.totals.openPaid), comps: res.totals.comps.map(x => f.fmt(x)), feeGross: f.fmt(res.totals.feeGross), feeOffset: f.fmt(res.totals.feeOffset), feeNet: f.fmt(res.totals.feeNet), total: f.fmt(res.totals.total), reduces: f.fmt(res.totals.reduces), closingUCC: f.fmt(res.totals.closingUCC), closingPaid: f.fmt(res.totals.closingPaid) },
+      exportXlsx: () => this.exportXlsx(res),
+      goldenSource: model.goldenSource || 'no fixture in this workbook',
+      checkRows: res.checks.map(c => ({ tag: tagFor(c.level), label: c.level === 'ok' ? 'OK' : c.level === 'fail' ? 'FAIL' : c.level === 'warn' ? 'WARN' : 'INFO', text: c.text })),
+      hasGoldenDiffs: res.goldenDiffs.length > 0, goldenDiffs: res.goldenDiffs,
+      noticeLps: activeRows.map(r => { const s = (wf[r.LP_ID] || {}).status || 'draft'; return { name: r.LP_Name || r.LP_ID, status: WF[s][0], tag: WF[s][1], bg: r.LP_ID === noticeLpId && !this.state.showAll ? 'var(--accent)' : 'transparent', onClick: e => { e.preventDefault(); this.setState({ noticeLp: r.LP_ID, showAll: false }); } }; }),
+      notices: noticeRows.map(r => { const n = f.buildNotice(model, res, r); n.account = n.account.map(a => ({ ...a, weight: a.strong ? 600 : 400 }));
+        const w = wf[r.LP_ID] || {}; const s = w.status || 'draft'; const sentAt = w.sentAt ? new Date(w.sentAt).toLocaleString() : '';
+        Object.assign(n, { wfStatus: WF[s][0], wfTag: WF[s][1], wfDetail: s === 'sent' ? `sent ${sentAt}${r.Contact_Email ? ' to ' + r.Contact_Email : ''}` : s === 'approved' ? `approved ${w.approvedAt ? new Date(w.approvedAt).toLocaleString() : ''} — ready to send` : (fails ? 'blocked by failing checks' : 'review, then approve'),
+          canApprove: s === 'draft', canSend: s === 'approved', isSent: s === 'sent', sentAt, showDraft: s === 'draft' && (this.props.draftWatermark ?? true), recipient: r.Contact_Email || r.LP_Name, noEmail: !r.Contact_Email && s !== 'draft',
+          approve: () => this.setWf([r.LP_ID], { status: 'approved', approvedAt: new Date().toISOString() }), unapprove: () => this.setWf([r.LP_ID], { status: 'draft' }), send: () => this.sendNotices(model, [r]), resend: () => this.sendNotices(model, [r]), unsend: () => this.setWf([r.LP_ID], { status: 'approved', sentAt: null }), goRegister: e => { e.preventDefault(); this.setState({ view: 'setup', step: 'lps' }); } });
+        return n; }),
+      wfSummary: `${wfCount.sent} sent · ${wfCount.approved} approved · ${wfCount.draft} draft`, noDrafts: wfCount.draft === 0 || fails > 0, noApproved: wfCount.approved === 0,
+      approveAll: () => this.setWf(activeRows.filter(r => (wf[r.LP_ID] || {}).status !== 'sent').map(r => r.LP_ID), { status: 'approved', approvedAt: new Date().toISOString() }),
+      sendAll: () => this.sendNotices(model, activeRows.filter(r => (wf[r.LP_ID] || {}).status === 'approved')),
+      toggleAll: e => { e.preventDefault(); this.setState(s => ({ showAll: !s.showAll })); }, toggleAllLabel: this.state.showAll ? 'Show one investor' : `Show all ${activeRows.length} notices`,
+      printCurrent: () => window.print(),
+    };
+  }
+}
+</script>
+</body>
+</html>

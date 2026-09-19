@@ -9,6 +9,8 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    // .tsx too: the notices toolbar decides which action to offer during
+    // render, which is worth a test and cannot live in a .ts file.
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
 });

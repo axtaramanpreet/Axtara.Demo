@@ -55,6 +55,7 @@ const SETUP: Row[] = [
   ['One row per field. Enter values in the Value column.', '', ''],
   ['Field', 'Value', 'Notes / allowed values'],
   ['Fund_Name', 'Meridian Growth Partners III, L.P.', 'Free text; shown on every notice.'],
+  ['GP_Name', 'Meridian Growth GP III LLC', 'The general partner, named in the notice letter.'],
   ['Reporting_Currency', 'USD', 'ISO code.'],
   ['Call_Number', 4, 'Integer. Increment each call.'],
   ['Call_Date', '2026-11-16', 'Effective date of the call (YYYY-MM-DD).'],

@@ -6,9 +6,10 @@ import type { NoticeData } from '@/engine';
  * Laid out as a document rather than a screen: fixed width, generous margins,
  * and `[data-notice]` so the print stylesheet gives each one its own page.
  *
- * It deliberately carries no payment instructions. That is how the design was
- * handed over, and it means an investor cannot act on this notice as it stands
- * — worth settling before any of these reach a real limited partner.
+ * The letter refers to wiring instructions "provided with this notice", and
+ * there are none. The wording was supplied that way and is being used as given,
+ * but until the bank details exist an investor is told to follow instructions
+ * that are not there — which is worse than the notice saying nothing at all.
  */
 export function NoticeSheet({
   notice,
@@ -85,18 +86,17 @@ export function NoticeSheet({
         <Meta label="Currency" value={notice.cur} />
       </div>
 
-      <p style={{ marginTop: 28 }}>
-        <strong>Re:</strong> Capital Call No. {String(notice.callNo)} — {notice.fund}
+      <p style={{ marginTop: 28, fontWeight: 600 }}>
+        Capital Call #{String(notice.callNo)} – {notice.fund}
       </p>
 
-      <p>Dear Limited Partner,</p>
+      <p>{notice.salutation}</p>
 
-      <p>
-        In accordance with the terms of the Limited Partnership Agreement, the General Partner
-        hereby calls capital from each Limited Partner in proportion to its respective interest.
-        Your share of this capital call is set out below and is payable in cleared funds on or
-        before {notice.dueDate}.
-      </p>
+      {/* The wording comes from the engine so the PDF cannot say something
+          different from the page. */}
+      {notice.intro.map((paragraph, i) => (
+        <p key={`intro-${i}`}>{paragraph}</p>
+      ))}
 
       <div
         style={{
@@ -180,9 +180,16 @@ export function NoticeSheet({
         ))}
       </ol>
 
+      {notice.closing.map((paragraph, i) => (
+        <p key={`closing-${i}`} style={i === 0 ? { marginTop: 26 } : undefined}>
+          {paragraph}
+        </p>
+      ))}
+
       <div style={{ marginTop: 44 }}>
         <p style={{ margin: 0 }}>
-          For and on behalf of the General Partner of {notice.fund}
+          For and on behalf of {notice.gp}
+          {notice.gp === 'the General Partner' ? ` of ${notice.fund}` : `, General Partner of ${notice.fund}`}
         </p>
         <div
           style={{ width: 240, borderTop: '1px solid var(--foreground)', marginTop: 46, paddingTop: 6 }}

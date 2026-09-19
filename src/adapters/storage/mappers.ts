@@ -115,6 +115,7 @@ export function fromIdList(v: unknown): string[] {
 export function toFundSetup(call: CallRow): FundSetup {
   return {
     Fund_Name: call.fund_name,
+    GP_Name: call.gp_name ?? '',
     Reporting_Currency: call.reporting_currency ?? '',
     Call_Number: call.call_no,
     Call_Date: call.call_date ?? '',
@@ -239,6 +240,7 @@ export function fromCallModel(model: CallModel) {
   const s = model.setup;
   return {
     fund_name: String(s.Fund_Name ?? ''),
+    gp_name: emptyToNull(s.GP_Name),
     reporting_currency: currencyOrNull(s.Reporting_Currency),
     call_date: toStoredDate(s.Call_Date),
     payment_due_date: toStoredDate(s.Payment_Due_Date),

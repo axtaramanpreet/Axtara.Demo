@@ -23,6 +23,7 @@ export function emptyCall(fundName: string): CallModel {
   return {
     setup: {
       Fund_Name: fundName,
+      GP_Name: '',
       Reporting_Currency: '',
       Call_Number: '',
       Call_Date: '',

@@ -59,6 +59,7 @@ const SETUP: Row[] = [
   ['One row per field. Enter values in the Value column.', '', ''],
   ['Field', 'Value', 'Notes / allowed values'],
   ['Fund_Name', 'Thornfield Continuation Fund II, L.P.', 'Free text; shown on every notice.'],
+  ['GP_Name', 'Thornfield GP II LLC', 'The general partner, named in the notice letter.'],
   ['Reporting_Currency', 'USD', 'ISO code.'],
   ['Call_Number', 7, 'Integer. Increment each call.'],
   ['Call_Date', '2026-09-30', 'Effective date of the call (YYYY-MM-DD).'],

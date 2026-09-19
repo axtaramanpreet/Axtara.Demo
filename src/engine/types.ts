@@ -31,6 +31,12 @@ export type FeeBasis = 'Commitment' | 'Invested_Capital' | 'NAV' | string;
 /** Fund_Setup tab: fund-level constants and the rounding policy. */
 export interface FundSetup {
   Fund_Name: string;
+  /**
+   * The general partner's legal name, as it appears on the notice: "on behalf
+   * of X, the General Partner of the Fund". Blank falls back to "the General
+   * Partner", which reads correctly but names nobody.
+   */
+  GP_Name?: string;
   Reporting_Currency: string;
   Call_Number: Cell;
   /** ISO date or an Excel serial number. */

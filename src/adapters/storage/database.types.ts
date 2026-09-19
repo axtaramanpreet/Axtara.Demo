@@ -449,6 +449,7 @@ export type Database = {
           fee_period_fraction: number | null
           fee_reduces_unfunded: boolean
           fund_name: string
+          gp_name: string | null
           id: string
           locked_at: string | null
           mgmt_fee_period_fraction: number | null
@@ -481,6 +482,7 @@ export type Database = {
           fee_period_fraction?: number | null
           fee_reduces_unfunded?: boolean
           fund_name: string
+          gp_name?: string | null
           id?: string
           locked_at?: string | null
           mgmt_fee_period_fraction?: number | null
@@ -513,6 +515,7 @@ export type Database = {
           fee_period_fraction?: number | null
           fee_reduces_unfunded?: boolean
           fund_name?: string
+          gp_name?: string | null
           id?: string
           locked_at?: string | null
           mgmt_fee_period_fraction?: number | null

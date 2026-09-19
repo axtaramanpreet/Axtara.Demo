@@ -38,6 +38,14 @@ export interface NoticeData {
   name: string;
   cur: string;
   fund: string;
+  /** The general partner as the letter names it. "the General Partner" when unset. */
+  gp: string;
+  /** "Dear Alpha Pension Trust," */
+  salutation: string;
+  /** Paragraphs before the figures. */
+  intro: string[];
+  /** Paragraphs after the figures, including how and by when to pay. */
+  closing: string[];
   callNo: string | number;
   callDate: string;
   dueDate: string;
@@ -183,14 +191,42 @@ export function buildNotice(
 
   notes.push(`Amounts are rounded to ${result.d} decimal places.`);
 
+  const fund = setup.Fund_Name;
+  const callNo = setup.Call_Number as string | number;
+  const dueDate = fmtDate(serialToISO(setup.Payment_Due_Date));
+
+  // Named when the fund has told us who they are; otherwise the role, which is
+  // accurate and reads properly, rather than an empty gap in a sentence.
+  const gpName = String(setup.GP_Name ?? '').trim();
+  const gp = gpName || 'the General Partner';
+
   return {
     id: row.LP_ID,
     name: row.LP_Name,
     cur,
-    fund: setup.Fund_Name,
-    callNo: setup.Call_Number as string | number,
+    fund,
+    gp,
+    salutation: `Dear ${row.LP_Name},`,
+    intro: [
+      gpName
+        ? `We are writing on behalf of ${gpName}, the General Partner of ${fund} (the “Fund”), ` +
+          `to issue Capital Call #${callNo} pursuant to the terms of the Limited Partnership ` +
+          `Agreement (the “LPA”).`
+        : `We are writing on behalf of the General Partner of ${fund} (the “Fund”), to issue ` +
+          `Capital Call #${callNo} pursuant to the terms of the Limited Partnership Agreement ` +
+          `(the “LPA”).`,
+    ],
+    closing: [
+      'Please remit the above amount to the Fund’s designated bank account in accordance with ' +
+        'the wiring instructions provided with this notice.',
+      `Kindly ensure that the funds are received by ${dueDate}. If you have any questions ` +
+        'regarding this capital call or require any additional information, please do not ' +
+        'hesitate to contact us.',
+      'Thank you for your continued partnership and support.',
+    ],
+    callNo,
     callDate: fmtDate(serialToISO(setup.Call_Date)),
-    dueDate: fmtDate(serialToISO(setup.Payment_Due_Date)),
+    dueDate,
     total: fmt(row.total),
     inside,
     outside,

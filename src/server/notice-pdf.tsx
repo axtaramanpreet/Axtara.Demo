@@ -178,19 +178,19 @@ export function NoticeDocument({
           <Meta label="Currency" value={notice.cur} />
         </View>
 
-        <Text style={styles.paragraph}>
-          <Text style={styles.bold}>Re: </Text>
-          {`Capital Call No. ${callNo} — ${notice.fund}`}
+        <Text style={[styles.paragraph, styles.bold]}>
+          {`Capital Call #${callNo} \u2013 ${notice.fund}`}
         </Text>
 
-        <Text style={styles.paragraph}>Dear Limited Partner,</Text>
+        <Text style={styles.paragraph}>{notice.salutation}</Text>
 
-        <Text style={styles.paragraph}>
-          {'In accordance with the terms of the Limited Partnership Agreement, the General Partner ' +
-            'hereby calls capital from each Limited Partner in proportion to its respective interest. ' +
-            'Your share of this capital call is set out below and is payable in cleared funds on or ' +
-            `before ${notice.dueDate}.`}
-        </Text>
+        {/* The wording comes from the engine, so this cannot say something
+            different from the page it was reviewed on. */}
+        {notice.intro.map((paragraph, i) => (
+          <Text key={`intro-${i}`} style={styles.paragraph}>
+            {paragraph}
+          </Text>
+        ))}
 
         <View style={styles.totalBand}>
           <Text style={styles.totalLabel}>TOTAL AMOUNT DUE</Text>
@@ -225,8 +225,18 @@ export function NoticeDocument({
           ))}
         </View>
 
+        {notice.closing.map((paragraph, i) => (
+          <Text key={`closing-${i}`} style={styles.paragraph}>
+            {paragraph}
+          </Text>
+        ))}
+
         <View style={styles.signature} wrap={false}>
-          <Text>{`For and on behalf of the General Partner of ${notice.fund}`}</Text>
+          <Text>
+            {notice.gp === 'the General Partner'
+              ? `For and on behalf of the General Partner of ${notice.fund}`
+              : `For and on behalf of ${notice.gp}, General Partner of ${notice.fund}`}
+          </Text>
           <View style={styles.signatureLine}>
             <Text style={styles.signatureCaption}>Authorized Signatory</Text>
           </View>

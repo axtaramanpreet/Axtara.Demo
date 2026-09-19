@@ -78,6 +78,7 @@ export const OFFSET_COLUMNS: ColumnDef[] = [
 
 export const SETUP_FIELDS: FieldDef[] = [
   { key: 'Fund_Name', note: 'Shown on every notice.' },
+  { key: 'GP_Name', note: 'The general partner, named in the notice letter.' },
   { key: 'Reporting_Currency', note: 'ISO code.' },
   { key: 'Call_Number', note: 'Increment each call.', num: true },
   { key: 'Call_Date', note: 'Effective date of the call (YYYY-MM-DD).', type: 'date' },

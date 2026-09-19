@@ -151,6 +151,19 @@ describe('a notice as a PDF', () => {
     expect(firstOutOfOrder(text, sequence)).toBeNull();
   });
 
+  it('carries the letter the engine composed, not a copy of its own', async () => {
+    // The wording lives in buildNotice so the page and the PDF cannot disagree.
+    // If this file ever grows its own paragraph, this fails.
+    const text = textOf(await renderNoticePdf(notice, 'draft'));
+
+    expect(firstOutOfOrder(text, [
+      `Capital Call #${notice.callNo}`,
+      notice.salutation,
+      ...notice.intro,
+      ...notice.closing,
+    ])).toBeNull();
+  });
+
   it('names the investor, the fund and both dates', async () => {
     const text = textOf(await renderNoticePdf(notice, 'draft'));
     for (const value of [notice.name, notice.fund, notice.id, notice.callDate, notice.dueDate]) {

@@ -25,12 +25,30 @@ import {
 import { buildNotice, compute } from '@/engine';
 import { SCENARIOS } from '@/engine/fixtures/scenarios';
 import type { CallModel } from '@/engine/types';
+import type { NoticeData } from '@/engine';
 
 /**
  * Scenarios where this engine deliberately differs from the original, with the
  * divergence asserted separately below rather than waved through here.
  */
 const DELIBERATE_DIVERGENCE = new Set(['wholeDollarRounding']);
+
+/**
+ * A notice with the letter wording removed.
+ *
+ * The prose is the fund's own template and is not something the handoff engine
+ * produces, so comparing it would only ever report the difference that was
+ * asked for. Everything an investor acts on — the amounts, the account summary,
+ * the footnotes — still has to match to the character.
+ */
+function figuresOf(notice: NoticeData | Record<string, unknown>) {
+  const { gp, salutation, intro, closing, ...rest } = notice as Record<string, unknown>;
+  void gp;
+  void salutation;
+  void intro;
+  void closing;
+  return rest;
+}
 
 describe('ported engine matches the original handoff implementation', () => {
   for (const [name, model] of Object.entries(SCENARIOS)) {
@@ -66,11 +84,14 @@ describe('ported engine matches the original handoff implementation', () => {
         expect(ported.fee).toEqual(original.fee);
       });
 
-      it('produces identical notices for every investor', () => {
+      it('produces identical notice figures for every investor', () => {
+        // The letter wording diverges on purpose — see below — so this compares
+        // everything the notice *states*: the amounts, the account summary and
+        // the generated footnotes.
         ported.rows.forEach((row, i) => {
-          expect(buildNotice(model, ported, row)).toEqual(
-            buildNoticeOriginal(model, original, original.rows[i]),
-          );
+          const mine = buildNotice(model, ported, row);
+          const theirs = buildNoticeOriginal(model, original, original.rows[i]);
+          expect(figuresOf(mine)).toEqual(figuresOf(theirs));
         });
       });
     });
@@ -119,5 +140,65 @@ describe('deliberate divergence: a configured zero means zero', () => {
     blank.setup.Rounding_Decimals = '';
     expect(compute(blank).d).toBe(2);
     expect(computeOriginal(structuredClone(blank)).d).toBe(2);
+  });
+});
+
+/**
+ * The second deliberate departure from the handoff engine.
+ *
+ * Its notice carried a generic paragraph of its own composition. The wording is
+ * the fund's to choose, and theirs names the general partner, cites the LPA and
+ * says how and by when to pay — so the engine now carries their template and
+ * both the screen and the PDF render it from one place.
+ *
+ * Asserted rather than excluded, so the difference stays a decision on the
+ * record instead of drift nobody notices.
+ */
+describe('deliberate divergence: the fund supplies the letter', () => {
+  const model = structuredClone(SCENARIOS.base) as CallModel;
+  model.setup.GP_Name = 'Meridian Growth GP III LLC';
+
+  const result = compute(model);
+  const notice = buildNotice(model, result, result.rows[0]);
+
+  it('names the general partner where the fund has given one', () => {
+    expect(notice.gp).toBe('Meridian Growth GP III LLC');
+    expect(notice.intro[0]).toContain('on behalf of Meridian Growth GP III LLC');
+    expect(notice.intro[0]).toContain('Limited Partnership Agreement');
+  });
+
+  it('falls back to the role rather than leaving a gap', () => {
+    const anonymous = structuredClone(SCENARIOS.base) as CallModel;
+    anonymous.setup.GP_Name = '';
+    const built = compute(anonymous);
+    const plain = buildNotice(anonymous, built, built.rows[0]);
+
+    expect(plain.gp).toBe('the General Partner');
+    expect(plain.intro[0]).toContain('on behalf of the General Partner');
+    expect(plain.intro[0]).not.toContain('undefined');
+  });
+
+  it('addresses the investor by name', () => {
+    expect(notice.salutation).toBe(`Dear ${result.rows[0].LP_Name},`);
+  });
+
+  it('says how and by when to pay', () => {
+    const text = notice.closing.join(' ');
+    expect(text).toContain('wiring instructions');
+    expect(text).toContain(notice.dueDate);
+  });
+
+  it('is wording the handoff engine never produced', () => {
+    const theirResult = computeOriginal(structuredClone(model));
+    const theirs = buildNoticeOriginal(model, theirResult, theirResult.rows[0]) as Record<
+      string,
+      unknown
+    >;
+
+    // The handoff notice carries no letter at all; that absence is the
+    // divergence, and it is why figuresOf() drops these before comparing.
+    expect(theirs.intro).toBeUndefined();
+    expect(theirs.closing).toBeUndefined();
+    expect(theirs.salutation).toBeUndefined();
   });
 });

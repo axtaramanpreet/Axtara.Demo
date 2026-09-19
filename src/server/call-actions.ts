@@ -26,6 +26,7 @@ import { getServerSupabase } from '@/lib/supabase/server';
 import type { Json } from '@/adapters/storage/database.types';
 import type { ComputeResult } from '@/engine';
 import { deliver } from './email';
+import { emailEnv } from '@/lib/env';
 import { noticeEmail } from './notice-email';
 import { renderNoticePdf } from './notice-pdf';
 
@@ -244,6 +245,10 @@ async function deliverNotices(
   const errors: string[] = [];
   const attemptedAt = new Date().toISOString();
 
+  // Every send is going to one test address, so what the register holds — or
+  // does not hold — cannot reach an investor.
+  const redirected = Boolean(emailEnv()?.overrideTo);
+
   for (const lpId of targets) {
     const row = result.rows.find((r) => r.LP_ID === lpId)!;
     const address = String(row.Contact_Email ?? '').trim();
@@ -255,7 +260,10 @@ async function deliverNotices(
       email_delivered_to: string | null;
     };
 
-    if (!address) {
+    // A missing address only stops a send that would have gone to the investor.
+    // While the override is in force nothing goes to them anyway, so refusing
+    // here would block the very testing the override exists to make safe.
+    if (!address && !redirected) {
       // Not a provider failure, and worth saying so precisely: nobody put an
       // address in the register.
       outcome = {
@@ -267,6 +275,8 @@ async function deliverNotices(
     } else {
       const notice = buildNotice(call.model, result, row);
       const pdf = await renderNoticePdf(notice, 'sent', attemptedAt);
+      // `deliver` replaces this with the override when one is set; passing the
+      // empty string is only reached in that case.
       const sent = await deliver(noticeEmail(notice, pdf, address));
 
       outcome = sent.ok

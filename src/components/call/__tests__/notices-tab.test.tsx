@@ -333,3 +333,44 @@ describe('what the notice says about its own delivery', () => {
     expect(model.lps[0].Contact_Email).toBe('');
   });
 });
+
+describe('the header sits in the document\u2019s column', () => {
+  /** The inline style of the first element matching `open`. */
+  function styleOf(html: string, open: RegExp) {
+    const style = open.exec(html)?.[1];
+    expect(style, `no element matching ${open}`).toBeDefined();
+    return style!;
+  }
+
+  function prop(style: string, name: string) {
+    return new RegExp(`(?:^|;)${name}:([^;]+)`).exec(style)?.[1] ?? null;
+  }
+
+  /** The left/right value out of a one- or two-part padding shorthand. */
+  function sideways(padding: string | null) {
+    const parts = String(padding).trim().split(/\s+/);
+    return parts.length === 1 ? parts[0] : parts[1];
+  }
+
+  const html = notices(callWith('sent'));
+  const strip = styleOf(html, /<div[^>]*data-noprint="1"[^>]*style="([^"]*)"/);
+  const sheet = styleOf(html, /<article[^>]*style="([^"]*)"/);
+
+  it('is the same width as the notice', () => {
+    // Full width, it ran out past the page on both sides and the download
+    // floated in space beside it.
+    expect(prop(strip, 'max-width')).toBe(prop(sheet, 'max-width'));
+    expect(prop(strip, 'max-width')).toBeTruthy();
+  });
+
+  it('starts and ends on the notice\u2019s own margins', () => {
+    // So the investor's name begins where the letter begins, and the buttons
+    // finish where it finishes.
+    expect(sideways(prop(strip, 'padding'))).toBe(sideways(prop(sheet, 'padding')));
+  });
+
+  it('is centred the same way', () => {
+    expect(prop(strip, 'margin')).toContain('auto');
+    expect(prop(sheet, 'margin')).toContain('auto');
+  });
+});

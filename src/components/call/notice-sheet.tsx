@@ -12,6 +12,13 @@ import type { NoticeData } from '@/engine';
  * an investor still cannot act on it alone. That gap is the thing to close
  * before any of these reach a real limited partner.
  */
+/**
+ * The document's own column, exported so anything shown above or below a notice
+ * can line up with it rather than guessing.
+ */
+export const NOTICE_WIDTH = 820;
+export const NOTICE_MARGIN = 64;
+
 export function NoticeSheet({
   notice,
   status,
@@ -31,8 +38,8 @@ export function NoticeSheet({
       data-notice="1"
       className="card"
       style={{
-        maxWidth: 820,
-        padding: '56px 64px',
+        maxWidth: NOTICE_WIDTH,
+        padding: `56px ${NOTICE_MARGIN}px`,
         fontSize: 14,
         lineHeight: 1.5,
         margin: '0 auto',

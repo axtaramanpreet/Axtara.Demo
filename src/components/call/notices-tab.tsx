@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Menu, MenuItem } from '@/components/ui/menu';
 import { Tag } from '@/components/ui/tag';
 import { NOTICE_DISPLAY, noticeFor, noticeStatusFor } from './notice-status';
-import { NoticeSheet } from './notice-sheet';
+import { NOTICE_MARGIN, NOTICE_WIDTH, NoticeSheet } from './notice-sheet';
 
 /**
  * Notices: review, approve, send.
@@ -436,12 +436,18 @@ export function NoticesTab({
               <div key={row.LP_ID}>
                 <div
                   data-noprint="1"
+                  // The document's own column, so the investor's name starts
+                  // where the letter starts and the buttons finish where it
+                  // finishes. Full width before, this ran out past the page on
+                  // both sides and read as belonging to nothing.
                   style={{
+                    maxWidth: NOTICE_WIDTH,
+                    margin: '0 auto 10px',
+                    padding: `0 ${NOTICE_MARGIN}px`,
                     display: 'flex',
                     alignItems: 'center',
                     gap: 12,
                     flexWrap: 'wrap',
-                    marginBottom: 10,
                     fontSize: 13,
                   }}
                 >
@@ -463,15 +469,13 @@ export function NoticesTab({
                       list, beside the status they change. Sending stays here,
                       because it is irreversible and belongs next to the figures
                       a person is meant to have read before pressing it — and it
-                      keeps its word for the same reason. The download is a bare
-                      icon: it changes nothing. */}
+                      keeps its word for the same reason. */}
                   <span
                     style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, alignItems: 'center' }}
                   >
                     <Button
                       iconOnly
                       small
-                      variant="ghost"
                       aria-label={`Download the notice for ${row.LP_Name}`}
                       title="Download this notice as a PDF"
                       loading={working(`download:${row.LP_ID}`)}
@@ -504,7 +508,13 @@ export function NoticesTab({
                   <p
                     data-noprint="1"
                     role="alert"
-                    style={{ color: 'var(--destructive)', fontSize: 12, marginTop: 0 }}
+                    style={{
+                      maxWidth: NOTICE_WIDTH,
+                      margin: '0 auto 10px',
+                      padding: `0 ${NOTICE_MARGIN}px`,
+                      color: 'var(--destructive)',
+                      fontSize: 12,
+                    }}
                   >
                     Email not delivered — {record.deliveryError}. The notice itself is issued and
                     its figures are frozen; sending the email again does not reissue it.

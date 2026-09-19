@@ -12,6 +12,15 @@ import { NOTICE_DISPLAY, noticeFor, noticeStatusFor } from './notice-status';
 import { NOTICE_MARGIN, NOTICE_WIDTH, NoticeSheet } from './notice-sheet';
 
 /**
+ * Wide enough for "Approved", the longest of the three.
+ *
+ * The tags used to sit hard against the right of each tile, so a long label
+ * pushed its dot left and the column zig-zagged down the list. A fixed cell
+ * starts every one of them at the same place.
+ */
+export const STATUS_COLUMN = 76;
+
+/**
  * Notices: review, approve, send.
  *
  * The three states are kept deliberately distinct. A draft is being checked; an
@@ -262,6 +271,22 @@ export function NoticesTab({
             )}
           </Menu>
 
+          {/* The selected notice on its own, beside the actions for all of
+              them. It used to hover above the page, the only control there and
+              belonging to nothing. In "show all" there is no one notice it
+              could mean, so only the menu's zip is offered. */}
+          {!showAll && selected && (
+            <Button
+              iconOnly
+              aria-label={`Download the notice for ${selected.LP_Name}`}
+              title={`Download the notice for ${selected.LP_Name} as a PDF`}
+              loading={working(`download:${selected.LP_ID}`)}
+              onClick={() => download(selected.LP_ID)}
+            >
+              {icon(`download:${selected.LP_ID}`, <FileDown size={16} aria-hidden />)}
+            </Button>
+          )}
+
           {/* One bold button, and it is whatever the call actually needs next.
               Sending is irreversible; it should never sit beside Print looking
               equally harmless. */}
@@ -345,7 +370,6 @@ export function NoticesTab({
                     minWidth: 0,
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
                     gap: 8,
                     padding: '8px 4px 8px 10px',
                     borderRadius: 6,
@@ -359,15 +383,30 @@ export function NoticesTab({
                   }}
                 >
                   <span
-                    style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
                   >
                     {row.LP_Name}
                   </span>
-                  {switchingTo === row.LP_ID ? (
-                    <span className="spinner text-muted" aria-label="Loading" />
-                  ) : (
-                    <Tag tone={NOTICE_DISPLAY[status].tone}>{NOTICE_DISPLAY[status].label}</Tag>
-                  )}
+                  <span
+                    style={{
+                      flex: 'none',
+                      width: STATUS_COLUMN,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {switchingTo === row.LP_ID ? (
+                      <span className="spinner text-muted" aria-label="Loading" />
+                    ) : (
+                      <Tag tone={NOTICE_DISPLAY[status].tone}>{NOTICE_DISPLAY[status].label}</Tag>
+                    )}
+                  </span>
                 </button>
 
                 {/* Both icons are on every row, enabled only where they mean
@@ -464,27 +503,14 @@ export function NoticesTab({
                       `issued${record?.sentAt ? ` ${new Date(record.sentAt).toLocaleString('en-GB')}` : ''} — cannot be changed`}
                   </span>
 
-                  {/* What is left to do with this one notice.
-                      Approving and undoing live on the investor's tile in the
-                      list, beside the status they change. Sending stays here,
-                      because it is irreversible and belongs next to the figures
-                      a person is meant to have read before pressing it — and it
-                      keeps its word for the same reason. */}
-                  <span
-                    style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, alignItems: 'center' }}
-                  >
-                    <Button
-                      iconOnly
-                      small
-                      aria-label={`Download the notice for ${row.LP_Name}`}
-                      title="Download this notice as a PDF"
-                      loading={working(`download:${row.LP_ID}`)}
-                      onClick={() => download(row.LP_ID)}
-                    >
-                      {icon(`download:${row.LP_ID}`, <FileDown size={15} aria-hidden />)}
-                    </Button>
-
-                    {status === 'approved' && (
+                  {/* The only action left on the page itself.
+                      Approving and undoing belong to the investor's tile,
+                      beside the status they change; downloading belongs with
+                      the other actions in the toolbar. Sending stays here
+                      because it is irreversible, and it should be pressed next
+                      to the figures a person is meant to have read first. */}
+                  {status === 'approved' && (
+                    <span style={{ marginLeft: 'auto', display: 'inline-flex' }}>
                       <Button
                         small
                         variant="primary"
@@ -500,8 +526,8 @@ export function NoticesTab({
                         {icon(`send:${row.LP_ID}`, <Send size={14} aria-hidden />)}
                         Send
                       </Button>
-                    )}
-                  </span>
+                    </span>
+                  )}
                 </div>
 
                 {record?.delivery === 'failed' && (

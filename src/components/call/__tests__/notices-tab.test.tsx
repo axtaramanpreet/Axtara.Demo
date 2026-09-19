@@ -20,7 +20,7 @@ import { compute } from '@/engine';
 import { ILLUSTRATIVE_FUND } from '@/engine/fixtures/illustrative-fund';
 import type { CallDetail, NoticeState, NoticeStatus } from '@/adapters/storage/types';
 import { Button } from '@/components/ui/button';
-import { NoticesTab } from '../notices-tab';
+import { NoticesTab, STATUS_COLUMN } from '../notices-tab';
 
 const result = compute(ILLUSTRATIVE_FUND);
 const active = result.rows.filter((r) => r.isActive);
@@ -151,37 +151,24 @@ describe('the actions on one notice', () => {
     return html.match(/<button[^>]*btn-icon[^>]*>/g) ?? [];
   }
 
-  const lp = active[0].LP_Name;
+  /** How many buttons the notice's own header carries. */
+  function buttons(html: string) {
+    return html.match(/<button/g)?.length ?? 0;
+  }
 
-  it('offers only the download on a draft', () => {
-    // Approving is the tile's job. Two copies of it on one screen is two
-    // places to look and one of them to keep in step.
-    const html = notices(callWith('draft'));
-    expect(html).toContain(`aria-label="Download the notice for ${lp}"`);
-    expect(html).not.toContain(`aria-label="Approve the notice for ${lp}"`);
-    expect(html).not.toContain('btn-primary');
+  it('carries its send and nothing else, and only once approved', () => {
+    // Approving and undoing belong to the tile, downloading to the toolbar.
+    expect(buttons(notices(callWith('draft'))), 'draft').toBe(0);
+    expect(buttons(notices(callWith('sent'))), 'sent').toBe(0);
+    expect(buttons(notices(callWith('approved'))), 'approved').toBe(1);
   });
 
-  it('offers sending once it is approved, and says so in a word', () => {
-    // The one irreversible action on the screen does not get to be a glyph.
+  it('says Send in a word rather than a glyph', () => {
+    // The one irreversible action on the screen does not get to be an icon.
     const html = notices(callWith('approved'));
     const send = /<button[^>]*btn-primary[^>]*>([\s\S]*?)<\/button>/.exec(html);
     expect(send, 'no primary action on an approved notice').not.toBeNull();
     expect(send![1]).toContain('Send');
-  });
-
-  it('leaves approving and undoing to the tile', () => {
-    const html = notices(callWith('approved'));
-    expect(html).not.toContain(`aria-label="Approve the notice for ${lp}"`);
-    expect(html).not.toContain('back to draft');
-  });
-
-  it('offers nothing but the download once it is sent', () => {
-    // An issued notice is frozen; there is no control that could change it.
-    const html = notices(callWith('sent'));
-    expect(html).toContain(`aria-label="Download the notice for ${lp}"`);
-    expect(html).not.toContain('btn-primary');
-    expect(html).not.toContain('back to draft');
   });
 
   it('names every icon, since none of them carry a visible label', () => {
@@ -372,5 +359,47 @@ describe('the header sits in the document\u2019s column', () => {
   it('is centred the same way', () => {
     expect(prop(strip, 'margin')).toContain('auto');
     expect(prop(sheet, 'margin')).toContain('auto');
+  });
+});
+
+describe('where the download lives', () => {
+  /** Everything above the investor list: the actions for the whole call. */
+  function toolbar(html: string) {
+    return html.slice(0, html.indexOf('aria-label="Investors"'));
+  }
+
+  const lp = active[0].LP_Name;
+
+  it('sits with the call-wide actions, not above the page', () => {
+    expect(toolbar(callWith('draft'))).toContain(`aria-label="Download the notice for ${lp}"`);
+  });
+
+  it('sits between the menu and the primary action', () => {
+    const bar = toolbar(callWith('draft'));
+    const menu = bar.indexOf('aria-haspopup="menu"');
+    const download = bar.indexOf('aria-label="Download the notice');
+    const primary = bar.indexOf('btn-primary');
+
+    expect(menu).toBeGreaterThan(-1);
+    expect(menu).toBeLessThan(download);
+    expect(download).toBeLessThan(primary);
+  });
+
+  it('downloads the investor whose notice is on screen', () => {
+    // It names one investor, so it had better be the selected one.
+    const bar = toolbar(callWith('draft'));
+    for (const other of active.slice(1)) {
+      expect(bar, other.LP_Name).not.toContain(`Download the notice for ${other.LP_Name}`);
+    }
+  });
+});
+
+describe('the status tags line up', () => {
+  it('reserves the same column on every tile', () => {
+    // Pushed to the right of each tile, a long label moved its own dot left
+    // and the column zig-zagged down the list. An explicit width cannot.
+    const nav = tiles(callWith('draft'));
+    const cells = nav.match(new RegExp(`width:${STATUS_COLUMN}px`, 'g')) ?? [];
+    expect(cells).toHaveLength(active.length);
   });
 });

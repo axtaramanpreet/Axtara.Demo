@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useTransition } from 'react';
 import { compute } from '@/engine';
 import type { CallDetail } from '@/adapters/storage/types';
 import { fmtDate, serialToISO } from '@/engine';
@@ -37,6 +38,7 @@ export function CallScreen({
   email: { configured: boolean; overrideTo: string | null };
 }) {
   const router = useRouter();
+  const [isNavigating, startNavigation] = useTransition();
   const params = useSearchParams();
 
   const basePath = `/clients/${clientId}/calls/${call.id}`;
@@ -50,10 +52,15 @@ export function CallScreen({
   const active = result.rows.filter((r) => r.isActive);
   const sent = call.notices.filter((n) => n.status === 'sent').length;
 
+  /**
+   * Changing tab is a server navigation, so there is a gap before anything
+   * moves. Inside a transition React knows the gap is happening, and the panel
+   * can fade instead of the click appearing to do nothing.
+   */
   function go(next: Tab, lpId?: string) {
     const query = new URLSearchParams({ tab: next });
     if (lpId) query.set('lp', lpId);
-    router.replace(`${basePath}?${query}`, { scroll: false });
+    startNavigation(() => router.replace(`${basePath}?${query}`, { scroll: false }));
   }
 
   return (
@@ -107,7 +114,11 @@ export function CallScreen({
         </TabLink>
       </nav>
 
-      {tab === 'summary' && <SummaryTab call={call} result={result} basePath={basePath} />}
+      <div
+        className={isNavigating ? 'is-busy' : undefined}
+        aria-busy={isNavigating || undefined}
+      >
+        {tab === 'summary' && <SummaryTab call={call} result={result} basePath={basePath} />}
       {tab === 'allocation' && <AllocationTab call={call} result={result} />}
       {tab === 'checks' && <ChecksTab result={result} goldenSource={call.model.goldenSource} />}
       {tab === 'notices' && (
@@ -119,6 +130,7 @@ export function CallScreen({
           onSelect={(lpId) => go('notices', lpId)}
         />
       )}
+      </div>
     </div>
   );
 }

@@ -19,6 +19,7 @@ vi.mock('next/navigation', () => ({
 import { compute } from '@/engine';
 import { ILLUSTRATIVE_FUND } from '@/engine/fixtures/illustrative-fund';
 import type { CallDetail, NoticeState, NoticeStatus } from '@/adapters/storage/types';
+import { Button } from '@/components/ui/button';
 import { NoticesTab } from '../notices-tab';
 
 const result = compute(ILLUSTRATIVE_FUND);
@@ -116,5 +117,35 @@ describe('the detail header', () => {
     // Closed by default: the markup holds the trigger, not the items.
     expect(html).not.toContain('Back to draft');
     expect(html).not.toContain('Download PDF');
+  });
+});
+
+describe('showing that something is happening', () => {
+  it('ships a spinner style the buttons can use', () => {
+    // The markup is static here, so what is checked is that the mechanism
+    // exists and is wired: `loading` puts a .spinner inside the button and
+    // marks it busy for a screen reader.
+    const html = renderToStaticMarkup(
+      <Button variant="primary" loading>
+        Approve
+      </Button>,
+    );
+
+    expect(html).toContain('spinner');
+    expect(html).toContain('aria-busy="true"');
+    // The label stays, so the row does not change width mid-action.
+    expect(html).toContain('Approve');
+  });
+
+  it('disables a loading button without being told to', () => {
+    const html = renderToStaticMarkup(<Button loading>Send</Button>);
+    expect(html).toContain('disabled');
+  });
+
+  it('leaves an idle button alone', () => {
+    const html = renderToStaticMarkup(<Button variant="primary">Approve</Button>);
+    expect(html).not.toContain('spinner');
+    expect(html).not.toContain('aria-busy');
+    expect(html).not.toContain('disabled');
   });
 });

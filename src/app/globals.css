@@ -596,3 +596,39 @@ input.cell:read-only {
     color: #000;
   }
 }
+
+/* --- Spinner -------------------------------------------------------------- */
+/* `currentColor` so it works on a primary button, a ghost button and muted
+   text without a variant for each. */
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: -0.125em;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still visible, just not spinning: the indicator is the point, the motion
+     is not. */
+  .spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+/* Whatever is being replaced fades rather than vanishing, so a slow switch
+   reads as "working" instead of "broken". */
+.is-busy {
+  opacity: 0.45;
+  transition: opacity 120ms ease-out;
+  pointer-events: none;
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { buildNotice, type ComputeResult } from '@/engine';
 import type { CallDetail } from '@/adapters/storage/types';
 import { CheckCheck, FileArchive, FileDown, Printer, Rows3, Send, Undo2 } from 'lucide-react';
@@ -34,9 +34,40 @@ export function NoticesTab({
   onSelect: (lpId: string) => void;
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+
+  /**
+   * Which control was pressed, and whether anything is still in flight.
+   *
+   * A single `busy` flag disabled every button at once and showed nothing, so
+   * a send looked identical to a misclick until the page happened to change.
+   *
+   * An action spans two waits — the request, then the refresh that shows its
+   * result — and React only knows the second has finished when the new UI is
+   * ready. Both are tracked as state: the key of the control, and the two
+   * transitions. The key is deliberately never cleared; it only means anything
+   * while something is running, so a stale one shows nothing.
+   */
+  const [workingKey, setWorkingKey] = useState<string | null>(null);
+  const [requesting, setRequesting] = useState(false);
+  const [switchTarget, setSwitchTarget] = useState<string | null>(null);
+
+  const [isRefreshing, startRefresh] = useTransition();
+  const [isSwitching, startSwitch] = useTransition();
+
+  const busy = requesting || isRefreshing;
+  /** True for the one control that is working. */
+  const working = (key: string) => busy && workingKey === key;
+  /** The investor being switched to, while the pane is still catching up. */
+  const switchingTo = isSwitching ? switchTarget : null;
+
+  /** Switch investors, keeping the clicked row marked until the pane catches up. */
+  function select(lpId: string) {
+    if (lpId === selectedLp) return;
+    setSwitchTarget(lpId);
+    startSwitch(() => onSelect(lpId));
+  }
 
   /**
    * Ask the server for the file.
@@ -47,6 +78,8 @@ export function NoticesTab({
    */
   async function download(lpId?: string) {
     setError(null);
+    setWorkingKey(lpId ? `download:${lpId}` : 'download:all');
+    setRequesting(true);
     const query = lpId ? `?lpId=${encodeURIComponent(lpId)}` : '';
     try {
       const response = await fetch(`/api/calls/${call.id}/notices/pdf${query}`);
@@ -68,6 +101,9 @@ export function NoticesTab({
       window.URL.revokeObjectURL(url);
     } catch {
       setError('The download could not be started.');
+    } finally {
+      // Nothing to refresh: a download changes no state on the page.
+      setRequesting(false);
     }
   }
 
@@ -101,8 +137,17 @@ export function NoticesTab({
     .filter(Boolean)
     .join(' · ');
 
-  async function act(action: 'approve' | 'revert' | 'send', lpIds?: string[]) {
-    setBusy(true);
+  /**
+   * @param key Identifies the control that was pressed, so the spinner appears
+   *            on that one rather than on all of them.
+   */
+  async function act(
+    action: 'approve' | 'revert' | 'send',
+    lpIds: string[] | undefined,
+    key: string,
+  ) {
+    setWorkingKey(key);
+    setRequesting(true);
     setError(null);
     try {
       const response = await fetch(`/api/calls/${call.id}/notices`, {
@@ -112,11 +157,14 @@ export function NoticesTab({
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? 'That did not work.');
-      router.refresh();
+
+      // Hand the spinner to the refresh: the server has recorded the change,
+      // but the page still shows the old figures until it re-renders.
+      startRefresh(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'That did not work.');
     } finally {
-      setBusy(false);
+      setRequesting(false);
     }
   }
 
@@ -164,8 +212,18 @@ export function NoticesTab({
 
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center' }}>
           <Menu label="Other notice actions">
-            <MenuItem icon={<FileArchive size={15} />} onClick={() => download()}>
-              Download all as .zip
+            <MenuItem
+              icon={
+                working('download:all') ? (
+                  <span className="spinner" aria-hidden />
+                ) : (
+                  <FileArchive size={15} />
+                )
+              }
+              disabled={working('download:all')}
+              onClick={() => download()}
+            >
+              {working('download:all') ? 'Preparing…' : 'Download all as .zip'}
             </MenuItem>
             <MenuItem icon={<Printer size={15} />} onClick={() => window.print()}>
               Print all
@@ -181,7 +239,7 @@ export function NoticesTab({
                 icon={<CheckCheck size={15} />}
                 disabled={busy || draft === 0 || failing > 0}
                 title={failing > 0 ? 'Resolve the failing checks first' : undefined}
-                onClick={() => act('approve')}
+                onClick={() => act('approve', undefined, 'bulk:approve')}
               >
                 Approve {draft} draft{draft === 1 ? '' : 's'}
               </MenuItem>
@@ -190,7 +248,7 @@ export function NoticesTab({
               <MenuItem
                 icon={<Send size={15} />}
                 disabled={busy}
-                onClick={() => act('send')}
+                onClick={() => act('send', undefined, 'bulk:send')}
               >
                 Send {approved} approved
               </MenuItem>
@@ -203,17 +261,23 @@ export function NoticesTab({
           {next === 'approve' && (
             <Button
               variant="primary"
+              loading={working('bulk:approve')}
               disabled={busy || draft === 0 || failing > 0}
               title={failing > 0 ? 'Resolve the failing checks first' : undefined}
-              onClick={() => act('approve')}
+              onClick={() => act('approve', undefined, 'bulk:approve')}
             >
-              <CheckCheck size={15} aria-hidden />
+              {working('bulk:approve') ? null : <CheckCheck size={15} aria-hidden />}
               Approve {draft} draft{draft === 1 ? '' : 's'}
             </Button>
           )}
           {next === 'send' && (
-            <Button variant="primary" disabled={busy} onClick={() => act('send')}>
-              <Send size={15} aria-hidden />
+            <Button
+              variant="primary"
+              loading={working('bulk:send')}
+              disabled={busy}
+              onClick={() => act('send', undefined, 'bulk:send')}
+            >
+              {working('bulk:send') ? null : <Send size={15} aria-hidden />}
               Send {approved} notice{approved === 1 ? '' : 's'}
             </Button>
           )}
@@ -250,7 +314,7 @@ export function NoticesTab({
               <button
                 key={row.LP_ID}
                 type="button"
-                onClick={() => onSelect(row.LP_ID)}
+                onClick={() => select(row.LP_ID)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -273,13 +337,23 @@ export function NoticesTab({
                 >
                   {row.LP_Name}
                 </span>
-                <Tag tone={NOTICE_DISPLAY[status].tone}>{NOTICE_DISPLAY[status].label}</Tag>
+                {switchingTo === row.LP_ID ? (
+                  <span className="spinner text-muted" aria-label="Loading" />
+                ) : (
+                  <Tag tone={NOTICE_DISPLAY[status].tone}>{NOTICE_DISPLAY[status].label}</Tag>
+                )}
               </button>
             );
           })}
         </nav>
 
-        <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 24 }}>
+        <div
+          // Fades rather than blanking: the outgoing notice stays readable, and
+          // nothing on the page jumps when the new one arrives.
+          className={isSwitching || isRefreshing ? 'is-busy' : undefined}
+          aria-busy={isSwitching || isRefreshing || undefined}
+          style={{ flex: 1, minWidth: 0, display: 'grid', gap: 24 }}
+        >
           {(showAll ? active : selected ? [selected] : []).map((row) => {
             const status = noticeStatusFor(call.notices, row.LP_ID);
             const record = noticeFor(call.notices, row.LP_ID);
@@ -322,7 +396,7 @@ export function NoticesTab({
                         <MenuItem
                           icon={<Undo2 size={15} />}
                           disabled={busy}
-                          onClick={() => act('revert', [row.LP_ID])}
+                          onClick={() => act('revert', [row.LP_ID], `revert:${row.LP_ID}`)}
                         >
                           Back to draft
                         </MenuItem>
@@ -332,26 +406,28 @@ export function NoticesTab({
                     {status === 'draft' && (
                       <Button
                         variant="primary"
+                        loading={working(`approve:${row.LP_ID}`)}
                         disabled={busy || failing > 0}
                         title={failing > 0 ? 'Resolve the failing checks first' : undefined}
-                        onClick={() => act('approve', [row.LP_ID])}
+                        onClick={() => act('approve', [row.LP_ID], `approve:${row.LP_ID}`)}
                       >
-                        <CheckCheck size={15} aria-hidden />
+                        {working(`approve:${row.LP_ID}`) ? null : <CheckCheck size={15} aria-hidden />}
                         Approve
                       </Button>
                     )}
                     {status === 'approved' && (
                       <Button
                         variant="primary"
+                        loading={working(`send:${row.LP_ID}`)}
                         disabled={busy}
                         title={
                           investorEmail
                             ? `Emails the notice to ${investorEmail}`
                             : 'No Contact_Email on the register for this investor'
                         }
-                        onClick={() => act('send', [row.LP_ID])}
+                        onClick={() => act('send', [row.LP_ID], `send:${row.LP_ID}`)}
                       >
-                        <Send size={15} aria-hidden />
+                        {working(`send:${row.LP_ID}`) ? null : <Send size={15} aria-hidden />}
                         Send
                       </Button>
                     )}

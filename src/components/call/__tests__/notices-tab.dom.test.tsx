@@ -9,6 +9,8 @@
  * component in a document and watches what it asks the server for.
  */
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -159,5 +161,35 @@ describe('sending one notice', () => {
 
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0].body).toEqual({ action: 'send', lpIds: [approved.LP_ID] });
+  });
+});
+
+describe('the undo looks as live as it is', () => {
+  /**
+   * Reported twice as "disabled" when it was not. jsdom does no layout, but it
+   * does apply a stylesheet, so this compares the undo on an approved tile
+   * against the approve on a draft one: whatever makes one of them read as
+   * pressable has to be true of the other.
+   */
+  function computed(el: Element) {
+    const s = getComputedStyle(el);
+    return { cursor: s.cursor, color: s.color, opacity: s.opacity, pointerEvents: s.pointerEvents };
+  }
+
+  it('matches the approve beside it in every way that says "press me"', () => {
+    const style = document.createElement('style');
+    style.textContent = readFileSync(resolve(process.cwd(), 'src/app/globals.css'), 'utf8');
+    document.head.appendChild(style);
+
+    renderTab();
+    const undo = control(`Take the notice for ${approved.LP_Name} back to draft`);
+    const approve = control(`Approve the notice for ${draft.LP_Name}`);
+
+    expect(undo.disabled).toBe(false);
+    expect(computed(undo)).toEqual(computed(approve));
+    expect(computed(undo).cursor).toBe('pointer');
+    expect(computed(undo).opacity).toBe('1');
+
+    style.remove();
   });
 });

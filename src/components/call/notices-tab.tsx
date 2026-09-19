@@ -459,10 +459,15 @@ export function NoticesTab({
                   </span>
 
                   {/* One notice's own actions, as icons.
-                      A tile carries at most three, and a row of worded buttons
-                      repeated down a stacked list drowned out the figures they
-                      belong to. Each icon still has an `aria-label` and a
-                      `title`, so nothing is hidden — only shortened. */}
+                      A row of worded buttons repeated down a stacked list
+                      drowned out the figures they belong to. Each icon still
+                      has an `aria-label` and a `title`, so nothing is hidden —
+                      only shortened.
+
+                      Approving is not here: it lives on the investor's tile in
+                      the list, beside the status it changes. Sending does live
+                      here, because it is irreversible and belongs next to the
+                      figures a person is meant to have read first. */}
                   <span
                     style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4, alignItems: 'center' }}
                   >
@@ -492,22 +497,6 @@ export function NoticesTab({
                         onClick={() => act('revert', [row.LP_ID], `revert:${row.LP_ID}`)}
                       >
                         {icon(`revert:${row.LP_ID}`, <Undo2 size={16} aria-hidden />)}
-                      </Button>
-                    )}
-
-                    {status === 'draft' && (
-                      <Button
-                        iconOnly
-                        variant="primary"
-                        aria-label={`Approve the notice for ${row.LP_Name}`}
-                        title={
-                          failing > 0 ? 'Resolve the failing checks first' : 'Approve this notice'
-                        }
-                        loading={working(`approve:${row.LP_ID}`)}
-                        disabled={busy || failing > 0}
-                        onClick={() => act('approve', [row.LP_ID], `approve:${row.LP_ID}`)}
-                      >
-                        {icon(`approve:${row.LP_ID}`, <Check size={16} aria-hidden />)}
                       </Button>
                     )}
 

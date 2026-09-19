@@ -149,9 +149,12 @@ describe('the actions on one notice', () => {
 
   const lp = active[0].LP_Name;
 
-  it('offers approval, and not sending, on a draft', () => {
+  it('offers only the download on a draft', () => {
+    // Approving is the tile's job. Two copies of it on one screen is two
+    // places to look and one of them to keep in step.
     const html = notices(callWith('draft'));
-    expect(html).toContain(`aria-label="Approve the notice for ${lp}"`);
+    expect(html).toContain(`aria-label="Download the notice for ${lp}"`);
+    expect(html).not.toContain(`aria-label="Approve the notice for ${lp}"`);
     expect(html).not.toContain(`aria-label="Send the notice to ${lp}"`);
   });
 

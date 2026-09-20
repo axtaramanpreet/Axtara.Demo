@@ -12,6 +12,7 @@ export { emptyCall, type CallDefaults } from './empty-call';
 export { allocate, type AllocationPart } from './allocate';
 export { applyTransfers } from './transfers';
 export { buildNotice } from './notice';
+export { missingForReview, whyNotReady, type Missing } from './readiness';
 export { splitCall, type CallSplit } from './summary';
 export type { NoticeData, NoticeLine, NoticeAccountLine, NoticeFootnote } from './notice';
 export { fmt, fmtDate, fmtStamp, ids, num, pct, round, serialToISO, yes } from './format';

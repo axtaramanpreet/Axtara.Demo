@@ -23,9 +23,6 @@ export default function LoginPage() {
           <span className="brand-mark-static" role="img" aria-label="Axtara" />
           <Wordmark height={17} />
         </div>
-        <div style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 6 }}>
-          Capital calls
-        </div>
         <h1 style={{ fontSize: 20 }}>Sign in</h1>
         <Suspense fallback={<p className="text-muted">Loading…</p>}>
           <LoginForm />

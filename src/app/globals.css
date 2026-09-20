@@ -371,7 +371,7 @@ body {
 .rail .nav-group,
 .rail .nav-item span,
 .rail .nav-item .soon,
-.rail .side-foot span:not(.wordmark) {
+.rail .side-foot span:not(.wordmark):not(.brand-mark) {
   display: none;
 }
 .rail .ws-btn {
@@ -1018,6 +1018,48 @@ input.cell:read-only {
 
 /* --- Print ---------------------------------------------------------------- */
 /* Notices are printed one per page; everything chrome-like disappears. */
+
+/* --- Brand ---------------------------------------------------------------- */
+/* The wordmark is one file tinted by CSS rather than a light copy and a dark
+   copy swapped by theme: masking it with `currentColor` means it is always the
+   colour of the text around it, with nothing to keep in step and no flash when
+   the theme changes. */
+
+.brand-word {
+  display: block;
+  background: currentColor;
+  -webkit-mask: url('/AXTARA-black.svg') no-repeat center / contain;
+  mask: url('/AXTARA-black.svg') no-repeat center / contain;
+}
+
+/* The mark on its own, for where the wordmark will not fit. Drawn rather than
+   loaded — it is a square turned 45°, and a request for that is silly. */
+.brand-mark {
+  display: none;
+  width: 11px;
+  height: 11px;
+  border: 1px solid currentColor;
+  transform: rotate(45deg);
+  flex: none;
+}
+
+/* The same diamond where it is always wanted, rather than only in the rail. */
+.brand-mark-static {
+  display: block;
+  width: 11px;
+  height: 11px;
+  border: 1px solid currentColor;
+  transform: rotate(45deg);
+  flex: none;
+}
+
+/* Collapsed, there is no room for six letters, so the mark stands in. */
+.rail .brand-word {
+  display: none;
+}
+.rail .brand-mark {
+  display: block;
+}
 
 /* --- Notices layout ------------------------------------------------------- */
 /* The investor list beside the notice. Below a laptop the two together are

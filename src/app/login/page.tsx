@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserSupabase } from '@/adapters/storage/supabase-client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Wordmark } from '@/components/ui/wordmark';
 
 /**
  * `useSearchParams` opts a component out of static prerendering, so the form
@@ -15,6 +16,13 @@ export default function LoginPage() {
   return (
     <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
       <Card style={{ width: 'min(100%, 380px)' }} bodyPadding="24px">
+        {/* The one screen with no sidebar and no top bar, so the only place the
+            brand can introduce itself. The lockup is the site's: the mark, then
+            the wordmark. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
+          <span className="brand-mark-static" role="img" aria-label="Axtara" />
+          <Wordmark height={17} />
+        </div>
         <div style={{ fontSize: 13, color: 'var(--muted-foreground)', marginBottom: 6 }}>
           Capital calls
         </div>

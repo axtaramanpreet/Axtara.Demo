@@ -7,6 +7,7 @@ import { createBrowserSupabase } from '@/adapters/storage/supabase-client';
 import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
 import type { Client } from '@/adapters/storage/types';
 import { fundCode } from '@/lib/fund-code';
+import { BrandMark, Wordmark } from '@/components/ui/wordmark';
 import { CallsIcon, ChevronDown, ChevronRight, InvestorsIcon, SettingsIcon } from './icons';
 
 /** Which sidebar entry is lit. */
@@ -171,11 +172,12 @@ export function Sidebar({
       />
 
       <div className="side-foot">
-        {/* The only brand mark in the product. No logo, no icon. */}
+        {/* The one brand mark in the product, as the handoff has it — now the
+            real wordmark rather than the word typed out. Collapsed to a rail
+            there is no room for it, and the diamond stands in. */}
         <div className="side-brand">
-          <span className="wordmark" style={{ fontSize: 13 }}>
-            Axtara
-          </span>
+          <BrandMark />
+          <Wordmark height={16} />
           <span style={{ fontSize: 11.5, color: 'var(--muted-foreground)' }}>
             Fund administration
           </span>

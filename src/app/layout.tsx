@@ -9,7 +9,7 @@ const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Capital calls',
+  title: 'Axtara — Capital calls',
   description: 'Capital call allocation, tie-out checks and investor notices.',
 };
 

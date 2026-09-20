@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useTransition, type ReactNode } from 'react';
-import { buildNotice, type ComputeResult } from '@/engine';
+import { buildNotice, fmtStamp, type ComputeResult } from '@/engine';
 import type { CallDetail } from '@/adapters/storage/types';
 import { Check, CheckCheck, FileArchive, FileDown, Printer, Rows3, Send, Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -520,9 +520,9 @@ export function NoticesTab({
                   <span className="text-muted">
                     {status === 'draft' && 'review, then approve'}
                     {status === 'approved' &&
-                      `approved${record?.approvedAt ? ` ${new Date(record.approvedAt).toLocaleString('en-GB')}` : ''} — ready to send`}
+                      `approved${record?.approvedAt ? ` ${fmtStamp(record.approvedAt)}` : ''} — ready to send`}
                     {status === 'sent' &&
-                      `issued${record?.sentAt ? ` ${new Date(record.sentAt).toLocaleString('en-GB')}` : ''} — cannot be changed`}
+                      `issued${record?.sentAt ? ` ${fmtStamp(record.sentAt)}` : ''} — cannot be changed`}
                   </span>
 
                   {/* Nothing to press here. Every action on a notice is

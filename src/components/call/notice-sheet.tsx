@@ -70,7 +70,7 @@ export function NoticeSheet({
               className="text-muted"
               style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase' }}
             >
-              Issued {issuedOn ? new Date(issuedOn).toLocaleDateString('en-GB') : ''}
+              Issued {issuedOn ? new Date(issuedOn).toLocaleDateString('en-GB', { timeZone: 'UTC' }) : ''}
             </div>
           )
         )}

@@ -86,6 +86,30 @@ export function fmtDate(iso: string): string {
 }
 
 /**
+ * Render a timestamp for display: `2026-09-20T01:13:24Z` -> `20/09/2026, 01:13 UTC`.
+ *
+ * Pinned to UTC for the same reason as `fmtDate`, and it matters more here.
+ * Left to the viewer's timezone this reads differently in every office, and a
+ * notice issued just after midnight UTC shows the day before to anyone west of
+ * it — on an audit line whose whole job is to say when something happened.
+ *
+ * It also has to be the same string on the server and in the browser, or React
+ * finds two different texts where it expects one and throws the hydration away.
+ */
+export function fmtStamp(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  const date = d.toLocaleDateString('en-GB', { timeZone: 'UTC' });
+  const time = d.toLocaleTimeString('en-GB', {
+    timeZone: 'UTC',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return `${date}, ${time} UTC`;
+}
+
+/**
  * Money for display, with thousands separators and fixed decimals.
  * Negatives use accounting parentheses — `(10,526.32)` — as they appear on the
  * notice for fee offsets. Returns `''` for blanks so empty cells stay empty.

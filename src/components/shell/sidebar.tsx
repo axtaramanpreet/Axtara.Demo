@@ -172,15 +172,13 @@ export function Sidebar({
       />
 
       <div className="side-foot">
-        {/* The one brand mark in the product, as the handoff has it — now the
-            real wordmark rather than the word typed out. Collapsed to a rail
-            there is no room for it, and the diamond stands in. */}
+        {/* The one brand mark in the product. The handoff put "Fund
+            administration" beside it; with the real wordmark there the two
+            sat awkwardly, and the mark says enough on its own. Collapsed to a
+            rail there is no room for six letters and the diamond stands in. */}
         <div className="side-brand">
           <BrandMark />
           <Wordmark height={16} />
-          <span style={{ fontSize: 11.5, color: 'var(--muted-foreground)' }}>
-            Fund administration
-          </span>
         </div>
       </div>
     </aside>

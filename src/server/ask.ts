@@ -7,6 +7,7 @@
  * to the reader instead of turned into a link.
  */
 
+import { AnthropicFoundry } from '@anthropic-ai/foundry-sdk';
 import { foundryEnv } from '@/lib/env';
 import type { FundContext } from './fund-context';
 
@@ -98,36 +99,43 @@ export const NOT_CONNECTED =
 /**
  * Ask the model.
  *
- * Azure AI Foundry speaks the Azure OpenAI chat-completions shape. The key
- * never leaves the server: this function is only ever called from a route
- * handler, and `foundryEnv()` throws outright if it is reached in a browser.
+ * Claude on Microsoft Foundry, through Anthropic's own Foundry client rather
+ * than a hand-rolled request: the key never leaves the server, and this
+ * function is only ever reached from a route handler — `foundryEnv()` throws
+ * outright if it is called in a browser.
+ *
+ * Streamed, and then collected. Nothing is streamed on to the browser; the
+ * point is that a system prompt carrying a whole fund's figures is a long
+ * request, and a non-streaming call of that size is the kind that times out
+ * once the fund is big enough rather than in testing.
  */
 export async function complete(system: string, history: Message[]): Promise<string> {
   const config = foundryEnv();
   if (!config) return NOT_CONNECTED;
 
-  const url = `${config.endpoint}/openai/deployments/${config.deployment}/chat/completions?api-version=${config.apiVersion}`;
+  const client = new AnthropicFoundry({ apiKey: config.apiKey, resource: config.resource });
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'api-key': config.apiKey },
-    body: JSON.stringify({
-      messages: [{ role: 'system', content: system }, ...history],
-      max_tokens: 700,
-      // Low, not zero: the same question twice should give the same figures.
-      temperature: 0.2,
-    }),
+  const stream = client.messages.stream({
+    model: config.model,
+    max_tokens: 1024,
+    // The snapshot is the same for every question about a fund until its data
+    // changes, so it is cached rather than re-read and re-billed each turn.
+    system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+    messages: history,
+    output_config: { effort: 'medium' },
   });
 
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as
-      | { error?: { message?: string } }
-      | null;
-    throw new Error(body?.error?.message || `The model returned ${response.status}.`);
+  const message = await stream.finalMessage();
+
+  // A safety decline arrives as a 200 with no answer in it. Saying so is better
+  // than handing back an empty panel.
+  if (message.stop_reason === 'refusal') {
+    return 'Axtara declined to answer that one. Try asking it a different way.';
   }
 
-  const body = (await response.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  return body.choices?.[0]?.message?.content ?? '';
+  return message.content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('')
+    .trim();
 }

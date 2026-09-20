@@ -489,3 +489,16 @@ describe('a tile row cannot outgrow the list it is in', () => {
     expect(Number(width![1])).toBeGreaterThanOrEqual(STATUS_COLUMN + 56 + 160);
   });
 });
+
+describe('the two things called a crumb', () => {
+  // The top bar's breadcrumb and the call screen's "‹ All calls" back link
+  // both carry `.crumb` — the handoff names one that, the app already named
+  // the other. Unscoped, the later rule won and the breadcrumb rendered as a
+  // back link.
+  const css = readFileSync(new URL('../../../app/globals.css', import.meta.url), 'utf8');
+
+  it('styles the breadcrumb only inside the top bar', () => {
+    expect(css).toContain('.topbar .crumb {');
+    expect(css.match(/\n\.crumb \{/g) ?? []).toHaveLength(1);
+  });
+});

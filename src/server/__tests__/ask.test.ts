@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { compute } from '@/engine';
 import { ILLUSTRATIVE_FUND } from '@/engine/fixtures/illustrative-fund';
 import type { CallDetail } from '@/adapters/storage/types';
+import { foundryEnv } from '@/lib/env';
 import { buildFundContext } from '../fund-context';
 import {
   NOT_CONNECTED,
@@ -160,11 +161,34 @@ describe('when no model is configured', () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it('says so plainly instead of failing', async () => {
-    vi.stubEnv('AZURE_FOUNDRY_ENDPOINT', '');
-    vi.stubEnv('AZURE_FOUNDRY_DEPLOYMENT', '');
-    vi.stubEnv('AZURE_FOUNDRY_API_KEY', '');
+    vi.stubEnv('ANTHROPIC_FOUNDRY_ENDPOINT', '');
+    vi.stubEnv('ANTHROPIC_FOUNDRY_KEY', '');
+    vi.stubEnv('ANTHROPIC_FOUNDRY_API_KEY', '');
 
     await expect(complete('system', [])).resolves.toBe(NOT_CONNECTED);
     expect(NOT_CONNECTED).toContain('not connected');
+  });
+
+  it('reads a Foundry resource out of either form of endpoint', () => {
+    // Azure shows a URL; the SDK wants the resource name. Whoever deploys this
+    // should not have to know which.
+    vi.stubEnv('ANTHROPIC_FOUNDRY_KEY', 'test-key');
+
+    vi.stubEnv('ANTHROPIC_FOUNDRY_ENDPOINT', 'https://xan-foundry.services.ai.azure.com/anthropic');
+    expect(foundryEnv()?.resource).toBe('xan-foundry');
+
+    vi.stubEnv('ANTHROPIC_FOUNDRY_ENDPOINT', 'xan-foundry');
+    expect(foundryEnv()?.resource).toBe('xan-foundry');
+  });
+
+  it('defaults to Opus unless a model is named', () => {
+    vi.stubEnv('ANTHROPIC_FOUNDRY_ENDPOINT', 'xan-foundry');
+    vi.stubEnv('ANTHROPIC_FOUNDRY_KEY', 'test-key');
+
+    vi.stubEnv('ANTHROPIC_FOUNDRY_MODEL', '');
+    expect(foundryEnv()?.model).toBe('claude-opus-5');
+
+    vi.stubEnv('ANTHROPIC_FOUNDRY_MODEL', 'claude-sonnet-5');
+    expect(foundryEnv()?.model).toBe('claude-sonnet-5');
   });
 });

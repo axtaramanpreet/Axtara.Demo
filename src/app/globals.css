@@ -442,20 +442,21 @@ body {
   z-index: 5;
   min-height: 54px;
 }
-.crumb {
+.topbar .crumb {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 14px;
   min-width: 0;
+  color: var(--foreground);
 }
-.crumb span {
+.topbar .crumb span {
   color: var(--muted-foreground);
 }
-.crumb b {
+.topbar .crumb b {
   font-weight: 500;
 }
-.crumb i {
+.topbar .crumb i {
   color: var(--border);
   font-style: normal;
 }

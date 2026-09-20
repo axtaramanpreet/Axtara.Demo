@@ -17,6 +17,7 @@
     "verify": "tsc -p tsconfig.check.json --noEmit && eslint src --max-warnings=0 && vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/foundry-sdk": "^0.4.8",
     "@react-pdf/renderer": "^4.9.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",

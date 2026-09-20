@@ -42,26 +42,46 @@ export function serverEnv() {
 }
 
 /**
- * Azure AI Foundry settings for Ask Axtara.
+ * Claude on Microsoft Foundry, for Ask Axtara.
  *
  * Returns null rather than throwing when unset, so the rest of the app runs
  * without it and the panel can say it is not connected — which is honest, and
  * better than a crash on a page that has nothing to do with the assistant.
+ *
+ * `ANTHROPIC_FOUNDRY_ENDPOINT` takes either form: the bare resource name
+ * (`my-resource`) or the full URL Azure shows you. The SDK wants the name, so a
+ * URL is reduced to it here rather than making whoever deploys this guess which
+ * one is wanted.
  */
 export function foundryEnv() {
   if (typeof window !== 'undefined') {
     throw new Error('foundryEnv() was called in the browser. The API key must stay on the server.');
   }
-  const endpoint = process.env.AZURE_FOUNDRY_ENDPOINT;
-  const deployment = process.env.AZURE_FOUNDRY_DEPLOYMENT;
-  const apiKey = process.env.AZURE_FOUNDRY_API_KEY;
-  if (!endpoint || !deployment || !apiKey) return null;
+
+  const endpoint = process.env.ANTHROPIC_FOUNDRY_ENDPOINT;
+  const apiKey = process.env.ANTHROPIC_FOUNDRY_KEY || process.env.ANTHROPIC_FOUNDRY_API_KEY;
+  if (!endpoint || !apiKey) return null;
+
   return {
-    endpoint: endpoint.replace(/\/+$/, ''),
-    deployment,
+    resource: foundryResource(endpoint),
     apiKey,
-    apiVersion: process.env.AZURE_FOUNDRY_API_VERSION || '2024-10-21',
+    // The handoff asks for a grounded answer over a fund's own figures, which
+    // is a reading task rather than a reasoning one — but it is being read in
+    // front of investors, so this is the one knob worth raising if an answer is
+    // ever wrong. `claude-opus-5` unless a deployment names something else.
+    model: process.env.ANTHROPIC_FOUNDRY_MODEL || 'claude-opus-5',
   };
+}
+
+/** `https://my-resource.services.ai.azure.com/...` and `my-resource` both mean `my-resource`. */
+function foundryResource(endpoint: string): string {
+  const value = endpoint.trim();
+  if (!/^https?:\/\//i.test(value)) return value.replace(/\/+$/, '');
+  try {
+    return new URL(value).hostname.split('.')[0];
+  } catch {
+    return value;
+  }
 }
 
 /**
@@ -94,11 +114,6 @@ export function emailEnv() {
   };
 }
 
-/**
- * What the browser may know about email: whether it is configured at all, and
- * whether sends are being redirected. Never the key, never the provider's
- * credentials.
- */
 /**
  * Whether Ask Axtara has a model behind it — the only thing about the model the
  * browser is allowed to know.

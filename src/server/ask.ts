@@ -23,10 +23,29 @@ export interface Message {
  * that moves other people's money, and the difference between "the fee is X"
  * and "I have changed the fee to X" is the whole product.
  */
-export function systemPrompt(context: FundContext): string {
+export function systemPrompt(
+  context: FundContext,
+  /** The call and tab on screen, when the question is asked from one. */
+  viewing?: { call_number: number; tab: string } | null,
+): string {
   return [
     'You are the analyst for a private-equity fund administration tool.',
+    // The snapshot carries every call this fund has. Which one "this call"
+    // means is a fact about the screen, not about the data, so it has to be
+    // said — left out, the model answered about a different call under the
+    // right call's name.
+    viewing
+      ? `The user is looking at Call ${viewing.call_number}, on the ${viewing.tab} tab. "This call", "the call" and "these notices" mean Call ${viewing.call_number} unless they name another one.`
+      : 'The user is looking at the list of calls for this fund, not at one call. Ask which call they mean if it matters and they have more than one.',
     'Answer ONLY from the JSON fund data provided; if the answer is not in the data, say so briefly.',
+    // The data is rebuilt from the database for every question, so it can move
+    // between one answer and the next — somebody approves a notice while the
+    // conversation is open. Asked without this, the model repeated its own
+    // earlier count and called it "still", with the new figure in front of it.
+    'The FUND DATA below was read fresh for this question and is the only thing that is true now.',
+    'Earlier turns in this conversation describe how things stood then, and may be out of date.',
+    'Where they disagree with the data, the data wins — say briefly what changed rather than repeating your earlier answer.',
+    'For how many notices are draft, approved or sent, read notice_summary on the call. Do not count the rows yourself.',
     'Be concise (2-5 sentences or a short list).',
     'Plain text only: no Markdown, no asterisks, no headings, no tables; use a simple "- " dash for list items.',
     'Cite every figure to its source in brackets, e.g. [LP03 · Mgmt_Fee_Rate_Override 0.01 · SL-2024-03] or [Call 2 · Deal Z · Allocation_Basis UCC].',
@@ -122,7 +141,7 @@ export async function complete(system: string, history: Message[]): Promise<stri
     // changes, so it is cached rather than re-read and re-billed each turn.
     system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
     messages: history,
-    output_config: { effort: 'medium' },
+    output_config: { effort: 'high' },
   });
 
   const message = await stream.finalMessage();

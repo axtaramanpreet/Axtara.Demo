@@ -28,7 +28,13 @@ import type { CallDetail } from '@/adapters/storage/types';
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
-  let body: { clientId?: string; question?: string; history?: Message[] };
+  let body: {
+    clientId?: string;
+    question?: string;
+    history?: Message[];
+    /** The call and tab on screen, so "this call" resolves to one. */
+    viewing?: { callNo?: number; tab?: string };
+  };
   try {
     body = await request.json();
   } catch {
@@ -69,9 +75,20 @@ export async function POST(request: Request) {
     .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && m.content)
     .slice(-8);
 
+  // Without this the snapshot holds every call and nothing says which one is on
+  // screen, so "this call" is a guess — and it guessed wrong, confidently, with
+  // another call's figures under the right call's name.
+  const viewing =
+    typeof body.viewing?.callNo === 'number'
+      ? { call_number: body.viewing.callNo, tab: body.viewing.tab ?? 'summary' }
+      : null;
+
   let raw: string;
   try {
-    raw = await complete(systemPrompt(context), [...history, { role: 'user', content: question }]);
+    raw = await complete(systemPrompt(context, viewing), [
+      ...history,
+      { role: 'user', content: question },
+    ]);
   } catch (e) {
     // The provider's own words. Anything else here is a guess about why.
     const reason = e instanceof Error ? e.message : 'the model could not be reached';

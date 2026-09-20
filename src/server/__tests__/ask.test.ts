@@ -192,3 +192,40 @@ describe('when no model is configured', () => {
     expect(foundryEnv()?.model).toBe('claude-sonnet-5');
   });
 });
+
+describe('which call "this call" means', () => {
+  it('says the one on screen, because the snapshot holds them all', () => {
+    // Left out, the model answered about a different call under the right
+    // call's name — consistently, three times out of three.
+    const prompt = systemPrompt(context, { call_number: 2, tab: 'notices' });
+    expect(prompt).toContain('looking at Call 2');
+    expect(prompt).toContain('notices tab');
+    expect(prompt).toContain('mean Call 2');
+  });
+
+  it('says plainly when the question comes from the list, not a call', () => {
+    const prompt = systemPrompt(context, null);
+    expect(prompt).toContain('list of calls');
+    expect(prompt).not.toContain('This call');
+  });
+
+  it('still carries the rules and the data either way', () => {
+    for (const viewing of [null, { call_number: 1, tab: 'summary' }]) {
+      const prompt = systemPrompt(context, viewing);
+      expect(prompt).toContain('Answer ONLY from the JSON fund data');
+      expect(prompt).toContain('FUND DATA:');
+    }
+  });
+});
+
+describe('when the data moves mid-conversation', () => {
+  it('tells the model the snapshot beats its own earlier answer', () => {
+    // Someone approves a notice while the panel is open. The snapshot is
+    // rebuilt per question and was correct; the model repeated its previous
+    // count and called it "still", with the new figure in front of it.
+    const prompt = systemPrompt(context, { call_number: 2, tab: 'notices' });
+    expect(prompt).toContain('read fresh for this question');
+    expect(prompt).toContain('may be out of date');
+    expect(prompt).toContain('the data wins');
+  });
+});

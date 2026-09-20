@@ -39,6 +39,7 @@ export default async function CallPage({
         leaf: `Capital Call No. ${call.callNo}`,
       }}
       surface="call"
+      callNo={call.callNo}
       preparedBy={call.model.setup.Prepared_By as string | undefined}
       askConnected={askStatusForClient().connected}
     >

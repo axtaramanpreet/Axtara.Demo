@@ -22,6 +22,7 @@ export function AppShell({
   callCount,
   crumb,
   surface,
+  callNo,
   preparedBy,
   askConnected,
   children,
@@ -32,6 +33,8 @@ export function AppShell({
   callCount: number;
   crumb: Crumb;
   surface: Surface;
+  /** The call this page is about, when it is about one. */
+  callNo?: number;
   /** From the call's Fund_Setup, for the avatar. */
   preparedBy?: string | null;
   /** Whether a model endpoint is configured. Decided on the server. */
@@ -61,6 +64,7 @@ export function AppShell({
           clientId={clientId}
           fundName={fundName}
           surface={surface}
+          callNo={callNo}
           connected={askConnected}
         />
       </Suspense>

@@ -13,7 +13,7 @@
  */
 
 import { compute, num, serialToISO } from '@/engine';
-import type { CallDetail, Client, NoticeState } from '@/adapters/storage/types';
+import type { CallDetail, Client, NoticeState, NoticeStatus } from '@/adapters/storage/types';
 
 /** Roughly the point past which a snapshot stops fitting in a request. */
 const MAX_CHARS = 400_000;
@@ -93,6 +93,33 @@ function describeCall(call: CallDetail) {
     totals: result.totals,
     checks: result.checks,
     expected_output_differences: result.goldenDiffs,
+    // Counted here rather than left for the model to work out by scanning the
+    // rows. It got this wrong twice: once by counting a different call's rows,
+    // and once by repeating its own earlier count after a notice was approved
+    // mid-conversation. A number it can read cannot be miscounted.
+    notice_summary: summarise(result.rows.filter((r) => r.isActive), notices),
+  };
+}
+
+function summarise(
+  rows: { LP_ID: string }[],
+  notices: Map<string, NoticeState>,
+) {
+  const of = (status: NoticeStatus) =>
+    rows.filter((r) => noticeStatus(notices.get(r.LP_ID)) === status).map((r) => r.LP_ID);
+
+  const draft = of('draft');
+  const approved = of('approved');
+  const sent = of('sent');
+
+  return {
+    active_investors: rows.length,
+    draft: draft.length,
+    approved: approved.length,
+    sent: sent.length,
+    draft_lps: draft,
+    approved_lps: approved,
+    sent_lps: sent,
   };
 }
 

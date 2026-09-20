@@ -43,11 +43,14 @@ export function AskAxtara({
   clientId,
   fundName,
   surface,
+  callNo,
   connected,
 }: {
   clientId: string;
   fundName: string;
   surface: Surface;
+  /** The call on screen, when there is one. Resolves "this call". */
+  callNo?: number;
   /** False when no model endpoint is configured; the panel then says so. */
   connected: boolean;
 }) {
@@ -120,6 +123,9 @@ export function AskAxtara({
         body: JSON.stringify({
           clientId,
           question: text,
+          // Which call is on screen. The snapshot holds every call, so without
+          // this "this call" is the model's guess.
+          viewing: callNo === undefined ? null : { callNo, tab },
           history: existing
             .filter((t) => t.answer)
             .slice(-4)

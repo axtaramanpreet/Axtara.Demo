@@ -35,16 +35,22 @@ export function Card({
 }
 
 /**
- * The page's card grid: columns at least 560px wide, collapsing to one on
- * narrow screens. `min(100%, 560px)` is what stops the grid overflowing rather
- * than wrapping when the viewport is under 560px.
+ * The page's card grid: columns at least 620px wide, collapsing to one on
+ * narrow screens. `min(100%, 620px)` is what stops the grid overflowing rather
+ * than wrapping when the viewport is under 620px.
+ *
+ * 620 rather than the handoff's 560 because the handoff had no sidebar. With
+ * 232px taken off the left, two 560px columns still fit at 1440 — but only just,
+ * and the calls table needs ~600, so its last column sat past the edge of its
+ * own card. The table could be scrolled sideways to reach it, which on a
+ * trackpad means it simply looked cut off.
  */
 export function CardGrid({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 560px), 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 620px), 1fr))',
         gap: 16,
         maxWidth: 1200,
         alignItems: 'start',

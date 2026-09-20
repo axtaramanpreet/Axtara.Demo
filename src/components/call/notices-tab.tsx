@@ -353,15 +353,13 @@ export function NoticesTab({
         </p>
       )}
 
-      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-        <nav
-          data-noprint="1"
-          aria-label="Investors"
-          // Wide enough for a long name, its status and both its actions.
-          // Too narrow and the names all truncate; the row cannot grow past it
-          // because a row that overflows slides under the notice beside it.
-          style={{ width: 332, flex: 'none', display: 'grid', gap: 2 }}
-        >
+      <div className="notice-layout">
+        {/* Width and the narrow-screen stacking live in the stylesheet, because
+            a media query cannot be written inline. Wide enough for a long name,
+            its status and both its actions: too narrow and every name
+            truncates, and the row cannot grow past it because a row that
+            overflows slides under the notice beside it. */}
+        <nav data-noprint="1" aria-label="Investors" className="notice-rail">
           {active.map((row) => {
             const status = noticeStatusFor(call.notices, row.LP_ID);
             const here = !showAll && selected?.LP_ID === row.LP_ID;

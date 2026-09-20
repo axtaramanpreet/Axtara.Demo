@@ -481,12 +481,23 @@ describe('a tile row cannot outgrow the list it is in', () => {
   });
 
   it('gives the list room for a name, a status and both actions', () => {
-    const nav = /aria-label="Investors"[^>]*style="([^"]*)"/.exec(html);
-    expect(nav, 'no investor list').not.toBeNull();
-    const width = /width:(\d+)px/.exec(nav![1]);
+    // The width moved to the stylesheet when the list learned to stack on a
+    // narrow screen, so this reads it from there.
+    const css = readFileSync(new URL('../../../app/globals.css', import.meta.url), 'utf8');
+    const rail = /\n\.notice-rail \{([^}]*)\}/.exec(css);
+    expect(rail, 'no .notice-rail rule').not.toBeNull();
+
+    const width = /width:\s*(\d+)px/.exec(rail![1]);
     expect(width, 'the list has no width').not.toBeNull();
     // 76 for the status, 56 for the two actions, and the rest for the name.
     expect(Number(width![1])).toBeGreaterThanOrEqual(STATUS_COLUMN + 56 + 160);
+  });
+
+  it('stacks the list above the notice when they will not fit side by side', () => {
+    // Together they are wider than a tablet, and the page grew a horizontal
+    // scrollbar rather than giving way.
+    const css = readFileSync(new URL('../../../app/globals.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/@media \(max-width: 1023px\) \{[\s\S]*?\.notice-rail \{/);
   });
 });
 

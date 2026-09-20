@@ -1019,6 +1019,35 @@ input.cell:read-only {
 /* --- Print ---------------------------------------------------------------- */
 /* Notices are printed one per page; everything chrome-like disappears. */
 
+/* --- Notices layout ------------------------------------------------------- */
+/* The investor list beside the notice. Below a laptop the two together are
+   wider than the window, and the page grew a horizontal scrollbar rather than
+   giving way — so under 1024px the list sits above the notice instead. */
+
+.notice-layout {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+.notice-rail {
+  width: 332px;
+  flex: none;
+  display: grid;
+  gap: 2px;
+}
+
+@media (max-width: 1023px) {
+  .notice-layout {
+    display: block;
+  }
+  .notice-rail {
+    width: auto;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
 /* --- Ask Axtara ----------------------------------------------------------- */
 /* A command bar that rises from the bottom of the page rather than a panel
    pinned to one side: the question is about whatever is on screen, so the

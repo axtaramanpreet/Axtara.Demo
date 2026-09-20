@@ -51,7 +51,8 @@ export function systemPrompt(
     'Cite every figure to its source in brackets, e.g. [LP03 · Mgmt_Fee_Rate_Override 0.01 · SL-2024-03] or [Call 2 · Deal Z · Allocation_Basis UCC].',
     'Use the reporting currency with thousands separators.',
     'Never invent data, never give investment or legal advice, and never claim to have changed anything — this is read-only.',
-    "If useful, end with one line 'GOTO: <call_number>|<tab>' where tab is summary, output, checks or notices, to point the user at the relevant screen; otherwise omit it.",
+    "If useful, end with one line 'GOTO: <call_number>|<tab>' where tab is summary, allocation, checks or notices, to point the user at the relevant screen; otherwise omit it.",
+    'That line is an instruction to the interface, never a sentence for the reader — write it exactly in that form or leave it out.',
     '',
     'FUND DATA:',
     JSON.stringify(context),
@@ -88,17 +89,24 @@ export interface Pointer {
  * reproduces the accountant's Expected_Output.
  */
 export function takePointer(reply: string): { reply: string; pointer: Pointer | null } {
-  const match = /GOTO:\s*(\d+)\s*\|\s*(summary|output|checks|notices)/i.exec(reply);
-  if (!match) return { reply: reply.trim(), pointer: null };
+  const match = /GOTO:\s*(\d+)\s*\|\s*(summary|allocation|output|checks|notices)/i.exec(reply);
 
-  const tab = match[2].toLowerCase();
-  return {
-    reply: reply.replace(match[0], '').trim(),
-    pointer: {
-      callNo: Number(match[1]),
-      tab: tab === 'output' ? 'allocation' : (tab as Pointer['tab']),
-    },
-  };
+  const pointer = match
+    ? {
+        callNo: Number(match[1]),
+        // The handoff calls this app's Allocation tab "output".
+        tab: (match[2].toLowerCase() === 'output'
+          ? 'allocation'
+          : match[2].toLowerCase()) as Pointer['tab'],
+      }
+    : null;
+
+  // Every GOTO line goes, including one naming a tab that does not exist. It
+  // is addressed to the interface, and a reader should never see it — when it
+  // cannot be turned into a link, the answer is simply left without one.
+  const cleaned = reply.replace(/^.*\bGOTO:.*$/gim, '').replace(/\n{3,}/g, '\n\n').trim();
+
+  return { reply: cleaned, pointer };
 }
 
 /** How the link reads under the answer. */

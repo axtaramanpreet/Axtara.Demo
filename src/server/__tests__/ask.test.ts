@@ -229,3 +229,38 @@ describe('when the data moves mid-conversation', () => {
     expect(prompt).toContain('the data wins');
   });
 });
+
+describe('a GOTO line never reaches the reader', () => {
+  it('understands the tab names this app actually uses', () => {
+    // The prompt said "output" while the viewing line said "allocation", so
+    // the model wrote `GOTO: 2|allocation` — which the parser did not know,
+    // and it was printed under the answer as text.
+    const { reply, pointer } = takePointer('LP01 is allocated 1,393,719.91\nGOTO: 2|allocation');
+    expect(reply).toBe('LP01 is allocated 1,393,719.91');
+    expect(pointer).toEqual({ callNo: 2, tab: 'allocation' });
+  });
+
+  it('still accepts the handoff’s own name for that tab', () => {
+    expect(takePointer('x\nGOTO: 2|output').pointer).toEqual({ callNo: 2, tab: 'allocation' });
+  });
+
+  it('strips a line naming a tab that does not exist, rather than showing it', () => {
+    const { reply, pointer } = takePointer('Here is the answer.\nGOTO: 2|drawdown');
+    expect(reply).toBe('Here is the answer.');
+    expect(pointer).toBeNull();
+  });
+
+  it('strips a malformed one too', () => {
+    for (const junk of ['GOTO: 2', 'GOTO:', 'goto: two|notices', 'GOTO: 2 | notices please']) {
+      const { reply } = takePointer(`The answer.\n${junk}`);
+      expect(reply, junk).not.toContain('GOTO');
+      expect(reply, junk).toContain('The answer.');
+    }
+  });
+
+  it('leaves an answer that never mentioned it alone', () => {
+    const { reply, pointer } = takePointer('The fee is 2.00% per annum. [Fund_Setup]');
+    expect(reply).toBe('The fee is 2.00% per annum. [Fund_Setup]');
+    expect(pointer).toBeNull();
+  });
+});

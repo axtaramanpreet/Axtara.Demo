@@ -2,9 +2,11 @@
 
 A course in the system, from the numbers outward.
 
-Written assuming you read code but do not write React. Every claim here was
-checked against the file it describes — if a chapter and the code disagree, the
-code is right and the chapter is a bug. Say so and it gets fixed.
+Written assuming you read code but do not write React. Every calculation is
+shown twice — once as the general formula, once worked through with this
+fund's real numbers. Every claim here was checked against the file it
+describes — if a chapter and the code disagree, the code is right and the
+chapter is a bug. Say so and it gets fixed.
 
 ## The order
 
@@ -14,7 +16,7 @@ the same six investors, the same numbers, all the way through.
 
 | # | Chapter | What you can do after it |
 |---|---------|--------------------------|
-| 1 | [The engine](01-the-engine.md) | Work out any investor's share by hand, and say why the code agrees |
+| 1 | [The engine](01-the-engine.md) | Work out any investor's share by hand, and say why the code agrees. Ends with a [formula sheet](01-the-engine.md#113-the-formula-sheet) |
 | 2 | The data | Read the schema, and explain who is allowed to write what |
 | 3 | The workbook | Say what happens to a `.xlsx` between upload and screen |
 | 4 | The screens | Say which code runs on the server and which in the browser, and why |

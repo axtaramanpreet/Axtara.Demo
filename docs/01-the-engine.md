@@ -154,12 +154,28 @@ Not silently ignored. Said out loud, in the checks.
 Each component is split across the investors in proportion to a **basis** —
 commitment, unfunded, or invested capital.
 
-### Deal X, split on Commitment
-
-LP01's share:
+**The formula.** One line, and it is the same one for every component in the
+system:
 
 ```
-3,000,000 × 10,000,000 / 50,500,000 = 594,059.4059…  →  594,059.41
+                        basis(LP)
+share(LP) = round(  total × ───────────────── ,  d )
+                        Σ basis(everyone)
+```
+
+- `total` — the component amount
+- `basis(LP)` — that investor's commitment, or unfunded, or invested capital
+- `Σ basis(everyone)` — the same figure summed over every participant
+- `d` — decimal places (2 here)
+
+### Deal X, split on Commitment
+
+```
+FORMULA   share = round( total × commitment(LP) / Σ commitments , 2 )
+
+LP01      share = round( 3,000,000 × 10,000,000 / 50,500,000 , 2 )
+                = round( 594,059.405940… , 2 )
+                = 594,059.41
 ```
 
 The engine produces exactly `594059.41`. The accountant's spreadsheet says
@@ -167,12 +183,19 @@ The engine produces exactly `594059.41`. The accountant's spreadsheet says
 
 ### Deal Z, split on UCC instead
 
-Same fund, different basis. The denominator changes from 50,500,000 to
-40,700,000, and LP01's numerator from their commitment to their unfunded:
+Same formula. Swap `commitment` for `UCC` and both halves of the fraction
+change — LP01's numerator, and the denominator for everybody:
 
 ```
-1,500,000 × 8,000,000 / 40,700,000 = 294,840.2948…  →  294,840.29
+FORMULA   share = round( total × UCC(LP) / Σ UCC , 2 )
+
+LP01      share = round( 1,500,000 × 8,000,000 / 40,700,000 , 2 )
+                = round( 294,840.294840… , 2 )
+                = 294,840.29
 ```
+
+`Σ commitments` was 50,500,000. `Σ UCC` is 40,700,000. Different denominator,
+different answer, same line of code.
 
 Notice what that does: **LP03 pays less of Deal Z than of Deal X**, because they
 have already paid in a lot and have little unfunded left. That is the entire
@@ -195,6 +218,13 @@ const others = parts.filter((p) => p.id !== plug.id)
 out[plug.id] = round(total - others, d);
 ```
 
+```
+FORMULA   everyone except the plug:   share  = round( total × basis / Σ basis , d )
+          the plug:                   share  = round( total − Σ everyone else , d )
+```
+
+The plug's line has **no fraction in it**. That is the whole trick.
+
 Here the plug is LP04, set in the fixture as `Rounding_Plug_LP_ID`. Deal X:
 
 ```
@@ -204,10 +234,12 @@ LP03  297,029.70
 LP05  742,574.26
 GP01   29,702.97
       ──────────
-      2,108,910.89
+      2,108,910.89   ← Σ everyone else
 
-LP04 = 3,000,000.00 − 2,108,910.89 = 891,089.11   ← the remainder, not a share
+LP04 = round( 3,000,000.00 − 2,108,910.89 , 2 ) = 891,089.11
 ```
+
+LP04 is not given a share. LP04 is given the **remainder**.
 
 It ties to the cent, every time, and always in the same place. The engine says
 so in a check:
@@ -227,7 +259,13 @@ a failing check. [allocate.ts:50](../src/engine/allocate.ts#L50)
 
 ## 1.7 Step 3 — the fee, then offsets against it
 
-Per investor: `basis × rate × period`, rounded.
+```
+FORMULA   gross_fee(LP) = round( basis(LP) × rate(LP) × period , d )
+```
+
+- `basis(LP)` — commitment here, but can be invested capital
+- `rate(LP)` — annual rate, **per investor** (see the three rules below)
+- `period` — fraction of a year. `0.25` = one quarter
 
 Three rules, in this order of precedence
 ([compute.ts:230](../src/engine/compute.ts#L230)):
@@ -240,25 +278,42 @@ Three rules, in this order of precedence
 A blank or zero override means "no override", **not** "0%". Only the exempt flag
 means zero.
 
-| | Basis | Rate | × 0.25 | Gross fee |
-|---|---:|---:|---|---:|
-| LP01 | 10,000,000 | 2% | | 50,000.00 |
-| LP02 | 7,500,000 | 2% | | 37,500.00 |
-| LP03 | 5,000,000 | **1%** ← side letter | | 12,500.00 |
-| LP04 | 15,000,000 | 2% | | 75,000.00 |
-| LP05 | 12,500,000 | 2% | | 62,500.00 |
-| GP01 | 500,000 | **exempt** | | 0.00 |
+| | Basis | × Rate | × Period | = Gross fee |
+|---|---:|---:|---:|---:|
+| LP01 | 10,000,000 | 0.02 | 0.25 | 50,000.00 |
+| LP02 | 7,500,000 | 0.02 | 0.25 | 37,500.00 |
+| LP03 | 5,000,000 | **0.01** ← side letter | 0.25 | 12,500.00 |
+| LP04 | 15,000,000 | 0.02 | 0.25 | 75,000.00 |
+| LP05 | 12,500,000 | 0.02 | 0.25 | 62,500.00 |
+| GP01 | 500,000 | **0** ← exempt | 0.25 | 0.00 |
 | | | | | **237,500.00** |
+
+Worked out longhand, LP03:
+
+```
+gross_fee(LP03) = round( 5,000,000 × 0.01 × 0.25 , 2 ) = 12,500.00
+```
 
 ### The offset
 
-The GP received a 50,000 transaction fee and shares it back. It is allocated
-**pro-rata to the gross fee**, not to commitment:
+The GP received a 50,000 transaction fee and shares it back. It runs through
+the **same `allocate()` function** as a component — the only thing that changes
+is what goes in the `basis` slot. Here the basis is the gross fee itself:
 
 ```
-LP01: 50,000 × 50,000 / 237,500 = 10,526.3157…  →  10,526.32
-LP01 net fee = 50,000 − 10,526.32 = 39,473.68
+FORMULA   offset(LP) = round( offset_total × gross_fee(LP) / Σ gross_fee , d )
+          net_fee(LP) = round( gross_fee(LP) − offset(LP) , d )
+
+LP01      offset  = round( 50,000 × 50,000 / 237,500 , 2 )
+                  = round( 10,526.315789… , 2 )
+                  = 10,526.32
+
+          net_fee = round( 50,000.00 − 10,526.32 , 2 )
+                  = 39,473.68
 ```
+
+`Allocation_Method` on the offset picks the basis slot: gross fee (default),
+commitment, or invested capital. Same formula, different denominator.
 
 And only fee **payers** share it — [compute.ts:250](../src/engine/compute.ts#L250):
 
@@ -276,7 +331,9 @@ If offsets ever exceed the gross fee, the net fee goes negative. That is a
 
 ## 1.8 Step 4 — rolling it up, and the distinction that matters most
 
-Per investor: components + net fee = total called.
+```
+FORMULA   total_call(LP) = round( Σ component_shares(LP) + net_fee(LP) , d )
+```
 
 For LP01:
 
@@ -301,23 +358,48 @@ a `Reduces_Unfunded` flag per component.
 Some money you call **counts against** what the investor promised. Some is
 called **on top of it**.
 
-Organizational Expense is flagged `'N'`. So of LP01's 1,393,719.91:
+```
+FORMULA   reduces(LP) = round( Σ shares of components flagged Reduces_Unfunded='Y'
+                               + net_fee(LP) if the fee is flagged 'Y' , d )
+
+          outside(LP) = round( total_call(LP) − reduces(LP) , d )
+```
+
+Note it **adds up the flagged ones**. It does not subtract the unflagged ones.
+Same answer here, but the code builds it that way so a new unflagged component
+cannot quietly slip inside commitment.
+
+Organizational Expense is flagged `'N'`, the fee block is flagged `'Y'`. LP01:
 
 ```
-reduces unfunded = 1,393,719.91 − 29,702.97 = 1,364,016.94
-called outside   =                  29,702.97
+Deal X                  594,059.41   Y
+Deal Y                  396,039.60   Y
+Deal Z                  294,840.29   Y
+Partnership Expense      39,603.96   Y
+Organizational Expense       —       N  ← left out
+net fee                  39,473.68   Y
+                      ────────────
+reduces               1,364,016.94
+
+outside = 1,393,719.91 − 1,364,016.94 = 29,702.97
 ```
 
 And the balances roll forward:
 
 ```
-Closing UCC       = 8,000,000.00 − 1,364,016.94 = 6,635,983.06
-Closing paid-in   = 2,000,000.00 + 1,393,719.91 = 3,393,719.91
+FORMULA   closing_UCC(LP)     = round( opening_UCC(LP)     − reduces(LP)    , d )
+          closing_paid_in(LP) = round( opening_paid_in(LP) + total_call(LP) , d )
+
+LP01      closing_UCC     = round( 8,000,000.00 − 1,364,016.94 , 2 ) = 6,635,983.06
+          closing_paid_in = round( 2,000,000.00 + 1,393,719.91 , 2 ) = 3,393,719.91
 ```
 
-Note the asymmetry: **everything** they pay increases paid-in capital. Only the
-*inside* part decreases unfunded. Get this backwards and every investor's
-remaining commitment is wrong forever after.
+Look at what each line uses. Unfunded is reduced by **`reduces`**. Paid-in is
+increased by **`total_call`**. Two different numbers.
+
+That asymmetry is the point: **everything** they pay increases paid-in capital,
+but only the *inside* part decreases unfunded. Get it backwards and every
+investor's remaining commitment is wrong forever after.
 
 The management fee has its own `Reduces_Unfunded` flag on the fee block — here
 it is `'Y'`, so the net fee is inside.
@@ -326,14 +408,25 @@ it is `'Y'`, so the net fee is inside.
 
 ## 1.9 Step 5 and 6 — proving it
 
-The engine does not trust itself. It re-derives its own totals and checks they
-agree:
+The engine does not trust itself. It re-derives its own totals a second way and
+checks the two agree:
+
+```
+FORMULA   Σ closing_UCC      must equal   Σ opening_UCC     − Σ reduces
+          Σ closing_paid_in  must equal   Σ opening_paid_in + Σ total_call
+          Σ allocated        must equal   the component amount   (per component)
+          Σ org expense      must be ≤    Org_Expense_Cap
+```
+
+Run against our fund:
 
 ```
 ok: Unfunded roll-forward ties: 40,700,000.00 − 6,887,500.00 = 33,812,500.00.
 ok: Paid-in roll-forward ties: 9,800,000.00 + 7,037,500.00 = 16,837,500.00.
 ok: Organizational expense 150,000.00 vs cap 1,500,000.00.
 ```
+
+"Ties" means the two sides matched. The tolerance is `1e-6` — well under a cent.
 
 Then the part that makes this trustworthy rather than merely tidy.
 
@@ -450,6 +543,82 @@ npx vitest run src/engine/__tests__/golden.test.ts
 
 That loop — move an input, watch what moves with it — is the whole engine.
 Everything else is plumbing.
+
+---
+
+## 1.13 The formula sheet
+
+Every formula in this chapter, in one place. `d` = decimal places, 2 unless the
+fund says otherwise.
+
+### Splitting one component across investors
+
+```
+                             basis(LP)
+share(LP)  =  round(  total × ──────────────  ,  d )
+                            Σ basis(all)
+
+the plug   =  round(  total − Σ everyone else's shares  ,  d )
+```
+
+`basis` is commitment, unfunded (UCC), or invested capital — chosen per
+component by `Allocation_Basis`.
+
+### The management fee
+
+```
+rate(LP)       =  0                        if exempt
+               =  Mgmt_Fee_Rate_Override   if that override is > 0
+               =  the fund default         otherwise
+
+gross_fee(LP)  =  round( basis(LP) × rate(LP) × period , d )
+```
+
+### An offset against the fee
+
+```
+                                       gross_fee(LP)
+offset(LP)   =  round( offset_total × ──────────────── , d )      ← fee payers only
+                                      Σ gross_fee
+
+net_fee(LP)  =  round( gross_fee(LP) − offset(LP) , d )
+```
+
+### What each investor owes
+
+```
+total_call(LP)  =  round( Σ share(LP, each component) + net_fee(LP) , d )
+
+reduces(LP)     =  round( Σ share(LP, components flagged Y)
+                          + net_fee(LP) if the fee is flagged Y , d )
+
+outside(LP)     =  round( total_call(LP) − reduces(LP) , d )
+```
+
+### Where they stand afterwards
+
+```
+closing_UCC(LP)      =  round( opening_UCC(LP)     − reduces(LP)    , d )
+closing_paid_in(LP)  =  round( opening_paid_in(LP) + total_call(LP) , d )
+```
+
+### The checks
+
+```
+Σ closing_UCC      ==  Σ opening_UCC     − Σ reduces
+Σ closing_paid_in  ==  Σ opening_paid_in + Σ total_call
+Σ allocated        ==  component amount              (each component)
+Σ org expense      <=  Org_Expense_Cap
+every figure       ==  the accountant's Expected_Output tab, to half a cent
+```
+
+### Rounding
+
+```
+round(x, d)  =  sign(x) × ⌊ |x| × 10^d + 1e-9 + 0.5 ⌋ / 10^d
+```
+
+The `1e-9` is not cosmetic. Without it, `1.005` rounds **down**. See §1.10.
 
 ## What is in this chapter's folder
 

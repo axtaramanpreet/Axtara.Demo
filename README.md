@@ -50,6 +50,12 @@ Postgres skip loudly without it, which is not the same as passing.
 
 After changing a migration, regenerate the types: `npm run db:types`.
 
+## Learning it
+
+`docs/` is a course in this system, in the order the numbers actually flow —
+one real capital call from spreadsheet to investor inbox. Start at
+[docs/README.md](docs/README.md).
+
 ## How it is put together
 
 ```

@@ -17,7 +17,7 @@ import type { CallDetail, CallSources } from '@/adapters/storage/types';
 // Type-only, so this does not pull SheetJS into the bundle; the module itself
 // is imported on demand when a workbook is actually opened.
 import type { WorkbookLike, WorkbookReader } from '@/adapters/workbook/parse-workbook';
-import { fmt, missingForReview, num, serialToISO, whyNotReady } from '@/engine';
+import { fmt, num, serialToISO } from '@/engine';
 import { nextCallFrom } from '@/engine/carry-forward';
 import type { CallModel, ComponentRow, LPRow, OffsetRow, TransferRow } from '@/engine/types';
 import { Button } from '@/components/ui/button';
@@ -172,15 +172,6 @@ export function SetupScreen({
     setStep('lps');
   }
 
-  /**
-   * What the call still needs before calculating it means anything.
-   *
-   * Recomputed as the model changes, so the button comes alive the moment the
-   * last gap is filled rather than on a save or a step change.
-   */
-  const missing = missingForReview(model);
-  const notReady = whyNotReady(missing);
-
   async function onReviewAllocation() {
     if (dirty.current) await save(model, sources);
     setOverlay({
@@ -242,47 +233,11 @@ export function SetupScreen({
                 Delete call
               </Button>
             )}
-            <Button
-              variant="primary"
-              onClick={onReviewAllocation}
-              disabled={missing.length > 0}
-              title={notReady ?? 'Run the calculation and open the call'}
-            >
+            <Button variant="primary" onClick={onReviewAllocation}>
               Review allocation ›
             </Button>
           </div>
         </div>
-
-        {missing.length > 0 && (
-          <p
-            data-noprint="1"
-            style={{
-              margin: '14px 0 0',
-              fontSize: 13,
-              color: 'var(--muted-foreground)',
-              textWrap: 'pretty',
-            }}
-          >
-            Before this can be calculated it needs{' '}
-            {missing.map((m, i) => (
-              <span key={m.what}>
-                {i > 0 && (i === missing.length - 1 ? ' and ' : ', ')}
-                {/* Each gap goes to the step that fixes it: being told what is
-                    wrong and left to find it is half an answer. */}
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setStep(m.step);
-                  }}
-                >
-                  {m.what}
-                </a>
-              </span>
-            ))}
-            .
-          </p>
-        )}
 
         {status && (
           <div

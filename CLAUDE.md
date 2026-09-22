@@ -142,4 +142,5 @@ that address.
 
 - `main` and `feat/capital-call-engine` are both on GitHub (`origin`).
 - Production deploys are done with the Vercel CLI (`vercel --prod`). Do not
-  deploy after a change: commit, report, and wait until the user says deploy.
+  commit or deploy after a change: verify, leave it uncommitted, report, and
+  ask. Commit only when the user says commit; deploy only when they say deploy.

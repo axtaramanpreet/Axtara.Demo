@@ -11,8 +11,9 @@ React 19, TypeScript, Supabase). Per fund it holds a history of capital calls,
 takes the accountant's input workbook or manual entry, allocates each call
 across investors, runs tie-out checks, and produces one notice per investor
 through Draft → Approved → Sent. Production is `https://fund.axtara.ai` on
-Vercel. `docs/` is a chapter-by-chapter walkthrough of the system; chapter 1
-covers the engine maths with worked figures.
+Vercel. `docs/` is a seven-chapter walkthrough of the system (engine, data,
+workbook, screens, notices, Ask Axtara, running it), each ending with the gaps
+found while writing it.
 
 ## Commands
 

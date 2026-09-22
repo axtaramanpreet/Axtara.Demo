@@ -632,7 +632,7 @@ The `1e-9` is not cosmetic. Without it, `1.005` rounds **down**. See §1.10.
 | [carry-forward.ts](../src/engine/carry-forward.ts) | 87 | next call's opening balances = this call's closing |
 | [allocate.ts](../src/engine/allocate.ts) | 73 | pro-rata + the plug |
 | [empty-call.ts](../src/engine/empty-call.ts) | 65 | a blank new call |
-| [summary.ts](../src/engine/summary.ts) | 47 | counts for the AI to read — chapter 6 |
+| [summary.ts](../src/engine/summary.ts) | 47 | splits a call into against commitment, outside commitment and net fee, for the summary and the drawdown chart |
 
 **Next:** Chapter 2 — the data. Where these numbers live, and who is allowed to
 touch them.

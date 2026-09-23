@@ -3,7 +3,7 @@ import { compute } from '@/engine';
 import { ILLUSTRATIVE_FUND } from '@/engine/fixtures/illustrative-fund';
 import { SCENARIOS } from '@/engine/fixtures/scenarios';
 import type { NoticeState } from '@/adapters/storage/types';
-import { actionableLpIds, canApprove, sendableLpIds } from '../notice-policy';
+import { actionableLpIds, approvableLpIds, canApprove, sendableLpIds } from '../notice-policy';
 
 const notice = (lpId: string, status: NoticeState['status']): NoticeState => ({
   investorId: `id-${lpId}`,
@@ -90,5 +90,37 @@ describe('who can be acted on', () => {
 
   it('ignores a requested investor who is not on this call', () => {
     expect(actionableLpIds(compute(ILLUSTRATIVE_FUND), ['LP01', 'LP99'])).toEqual(['LP01']);
+  });
+});
+
+describe('deciding what may be approved', () => {
+  const result = compute(ILLUSTRATIVE_FUND);
+  // A call part-way through issuing: one investor already told, one approved,
+  // the rest never looked at (no row yet counts as draft).
+  const notices = [notice('LP01', 'sent'), notice('LP02', 'approved'), notice('LP03', 'draft')];
+
+  it('approves only drafts when none is named', () => {
+    // "Approve all" sends no names. It once meant every active investor, which
+    // took LP01 — already sent — back to approved, so the next send issued it
+    // a second time over its own record.
+    const { approve, skipped } = approvableLpIds(result, notices);
+    expect(approve).toEqual(['LP03', 'LP04', 'LP05', 'GP01']);
+    expect(skipped).toEqual([]);
+  });
+
+  it('never takes a sent notice back to approved, even when asked directly', () => {
+    const { approve, skipped } = approvableLpIds(result, notices, ['LP01', 'LP03']);
+    expect(approve).toEqual(['LP03']);
+    expect(skipped).toEqual(['LP01']);
+  });
+
+  it('leaves an approved notice as it is, rather than re-stamping it', () => {
+    const { approve, skipped } = approvableLpIds(result, notices, ['LP02']);
+    expect(approve).toEqual([]);
+    expect(skipped).toEqual(['LP02']);
+  });
+
+  it('reports a requested investor who is not on this call', () => {
+    expect(approvableLpIds(result, notices, ['LP99']).skipped).toEqual(['LP99']);
   });
 });

@@ -259,6 +259,17 @@ async function buildDrawdown(
   let cumulative = 0;
   let commitments = 0;
 
+  // Every call is loaded at once rather than one after another. Each getCall is
+  // two round trips to the database, and awaited inside the loop they queued up:
+  // a fund with ten calls waited on twenty trips in a row before Home drew.
+  const details = new Map(
+    await Promise.all(
+      ordered
+        .filter((c) => c.stage !== 'not_started')
+        .map(async (c) => [c.id, await repo.getCall(c.id)] as const),
+    ),
+  );
+
   for (const call of ordered) {
     if (call.stage === 'not_started') {
       columns.push({
@@ -273,7 +284,7 @@ async function buildDrawdown(
       continue;
     }
 
-    const detail = await repo.getCall(call.id);
+    const detail = details.get(call.id);
     if (!detail) continue;
 
     const result = compute(detail.model);

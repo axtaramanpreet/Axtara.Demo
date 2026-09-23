@@ -151,6 +151,27 @@ describe('a notice as a PDF', () => {
     expect(firstOutOfOrder(text, sequence)).toBeNull();
   });
 
+  it('prints every footnote mark as its number, past three as well', async () => {
+    // The marks are superscript characters (¹ ² ³ ⁴…). The PDF's built-in
+    // Helvetica only has ¹ ² ³; from ⁴ on it kept the low byte of the code
+    // point, so ⁴ (U+2074) printed as "t", ⁵ as "u", and so on. The label
+    // check above still passed, because the label was all there — the stray
+    // letter sat after it. LP01's notice has four footnote marks, so its
+    // outside-commitment line is the one that showed it.
+    const text = textOf(await renderNoticePdf(notice, 'draft'));
+    const number = (mark: string) => String('¹²³⁴⁵⁶⁷⁸⁹'.indexOf(mark) + 1);
+
+    const lines = [...notice.inside, ...notice.outside];
+    expect(lines.some((l) => l.mark === '⁴')).toBe(true);
+
+    for (const line of lines) {
+      expect(text, `${line.label} should carry note ${number(line.mark)}`).toContain(
+        `${line.label} ${number(line.mark)}`,
+      );
+    }
+    expect(text).not.toContain('(outside commitment) t');
+  });
+
   it('carries the letter the engine composed, not a copy of its own', async () => {
     // The wording lives in buildNotice so the page and the PDF cannot disagree.
     // If this file ever grows its own paragraph, this fails.

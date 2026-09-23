@@ -77,6 +77,8 @@ const styles = StyleSheet.create({
   rowAmount: { textAlign: 'right' },
 
   notes: { marginTop: 22, fontSize: 7.5, color: '#6b6b6b' },
+  // A footnote number, raised and smaller, drawn from plain digits.
+  mark: { fontSize: 6, verticalAlign: 'super' },
   note: { flexDirection: 'row', marginBottom: 3 },
   noteMark: { width: 14 },
 
@@ -101,19 +103,41 @@ function amountOf(line: { amt: string; neg?: boolean }): string {
   return line.neg ? `(${line.amt.replace(/[()]/g, '')})` : line.amt;
 }
 
+/**
+ * A footnote mark as the digits it stands for: `⁴` -> `4`, `(10)` -> `10`.
+ *
+ * The notice carries its marks as superscript characters, which the page shows
+ * as they are. The PDF cannot: its built-in Helvetica encodes only ¹ ² ³, and
+ * anything past that is written as the low byte of its code point — ⁴ (U+2074)
+ * came out as "t". So the PDF prints the number and raises it itself, which
+ * works for every footnote, in any font, and for notices already sent whose
+ * frozen payload still holds the old characters.
+ */
+function markDigits(mark: string): string {
+  const at = '¹²³⁴⁵⁶⁷⁸⁹'.indexOf(mark);
+  if (at >= 0) return String(at + 1);
+  return mark.replace(/[()]/g, '');
+}
+
 function Line({
   label,
+  mark,
   amount,
   strong,
 }: {
   label: string;
+  /** Footnote mark, as the notice carries it. */
+  mark?: string;
   amount: string;
   strong?: boolean;
 }) {
   const text = strong ? styles.bold : undefined;
   return (
     <View style={strong ? [styles.row, styles.rowStrong] : styles.row}>
-      <Text style={[styles.rowLabel, ...(text ? [text] : [])]}>{label}</Text>
+      <Text style={[styles.rowLabel, ...(text ? [text] : [])]}>
+        {mark ? `${label} ` : label}
+        {mark ? <Text style={styles.mark}>{markDigits(mark)}</Text> : null}
+      </Text>
       <Text style={[styles.rowAmount, ...(text ? [text] : [])]}>{amount}</Text>
     </View>
   );
@@ -189,7 +213,7 @@ export function NoticeDocument({
 
         <Text style={styles.heading}>A. Purpose of this Capital Call</Text>
         {notice.inside.map((line, i) => (
-          <Line key={`in-${i}`} label={`${line.label} ${line.mark}`} amount={amountOf(line)} />
+          <Line key={`in-${i}`} label={line.label} mark={line.mark} amount={amountOf(line)} />
         ))}
         <Line
           label="Subtotal — called against capital commitment"
@@ -197,7 +221,7 @@ export function NoticeDocument({
           strong
         />
         {notice.outside.map((line, i) => (
-          <Line key={`out-${i}`} label={`${line.label} ${line.mark}`} amount={amountOf(line)} />
+          <Line key={`out-${i}`} label={line.label} mark={line.mark} amount={amountOf(line)} />
         ))}
         <Line label="Total Amount Called" amount={notice.total} strong />
 

@@ -18,7 +18,7 @@
  */
 
 import { buildNotice, compute, round } from '@/engine';
-import { actionableLpIds, canApprove, sendableLpIds } from './notice-policy';
+import { approvableLpIds, canApprove, sendableLpIds } from './notice-policy';
 import { createServiceSupabase } from '@/adapters/storage/supabase-client';
 import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
 import type { SupabaseClient } from '@/adapters/storage/supabase-client';
@@ -98,8 +98,10 @@ export async function approveNotices(callId: string, lpIds?: string[]) {
   const decision = canApprove(result.checks);
   if (!decision.ok) throw new ActionError(decision.reason, 409);
 
-  const targets = actionableLpIds(result, lpIds);
-  if (!targets.length) throw new ActionError('There are no notices to approve.', 400);
+  // Drafts only, so approving can never reach a notice that has already gone
+  // out and put it back in line to be sent again.
+  const { approve: targets, skipped } = approvableLpIds(result, call.notices, lpIds);
+  if (!targets.length) throw new ActionError('There are no draft notices to approve.', 400);
 
   const service = createServiceSupabase();
   const investors = await investorIdsByLp(service, call.clientId, targets);
@@ -117,8 +119,8 @@ export async function approveNotices(callId: string, lpIds?: string[]) {
   );
   if (error) throw new ActionError(error.message, 400);
 
-  await audit(service, call, user.id, 'notices.approved', { lpIds: targets });
-  return { approved: targets.length };
+  await audit(service, call, user.id, 'notices.approved', { lpIds: targets, skipped });
+  return { approved: targets.length, skipped };
 }
 
 /** Send a notice back to draft. Only possible while it has not gone out. */

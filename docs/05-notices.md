@@ -183,14 +183,16 @@ missing before real use (§5.9).
 1. check you're signed in and allowed to write this call     (chapter 2 §2.5)
 2. compute() from stored inputs
 3. canApprove(checks)?  any fail → 409, refused
-4. targets = actionableLpIds(result, lpIds)
-             lpIds given    → those, if they're active on the call
-             lpIds omitted  → every active investor
+4. approvableLpIds(result, notices, lpIds)
+             DRAFTS ONLY, and only investors active on the call
+             lpIds given    → those that are drafts; the rest listed as skipped
+             lpIds omitted  → every draft ("Approve all")
 5. upsert notices: status='approved', approved_at=now, approved_by=you
-6. audit_log: 'notices.approved'
+6. audit_log: 'notices.approved', with what was skipped
 ```
 
-Step 4 has a problem when `lpIds` is left out. See §5.9, gap 1.
+Drafts only is a fix. Step 4 used to take every active investor, sent ones
+included. See §5.9, fixed gap 1.
 
 `revertNotices(callId, lpIds)` sets status back to `draft` and clears
 `approved_at` and `approved_by`, with one guard:
@@ -244,6 +246,18 @@ copy the amount out of it.
 read `NoticeData`, so the figures can't disagree. They're laid out separately,
 so they can **look** a bit different. `notice-pdf.test.ts` checks that every
 figure in `NoticeData` reaches the PDF, which is the part that matters.
+
+**Footnote marks are printed as raised digits.** The notice carries them as
+superscript characters (`¹ ² ³ ⁴`), which the screen shows as they are. The PDF
+uses the built-in Helvetica font, which only has `¹ ² ³`. Past that it wrote the
+last byte of the character's code, so `⁴` (U+2074) came out as the letter `t`,
+`⁵` as `u`, and so on. So the PDF turns each mark back into its number and
+raises it itself (`markDigits()`). That also works for notices already sent,
+whose saved copy still holds the old characters.
+
+The same limit applies to **any** character outside Western European. An
+investor or fund name in Polish, Chinese or Arabic would garble the same way.
+The complete fix is to embed a real font file (see §5.9, gap 7).
 
 **The stamp in the corner:**
 
@@ -373,38 +387,47 @@ npx vitest run src/server src/components/call
 
 ## 5.9 Honest gaps
 
-I found these while writing this chapter. None of them is fixed.
+I found these while writing this chapter. Gap 1 is fixed; the rest aren't.
 
-**1. "Approve all" can put a sent notice back to Approved, and then it can be
-sent again. This is the serious one.**
+**1. Fixed: "Approve all" could put a sent notice back to Approved.**
 
-I found this by reading the code. **I haven't reproduced it**, because Docker
-wasn't running. Here's the path:
+This one was serious, so it was fixed rather than just listed. Kept here so the
+reasoning isn't lost.
+
+**What happened.** "Approve all" sends no `lpIds`. Approve then took **every**
+active investor, sent ones included, and set them to `approved`. The database
+trigger allowed that, because it froze a sent notice's letter and timestamp but
+not its status. Once the row said `approved`, the trigger stopped protecting it
+at all. The next Send overwrote the letter, the timestamp and the snapshot, and
+emailed the investor a second time.
+
+**Reproduced** against the local database, following exactly what the app does:
 
 ```
-a call where LP01 is SENT and LP02 is still DRAFT
-  → the toolbar shows "Approve 1 draft"
-  → it calls approve with NO lpIds                     (notices-tab.tsx)
-  → actionableLpIds() returns EVERY active investor,   (notice-policy.ts)
-    with no check on what state they're in
-  → upsert sets LP01 to status='approved'
-  → protect_sent_notice allows that, because it only   (immutability.sql)
-    freezes payload, sent_at, result_id and sent_to_email, not status
-  → LP01 is now "approved" and still carries its old sent_at and payload
-  → "Send" now includes LP01
-  → old.status is 'approved', not 'sent', so the trigger no longer protects it
-  → LP01's payload and sent_at are overwritten, and LP01 is emailed a second time
+before        sent       30 Sep 09:00   ORIGINAL
+Approve all   approved   30 Sep 09:00   ORIGINAL      ← sent notice "approved" again
+Send          sent       23 Sep 13:37   OVERWRITTEN   ← new time, new letter, new snapshot
 ```
 
-`revertNotices` has a `.neq('status', 'sent')` guard. `approveNotices` doesn't.
-The fix has two halves:
+**Fixed in two places**, so it takes two separate mistakes to happen again:
 
-- approve only drafts, the way revert only touches non-sent notices
-- make the trigger refuse any change of `status` away from `'sent'`, so the
-  database holds the line even if the app gets it wrong again
+- **The app:** `approvableLpIds()` in
+  [notice-policy.ts](../src/server/notice-policy.ts) approves **drafts only**.
+  Anything named that isn't a draft comes back as `skipped`.
+- **The database:**
+  [sent_is_final.sql](../supabase/migrations/20260923120000_sent_is_final.sql)
+  makes `protect_sent_notice` refuse **any** status change away from `sent`.
+  That holds even for the service-role key.
 
-It's also why "Approve all" resets `approved_at` on notices that were already
-approved.
+This deliberately removed an older rule, *"a mis-send can still be walked
+back"*. Nothing in the app used it. A notice that went to the wrong address is a
+**delivery** problem (the `email_*` columns stay writable for that), not a
+reason to un-issue it.
+
+**Tests:** 4 in [notice-policy.test.ts](../src/server/__tests__/notice-policy.test.ts)
+and 3 in [immutability.test.sql](../supabase/tests/immutability.test.sql). The
+database tests were run against the **old** rule first, and failed, so they're
+known to catch it.
 
 **2. A failed email can't be retried.** The code comment says *"the Notices tab
 reads these columns and offers a retry."* There's no retry action. The API
@@ -430,6 +453,11 @@ same gap as chapter 4 §4.10, gap 4.
 server, so React doesn't complain. But the date follows the server's zone: UTC
 on Vercel, IST on your laptop. A notice sent just after midnight UTC could say
 different dates depending on where it was rendered.
+
+**7. The PDF font only covers Western European characters.** See §5.5. A name
+with other characters would print as garbage, and the notice would still look
+finished. Embedding a Unicode font (`Font.register` in @react-pdf) fixes it for
+everything at once.
 
 ---
 

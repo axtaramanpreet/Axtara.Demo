@@ -4,7 +4,7 @@ Chapter 1 was the maths. This chapter is **where the numbers live, and who is
 allowed to change them.**
 
 The database is Postgres, hosted by Supabase. Everything about its shape is in
-12 files in [supabase/migrations/](../supabase/migrations/). A **migration** is
+14 files in [supabase/migrations/](../supabase/migrations/). A **migration** is
 a SQL file that changes the database one step. They run in date order, oldest
 first, and never get edited after they've run. Each fix is a new file.
 
@@ -359,7 +359,7 @@ later doesn't move the timestamp.
 | `call_register`, `call_components`, `call_fee_offsets`, `call_transfers`, `call_expected_output` | insert, update, delete |
 | `calls` | update, delete |
 | `call_results` | update, delete — **always**, locked or not |
-| `notices` (sent) | changing `payload`, `sent_at`, `result_id`, `sent_to_email` |
+| `notices` (sent) | changing `payload`, `sent_at`, `result_id`, `sent_to_email`, and moving the status away from `sent` ([sent_is_final.sql](../supabase/migrations/20260923120000_sent_is_final.sql)) |
 | `audit_log` | update, delete — **always** |
 
 The error has a code, `23001` (Postgres's name for it is `restrict_violation`).
@@ -502,10 +502,10 @@ select distinct on (call_id) … order by call_id, computed_at desc
 
 ```
 FORMULA
-  total_commitments          = Σ commitment       ┐
-  paid_in_capital            = Σ opening_paid_in  │ from the LATEST call's
-  unfunded_commitment        = Σ opening_ucc      │ register, active LPs only
-  investors                  = count              ┘
+  total_commitments          = Σ commitment       ┐ from the register of the
+  paid_in_capital            = Σ opening_paid_in  │ NEWEST CALL THAT HAS ONE
+  unfunded_commitment        = Σ opening_ucc      │ (at least one active LP),
+  investors                  = count              ┘ active LPs only
 
   called_to_date             = Σ snapshot.total    ┐ from ISSUED (locked)
   called_against_commitment  = Σ snapshot.reduces  ┘ calls only
@@ -527,6 +527,14 @@ The fix migration explains why unfunded comes from the register and not from
 "commitments minus what we called": the fund already had 9.8m paid in before
 this system existed. The first version ignored that and showed all 50.5m as
 still unfunded.
+
+**Why "that has one".** It used to read the newest call, full stop. A new call
+starts empty, so pressing *New capital call* made the card read an empty
+register: every line 0.00, and the chart saying *"27.9% of USD 0"*.
+[position_from_set_up_call.sql](../supabase/migrations/20260924090000_position_from_set_up_call.sql)
+skips calls with no active investor yet, and `latest_call_no` names the call the
+figures came from. Tested in
+[client_positions.test.sql](../supabase/tests/client_positions.test.sql).
 
 Draft calls are left out of `called_to_date` on purpose. Their figures aren't
 stored (§2.1), so only money that was actually called gets counted.
@@ -568,19 +576,17 @@ too.)
 
 ## 2.12 Do it yourself
 
-Docker wasn't running while I wrote this, so I **haven't run these**. They're
-standard commands for this repo, but check them yourself.
+Both of these were run against the local database while writing this chapter.
 
 ### Watch the database refuse
 
 ```bash
 npm run db:start
-npm run db:reset
 npm run db:test
 ```
 
-`db:test` runs 46 **pgTAP** tests (tests written in SQL, run inside the
-database) from [supabase/tests/](../supabase/tests/). Open
+`db:test` runs 55 **pgTAP** tests (tests written in SQL, run inside the
+database) from [supabase/tests/](../supabase/tests/). All 55 pass. Open
 [immutability.test.sql](../supabase/tests/immutability.test.sql) next to the
 output. It sends a notice, then tries to edit the register:
 
@@ -598,8 +604,11 @@ the database **refuses**.
 
 ### Look at the stage view yourself
 
+`psql` isn't installed on your Mac, so this runs it inside the database's own
+Docker container:
+
 ```bash
-psql postgresql://postgres:postgres@127.0.0.1:54322/postgres
+docker exec -it supabase_db_Axtara.Fund psql -U postgres -d postgres
 ```
 
 ```sql
@@ -608,12 +617,17 @@ select call_no, active_investors, components, notices_sent, stage
  where call_id = '00000000-0000-4000-8000-0000000000a2';
 ```
 
-That's the seeded Call 2 from §2.10. Expect 6 active investors, 5 components,
-0 sent, and `in_progress`.
+That's the seeded Call 2 from §2.10. You get:
+
+```
+ call_no | active_investors | components | notices_sent |    stage
+---------+------------------+------------+--------------+-------------
+       2 |                6 |          5 |            0 | in_progress
+```
 
 This connects as `postgres`, the database superuser, so **RLS doesn't apply**
 here. You'll see every firm's data. That's the view the service role key gets,
-and it's why that key is dangerous.
+and it's why that key is dangerous. `\q` to leave.
 
 ---
 
@@ -629,6 +643,8 @@ and it's why that key is dangerous.
 | [relax_input_validation.sql](../supabase/migrations/20260917120500_relax_input_validation.sql) | database = structure, engine = rules |
 | [position_paid_in.sql](../supabase/migrations/20260917120600_position_paid_in.sql) | fund position fixed to use the register |
 | [notice_delivery.sql](../supabase/migrations/20260919090000_notice_delivery.sql) | sent ≠ delivered |
+| [sent_is_final.sql](../supabase/migrations/20260923120000_sent_is_final.sql) | a sent notice can't be moved out of `sent` (chapter 5 §5.9) |
+| [position_from_set_up_call.sql](../supabase/migrations/20260924090000_position_from_set_up_call.sql) | fund position reads the newest call that has a register (§2.10) |
 | the other 4 migrations | small additions: delete an empty fund, optional setup fields, GP name, signatory |
 | [supabase-client.ts](../src/adapters/storage/supabase-client.ts) | the three clients |
 | [supabase-repository.ts](../src/adapters/storage/supabase-repository.ts) | every read, and the one save |

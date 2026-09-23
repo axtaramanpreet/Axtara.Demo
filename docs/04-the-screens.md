@@ -356,10 +356,10 @@ after a call is sent, that call's screen shows the new figures while the
 investor's notice (`payload`, chapter 2 §2.6) shows the old ones. The snapshot
 exists. The screen just doesn't read it.
 
-**5. The Home page loads calls one at a time.** `buildDrawdown` does
-`await repo.getCall(call.id)` inside a loop, and each `getCall` makes 8
-queries. 10 calls means 80 queries, one after another. Fine for a demo; slow
-for a fund with real history.
+**5. Fixed: the Home page loaded calls one at a time.** `buildDrawdown` did
+`await repo.getCall(call.id)` inside a loop, two database round trips per call,
+one call after another. It now loads them all at once with `Promise.all`. See
+chapter 7 §7.1 for the bigger half of why pages were slow.
 
 **6. Worth checking: the `next` redirect after sign-in.** The login page does
 `router.replace(params.get('next') || '/')` without checking `next` is a page

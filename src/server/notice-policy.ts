@@ -57,6 +57,35 @@ export function sendableLpIds(
   };
 }
 
+/**
+ * Which notices may be approved.
+ *
+ * Drafts only. Approving is the move from draft to approved and nothing else:
+ * an approved notice keeps the approval it has, and a sent one is never taken
+ * back to approved. "Approve all" names nobody, and once meant every active
+ * investor — which moved an already-sent notice back to approved, so the next
+ * send issued it again over its own record and emailed the investor twice.
+ *
+ * Anything requested that is not a draft on this call is reported, the way
+ * `sendableLpIds` reports what it will not send.
+ */
+export function approvableLpIds(
+  result: ComputeResult,
+  notices: NoticeState[],
+  requested?: string[],
+): { approve: string[]; skipped: string[] } {
+  const isDraft = (id: string) =>
+    (notices.find((n) => n.lpId === id)?.status ?? 'draft') === 'draft';
+  const active = actionableLpIds(result);
+
+  if (!requested) return { approve: active.filter(isDraft), skipped: [] };
+
+  return {
+    approve: requested.filter((id) => active.includes(id) && isDraft(id)),
+    skipped: requested.filter((id) => !active.includes(id) || !isDraft(id)),
+  };
+}
+
 /** Investors who can be acted on at all: the ones the call is actually against. */
 export function actionableLpIds(result: ComputeResult, requested?: string[]): string[] {
   const active = result.rows.filter((r) => r.isActive).map((r) => r.LP_ID);

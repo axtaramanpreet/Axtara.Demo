@@ -38,6 +38,38 @@ keys matter, and what to do when something breaks.
 Only Supabase holds data. Everything else can be replaced without losing
 anything.
 
+### Where each one runs, and why it matters
+
+| | Region |
+|---|---|
+| Supabase | `ap-south-1`, **Mumbai** |
+| Vercel's edge (static pages, the nearest cache) | `bom1`, Mumbai, the nearest to you |
+| Vercel's **functions** (every page that reads data, every API route) | set by [vercel.json](../vercel.json): `"regions": ["bom1"]` |
+
+The functions **must run next to the database.** A page asks the database
+several times, one question after another. Until `vercel.json` set the region,
+the functions ran in Vercel's default, `iad1`, **Washington DC**. Every question
+crossed from the US to Mumbai and back:
+
+```
+measured on production, signed in, before the fix
+  x-vercel-id: bom1::iad1::…      edge Mumbai, function Washington
+  /  (redirect to your fund)      2.7 s
+  Home                            3.6 – 4.4 s
+  a call                          1.5 – 1.9 s
+  one round trip, India → the database directly    0.13 – 0.17 s
+```
+
+The header `x-vercel-id` on any response shows it: `bom1::bom1::…` is right,
+`bom1::iad1::…` means the functions have gone back to the US.
+
+```bash
+curl -sI https://fund.axtara.ai/login | grep -i x-vercel-id
+```
+
+(The login page is cached, so it only shows the edge. Check a signed-in page,
+or the Network tab in the browser, to see the function region.)
+
 ---
 
 ## 7.2 Running it on your machine
@@ -95,9 +127,9 @@ The full list of names, with no values, is in
 ## 7.3 Before any deploy
 
 ```bash
-npm run verify     # types + lint + all 439 tests
+npm run verify     # types + lint + all 444 tests
 npm run build      # the production build, exactly as Vercel will run it
-npm run db:test    # the 46 database tests (needs the local stack running)
+npm run db:test    # the 55 database tests (needs the local stack running)
 ```
 
 Two catches:

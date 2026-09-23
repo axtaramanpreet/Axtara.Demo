@@ -13,7 +13,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(18);
+select plan(20);
 
 
 -- --- Fixtures --------------------------------------------------------------
@@ -187,12 +187,37 @@ select throws_ok(
   'the payload of a sent notice cannot be rewritten'
 );
 
--- A mis-send can still be walked back; only the evidence is protected.
-select lives_ok(
+-- Sent is final. The status used to be left free so a mis-send could be
+-- walked back, which let "Approve all" put a sent notice back in line to be
+-- sent — and once it was not 'sent', nothing protected its record.
+select throws_ok(
   $$ update notices set status = 'draft'
       where call_id = '55555555-5555-5555-5555-555555555555'
         and investor_id = '33333333-3333-3333-3333-333333333333' $$,
-  'a sent notice can be marked unsent without touching its delivery record'
+  '23001',
+  null,
+  'a sent notice cannot be taken back to draft'
+);
+
+-- The exact write "Approve all" used to make over a sent notice.
+select throws_ok(
+  $$ insert into notices (call_id, investor_id, status, approved_at)
+     values ('55555555-5555-5555-5555-555555555555',
+             '33333333-3333-3333-3333-333333333333', 'approved', now())
+     on conflict (call_id, investor_id)
+     do update set status = excluded.status, approved_at = excluded.approved_at $$,
+  '23001',
+  null,
+  'a sent notice cannot be approved again'
+);
+
+-- Delivery is a separate question and stays writable, so a failed email can
+-- be retried without touching what was issued.
+select lives_ok(
+  $$ update notices set email_status = 'failed', email_error = 'bounced'
+      where call_id = '55555555-5555-5555-5555-555555555555'
+        and investor_id = '33333333-3333-3333-3333-333333333333' $$,
+  'the delivery record of a sent notice can still be updated'
 );
 
 

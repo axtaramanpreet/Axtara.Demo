@@ -12,7 +12,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(16);
+select plan(23);
 
 insert into firms (id, name)
 values ('11111111-1111-1111-1111-111111111111', 'Test Fund Administrators');
@@ -136,6 +136,57 @@ $$, 'an unrecognised allocation basis is stored, for the engine to warn about');
 select is((select allocation_basis from call_components
             where call_id = '55555555-5555-5555-5555-555555555555'),
           'Vibes', 'and it is kept exactly as the accountant typed it');
+
+
+-- --- Who the notice is from ------------------------------------------------
+-- GP_Name and the signatory were sent by the app on every save and ignored by
+-- this function, so an edit on the setup screen reverted on reload and the
+-- notice kept naming whoever was set when the call was created.
+
+select save_call_inputs(
+  '55555555-5555-5555-5555-555555555555',
+  '{"gp_name": "Illustrative GP LLC", "signatory_name": "Jane Doe", "signatory_title": "Managing Partner"}'::jsonb,
+  '{}'::jsonb, null, null, null, null, null
+);
+
+select is((select gp_name from calls where id = '55555555-5555-5555-5555-555555555555'),
+          'Illustrative GP LLC', 'the general partner is saved');
+select is((select signatory_name from calls where id = '55555555-5555-5555-5555-555555555555'),
+          'Jane Doe', 'the signatory is saved');
+select is((select signatory_title from calls where id = '55555555-5555-5555-5555-555555555555'),
+          'Managing Partner', 'and their title');
+
+-- A save that does not mention them leaves them alone, as for every field.
+select save_call_inputs(
+  '55555555-5555-5555-5555-555555555555',
+  '{"fund_name": "Illustrative Fund II, L.P."}'::jsonb, '{}'::jsonb, null, null, null, null, null
+);
+select is((select signatory_name from calls where id = '55555555-5555-5555-5555-555555555555'),
+          'Jane Doe', 'a save that leaves them out keeps them');
+
+-- Blanking one on the screen sends null. That has to clear it: the notice drops
+-- a blank sign-off line, and a name that cannot be removed would be printed
+-- under every notice from then on.
+select save_call_inputs(
+  '55555555-5555-5555-5555-555555555555',
+  '{"signatory_title": null}'::jsonb, '{}'::jsonb, null, null, null, null, null
+);
+select is((select signatory_title from calls where id = '55555555-5555-5555-5555-555555555555'),
+          null, 'a field blanked on screen is cleared, not kept');
+
+
+-- The same for every column that may be empty. Blanking the due date or the
+-- rounding plug used to be undone on reload.
+update calls set payment_due_date = '2026-10-14', rounding_plug_lp_id = 'LP04'
+ where id = '55555555-5555-5555-5555-555555555555';
+select save_call_inputs(
+  '55555555-5555-5555-5555-555555555555',
+  '{"payment_due_date": null, "rounding_plug_lp_id": null}'::jsonb, '{}'::jsonb, null, null, null, null, null
+);
+select is((select payment_due_date from calls where id = '55555555-5555-5555-5555-555555555555'),
+          null, 'a blanked payment due date is cleared');
+select is((select rounding_plug_lp_id from calls where id = '55555555-5555-5555-5555-555555555555'),
+          null, 'a blanked rounding plug is cleared');
 
 
 -- --- Still refused once the call is issued ---------------------------------

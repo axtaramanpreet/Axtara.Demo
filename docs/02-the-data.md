@@ -4,7 +4,7 @@ Chapter 1 was the maths. This chapter is **where the numbers live, and who is
 allowed to change them.**
 
 The database is Postgres, hosted by Supabase. Everything about its shape is in
-14 files in [supabase/migrations/](../supabase/migrations/). A **migration** is
+15 files in [supabase/migrations/](../supabase/migrations/). A **migration** is
 a SQL file that changes the database one step. They run in date order, oldest
 first, and never get edited after they've run. Each fix is a new file.
 
@@ -450,6 +450,11 @@ Two details:
 - **Investors are upserted, not replaced.** (Upsert means insert it, or update
   it if it's already there.) Fix LP01's email on Call 7 and it's fixed for the
   investor everywhere. Their balances belong to Call 7 only.
+- **A blank is an answer.** For a field that may be empty, a key sent as
+  `null` clears it; a key left out keeps its value. Until
+  [save_every_setup_field.sql](../supabase/migrations/20260925100000_save_every_setup_field.sql),
+  every field kept its old value on `null`, so blanking a due date was undone on
+  reload, and GP name and signatory weren't saved at all.
 - **It runs as the caller** (`SECURITY INVOKER`, the default). So RLS and the
   lock triggers still apply inside it. It makes saving atomic; it isn't a way
   round the rules. Save into a locked call and the first `delete` hits the
@@ -585,8 +590,8 @@ npm run db:start
 npm run db:test
 ```
 
-`db:test` runs 55 **pgTAP** tests (tests written in SQL, run inside the
-database) from [supabase/tests/](../supabase/tests/). All 55 pass. Open
+`db:test` runs 62 **pgTAP** tests (tests written in SQL, run inside the
+database) from [supabase/tests/](../supabase/tests/). All 62 pass. Open
 [immutability.test.sql](../supabase/tests/immutability.test.sql) next to the
 output. It sends a notice, then tries to edit the register:
 
@@ -645,6 +650,7 @@ and it's why that key is dangerous. `\q` to leave.
 | [notice_delivery.sql](../supabase/migrations/20260919090000_notice_delivery.sql) | sent ≠ delivered |
 | [sent_is_final.sql](../supabase/migrations/20260923120000_sent_is_final.sql) | a sent notice can't be moved out of `sent` (chapter 5 §5.9) |
 | [position_from_set_up_call.sql](../supabase/migrations/20260924090000_position_from_set_up_call.sql) | fund position reads the newest call that has a register (§2.10) |
+| [save_every_setup_field.sql](../supabase/migrations/20260925100000_save_every_setup_field.sql) | GP name and signatory are saved, and a blanked field stays blank (§2.9) |
 | the other 4 migrations | small additions: delete an empty fund, optional setup fields, GP name, signatory |
 | [supabase-client.ts](../src/adapters/storage/supabase-client.ts) | the three clients |
 | [supabase-repository.ts](../src/adapters/storage/supabase-repository.ts) | every read, and the one save |

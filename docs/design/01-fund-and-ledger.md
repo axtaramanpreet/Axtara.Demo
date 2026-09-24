@@ -3,7 +3,7 @@
 **Status:** proposal. Nothing here is built. Branch `feat/fund-ledger`.
 
 **Names:** written after the rename in
-[client_above_fund.sql](../../supabase/migrations/20260925090000_client_above_fund.sql):
+[client_above_fund.sql](../../supabase/migrations/20260925110000_client_above_fund.sql):
 `clients` is the top level (a GP or manager), `funds` sit under it.
 
 **Covers:** steps 1 and 2 of the plan. These are the foundation that Closings,

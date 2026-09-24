@@ -129,7 +129,7 @@ The full list of names, with no values, is in
 ```bash
 npm run verify     # types + lint + all 444 tests
 npm run build      # the production build, exactly as Vercel will run it
-npm run db:test    # the 55 database tests (needs the local stack running)
+npm run db:test    # the 62 database tests (needs the local stack running)
 ```
 
 Two catches:

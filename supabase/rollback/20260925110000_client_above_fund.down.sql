@@ -1,16 +1,17 @@
 -- ---------------------------------------------------------------------------
--- UNDO for 20260925090000_client_above_fund.sql
+-- UNDO for 20260925110000_client_above_fund.sql
 -- ---------------------------------------------------------------------------
 -- NOT a migration: it lives outside supabase/migrations so nothing runs it by
 -- accident. Run by hand only if the rename has to be taken back out of a
 -- database, together with redeploying the app from before the rename:
 --
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/rollback/20260925090000_client_above_fund.down.sql
---   npx supabase migration repair --status reverted 20260925090000
+--   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/rollback/20260925110000_client_above_fund.down.sql
+--   npx supabase migration repair --status reverted 20260925110000
 --
 -- The exact reverse, in the reverse order: the top level gives back the name
 -- `clients` before the lower level can take it again. The helpers, policies and
--- save function are restated from the migrations that first created them.
+-- save function are restated as they stood just before the rename
+-- (save_call_inputs from 20260925100000_save_every_setup_field).
 -- Like the forward rename, it moves no data.
 -- ---------------------------------------------------------------------------
 
@@ -222,34 +223,40 @@ begin
       using errcode = 'no_data_found';
   end if;
 
-  -- Fund_Setup and Management_Fee columns. Absent keys keep their value, so a
-  -- caller can save one step of the stepper without resending the rest.
+  -- Nullable columns take whatever the screen sent, blank included: a key that
+  -- is present with null clears the field. A key that is absent keeps its
+  -- value, so a caller can still save one step without resending the rest.
+  -- Columns that cannot be null keep coalesce, since null there is not an
+  -- answer anyone gave.
   update calls set
     fund_name                    = coalesce(p_call ->> 'fund_name', fund_name),
-    reporting_currency           = coalesce(p_call ->> 'reporting_currency', reporting_currency),
-    call_date                    = coalesce((p_call ->> 'call_date')::date, call_date),
-    payment_due_date             = coalesce((p_call ->> 'payment_due_date')::date, payment_due_date),
-    default_mgmt_fee_rate_annual = coalesce((p_call ->> 'default_mgmt_fee_rate_annual')::numeric, default_mgmt_fee_rate_annual),
-    default_mgmt_fee_basis       = coalesce(p_call ->> 'default_mgmt_fee_basis', default_mgmt_fee_basis),
-    mgmt_fee_period_fraction     = coalesce((p_call ->> 'mgmt_fee_period_fraction')::numeric, mgmt_fee_period_fraction),
-    org_expense_cap              = coalesce((p_call ->> 'org_expense_cap')::numeric, org_expense_cap),
-    rounding_decimals            = coalesce((p_call ->> 'rounding_decimals')::smallint, rounding_decimals),
-    rounding_plug_lp_id          = coalesce(p_call ->> 'rounding_plug_lp_id', rounding_plug_lp_id),
-    fee_basis                    = coalesce(p_call ->> 'fee_basis', fee_basis),
-    fee_default_rate_annual      = coalesce((p_call ->> 'fee_default_rate_annual')::numeric, fee_default_rate_annual),
-    fee_period_fraction          = coalesce((p_call ->> 'fee_period_fraction')::numeric, fee_period_fraction),
+    reporting_currency           = case when p_call ? 'reporting_currency' then (p_call ->> 'reporting_currency') else reporting_currency end,
+    call_date                    = case when p_call ? 'call_date' then (p_call ->> 'call_date')::date else call_date end,
+    payment_due_date             = case when p_call ? 'payment_due_date' then (p_call ->> 'payment_due_date')::date else payment_due_date end,
+    default_mgmt_fee_rate_annual = case when p_call ? 'default_mgmt_fee_rate_annual' then (p_call ->> 'default_mgmt_fee_rate_annual')::numeric else default_mgmt_fee_rate_annual end,
+    default_mgmt_fee_basis       = case when p_call ? 'default_mgmt_fee_basis' then (p_call ->> 'default_mgmt_fee_basis') else default_mgmt_fee_basis end,
+    mgmt_fee_period_fraction     = case when p_call ? 'mgmt_fee_period_fraction' then (p_call ->> 'mgmt_fee_period_fraction')::numeric else mgmt_fee_period_fraction end,
+    org_expense_cap              = case when p_call ? 'org_expense_cap' then (p_call ->> 'org_expense_cap')::numeric else org_expense_cap end,
+    rounding_decimals            = case when p_call ? 'rounding_decimals' then (p_call ->> 'rounding_decimals')::smallint else rounding_decimals end,
+    rounding_plug_lp_id          = case when p_call ? 'rounding_plug_lp_id' then (p_call ->> 'rounding_plug_lp_id') else rounding_plug_lp_id end,
+    fee_basis                    = case when p_call ? 'fee_basis' then (p_call ->> 'fee_basis') else fee_basis end,
+    fee_default_rate_annual      = case when p_call ? 'fee_default_rate_annual' then (p_call ->> 'fee_default_rate_annual')::numeric else fee_default_rate_annual end,
+    fee_period_fraction          = case when p_call ? 'fee_period_fraction' then (p_call ->> 'fee_period_fraction')::numeric else fee_period_fraction end,
     fee_reduces_unfunded         = coalesce((p_call ->> 'fee_reduces_unfunded')::boolean, fee_reduces_unfunded),
     fee_exempt_lp_ids            = coalesce(
                                      (select array_agg(value::text)
                                         from jsonb_array_elements_text(p_call -> 'fee_exempt_lp_ids') as value),
                                      fee_exempt_lp_ids),
+    gp_name                      = case when p_call ? 'gp_name' then (p_call ->> 'gp_name') else gp_name end,
+    signatory_name               = case when p_call ? 'signatory_name' then (p_call ->> 'signatory_name') else signatory_name end,
+    signatory_title              = case when p_call ? 'signatory_title' then (p_call ->> 'signatory_title') else signatory_title end,
     source_setup                 = coalesce(p_sources ->> 'setup', source_setup),
     source_lps                   = coalesce(p_sources ->> 'lps', source_lps),
     source_components            = coalesce(p_sources ->> 'components', source_components),
     source_fee                   = coalesce(p_sources ->> 'fee', source_fee),
     source_transfers             = coalesce(p_sources ->> 'transfers', source_transfers),
-    source_file_name             = coalesce(p_call ->> 'source_file_name', source_file_name),
-    source_file_path             = coalesce(p_call ->> 'source_file_path', source_file_path)
+    source_file_name             = case when p_call ? 'source_file_name' then (p_call ->> 'source_file_name') else source_file_name end,
+    source_file_path             = case when p_call ? 'source_file_path' then (p_call ->> 'source_file_path') else source_file_path end
   where id = p_call_id;
 
   -- --- Register -----------------------------------------------------------

@@ -5,7 +5,7 @@
 --
 -- Two claims are checked here, both of which the product depends on:
 --
---   1. A signed-in user reaches their own firm's funds and nothing else.
+--   1. A signed-in user reaches their own client's funds and nothing else.
 --   2. Telling an investor money is due cannot originate in a browser. The
 --      `notices`, `call_results` and `audit_log` tables have no write policy,
 --      so those writes are refused for every signed-in user and can only be
@@ -19,35 +19,35 @@ create extension if not exists pgtap with schema extensions;
 select plan(12);
 
 
--- --- Two firms, two users, one fund each -----------------------------------
+-- --- Two clients, two users, one fund each -----------------------------------
 
 insert into auth.users (id, instance_id, aud, role, email)
 values ('aaaaaaaa-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-000000000000',
-        'authenticated', 'authenticated', 'alice@firm-a.example'),
+        'authenticated', 'authenticated', 'alice@client-a.example'),
        ('bbbbbbbb-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-000000000000',
-        'authenticated', 'authenticated', 'bob@firm-b.example'),
+        'authenticated', 'authenticated', 'bob@client-b.example'),
        ('cccccccc-0000-0000-0000-00000000000c', '00000000-0000-0000-0000-000000000000',
-        'authenticated', 'authenticated', 'carol@firm-a.example');
+        'authenticated', 'authenticated', 'carol@client-a.example');
 
-insert into firms (id, name)
-values ('aaaa1111-1111-1111-1111-111111111111', 'Firm A'),
-       ('bbbb1111-1111-1111-1111-111111111111', 'Firm B');
+insert into clients (id, name)
+values ('aaaa1111-1111-1111-1111-111111111111', 'Client A'),
+       ('bbbb1111-1111-1111-1111-111111111111', 'Client B');
 
-insert into firm_members (firm_id, user_id, role)
+insert into client_members (client_id, user_id, role)
 values ('aaaa1111-1111-1111-1111-111111111111', 'aaaaaaaa-0000-0000-0000-00000000000a', 'admin'),
        ('bbbb1111-1111-1111-1111-111111111111', 'bbbbbbbb-0000-0000-0000-00000000000b', 'admin'),
-       -- Carol can read Firm A but not change anything.
+       -- Carol can read Client A but not change anything.
        ('aaaa1111-1111-1111-1111-111111111111', 'cccccccc-0000-0000-0000-00000000000c', 'viewer');
 
-insert into clients (id, firm_id, name)
+insert into funds (id, client_id, name)
 values ('aaaa2222-2222-2222-2222-222222222222', 'aaaa1111-1111-1111-1111-111111111111', 'Fund A I, L.P.'),
        ('bbbb2222-2222-2222-2222-222222222222', 'bbbb1111-1111-1111-1111-111111111111', 'Fund B I, L.P.');
 
-insert into calls (id, client_id, call_no, fund_name)
+insert into calls (id, fund_id, call_no, fund_name)
 values ('aaaa3333-3333-3333-3333-333333333333', 'aaaa2222-2222-2222-2222-222222222222', 1, 'Fund A I, L.P.'),
        ('bbbb3333-3333-3333-3333-333333333333', 'bbbb2222-2222-2222-2222-222222222222', 1, 'Fund B I, L.P.');
 
-insert into investors (id, client_id, lp_id, lp_name)
+insert into investors (id, fund_id, lp_id, lp_name)
 values ('aaaa5555-5555-5555-5555-555555555555', 'aaaa2222-2222-2222-2222-222222222222', 'LP01', 'Fund A Investor');
 
 insert into call_results (id, call_id, engine_version, totals, rows)
@@ -55,19 +55,19 @@ values ('aaaa4444-4444-4444-4444-444444444444', 'aaaa3333-3333-3333-3333-3333333
         'test-sha', '{"total": 1}'::jsonb, '[]'::jsonb);
 
 
--- --- Alice, an admin at Firm A ---------------------------------------------
+-- --- Alice, an admin at Client A ---------------------------------------------
 
 set local role authenticated;
 set local request.jwt.claims = '{"sub": "aaaaaaaa-0000-0000-0000-00000000000a", "role": "authenticated"}';
 
 select is(
-  (select count(*) from clients),
+  (select count(*) from funds),
   1::bigint,
-  'a member sees only their own firm''s funds'
+  'a member sees only their own client''s funds'
 );
 
 select is(
-  (select name from clients),
+  (select name from funds),
   'Fund A I, L.P.',
   'and it is the right one'
 );
@@ -75,7 +75,7 @@ select is(
 select is(
   (select count(*) from calls),
   1::bigint,
-  'calls are scoped to the firm''s funds'
+  'calls are scoped to the client''s funds'
 );
 
 select lives_ok(
@@ -87,7 +87,7 @@ select lives_ok(
 select is(
   (select count(*) from call_results),
   1::bigint,
-  'snapshots for the firm''s own calls are readable'
+  'snapshots for the client''s own calls are readable'
 );
 
 -- The security boundary: these three writes must be impossible from a browser.
@@ -112,27 +112,27 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$ insert into audit_log (firm_id, action) values ('aaaa1111-1111-1111-1111-111111111111', 'forged') $$,
+  $$ insert into audit_log (client_id, action) values ('aaaa1111-1111-1111-1111-111111111111', 'forged') $$,
   '42501',
   null,
   'a signed-in user cannot write to the audit log'
 );
 
 
--- --- Bob, at Firm B, must not see Firm A -----------------------------------
+-- --- Bob, at Client B, must not see Client A -----------------------------------
 
 set local request.jwt.claims = '{"sub": "bbbbbbbb-0000-0000-0000-00000000000b", "role": "authenticated"}';
 
 select is(
-  (select count(*) from clients where id = 'aaaa2222-2222-2222-2222-222222222222'),
+  (select count(*) from funds where id = 'aaaa2222-2222-2222-2222-222222222222'),
   0::bigint,
-  'another firm''s fund is invisible'
+  'another client''s fund is invisible'
 );
 
 select is(
   (select count(*) from call_results),
   0::bigint,
-  'another firm''s snapshots are invisible'
+  'another client''s snapshots are invisible'
 );
 
 select throws_ok(
@@ -140,11 +140,11 @@ select throws_ok(
      values ('aaaa3333-3333-3333-3333-333333333333', 'C9', 'Injected', 1) $$,
   '42501',
   null,
-  'another firm''s call cannot be written to'
+  'another client''s call cannot be written to'
 );
 
 
--- --- Carol, a viewer at Firm A: read yes, write no -------------------------
+-- --- Carol, a viewer at Client A: read yes, write no -------------------------
 
 set local request.jwt.claims = '{"sub": "cccccccc-0000-0000-0000-00000000000c", "role": "authenticated"}';
 

@@ -1,7 +1,7 @@
 /**
  * The two-to-four character tile that stands for a fund in the sidebar.
  *
- * Funds in one firm are often the same name with a different numeral —
+ * Funds in one client are often the same name with a different numeral —
  * "Illustrative Fund II" beside "Illustrative Fund III" — so the numeral is the
  * part that has to survive. A name without one falls back to the initials of
  * its first two distinguishing words.
@@ -16,7 +16,7 @@ const SUFFIX = /,?\s*(L\.?P\.?|LLC|Ltd\.?|Limited|Inc\.?)\s*$/i;
 /** I, II, III, IV … XXXIX. */
 const ROMAN = /^(X{0,3})(IX|IV|V?I{0,3})$/i;
 
-/** Words almost every fund in a firm shares, so they cannot distinguish one. */
+/** Words almost every fund in a client shares, so they cannot distinguish one. */
 const GENERIC_WITH_NUMERAL =
   /^(the|illustrative|fund|capital|partners|opportunities|growth|ventures)$/i;
 const GENERIC = /^(the|illustrative|fund|capital|partners)$/i;

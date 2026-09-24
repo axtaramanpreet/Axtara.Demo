@@ -23,14 +23,14 @@ import { Button } from '@/components/ui/button';
  * there as an explicit choice.
  */
 export function NewCallButton({
-  clientId,
-  clientName,
+  fundId,
+  fundName,
   defaults,
   reuseCallId,
 }: {
-  clientId: string;
+  fundId: string;
   /** The fund's name, which becomes the new call's Fund_Name. */
-  clientName: string;
+  fundName: string;
   /** The general partner and signatory a new call starts with. */
   defaults: CallDefaults;
   /** An existing not-started call to open instead of creating another. */
@@ -44,21 +44,21 @@ export function NewCallButton({
     setError(null);
 
     if (reuseCallId) {
-      router.push(`/clients/${clientId}/calls/${reuseCallId}/setup`);
+      router.push(`/funds/${fundId}/calls/${reuseCallId}/setup`);
       return;
     }
 
     setBusy(true);
     try {
       const repo = createSupabaseRepository(createBrowserSupabase());
-      const created = await repo.createCall(clientId, emptyCall(clientName, defaults), {
+      const created = await repo.createCall(fundId, emptyCall(fundName, defaults), {
         setup: 'empty',
         lps: 'empty',
         components: 'empty',
         fee: 'empty',
         transfers: 'empty',
       });
-      router.push(`/clients/${clientId}/calls/${created.id}/setup`);
+      router.push(`/funds/${fundId}/calls/${created.id}/setup`);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not start a new call.');

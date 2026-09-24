@@ -14,14 +14,14 @@ create extension if not exists pgtap with schema extensions;
 
 select plan(16);
 
-insert into firms (id, name)
+insert into clients (id, name)
 values ('11111111-1111-1111-1111-111111111111', 'Test Fund Administrators');
 
-insert into clients (id, firm_id, name)
+insert into funds (id, client_id, name)
 values ('22222222-2222-2222-2222-222222222222',
         '11111111-1111-1111-1111-111111111111', 'Illustrative Fund II, L.P.');
 
-insert into calls (id, client_id, call_no, fund_name)
+insert into calls (id, fund_id, call_no, fund_name)
 values ('55555555-5555-5555-5555-555555555555',
         '22222222-2222-2222-2222-222222222222', 2, 'Illustrative Fund II, L.P.');
 
@@ -50,7 +50,7 @@ select lives_ok($$
   );
 $$, 'a full save succeeds');
 
-select is((select count(*) from investors where client_id = '22222222-2222-2222-2222-222222222222'),
+select is((select count(*) from investors where fund_id = '22222222-2222-2222-2222-222222222222'),
           2::bigint, 'investors are created from the register');
 
 select is((select count(*) from call_register where call_id = '55555555-5555-5555-5555-555555555555'),
@@ -91,7 +91,7 @@ select is((select count(*) from call_components where call_id = '55555555-5555-5
           1::bigint, 'passing null for a table leaves it untouched');
 
 select is((select lp_name from investors
-            where client_id = '22222222-2222-2222-2222-222222222222'
+            where fund_id = '22222222-2222-2222-2222-222222222222'
               and lp_id = 'LP01'),
           'Alpha Pension Trust (renamed)',
           'investor identity is updated in place rather than duplicated');

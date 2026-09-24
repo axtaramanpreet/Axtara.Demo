@@ -16,16 +16,16 @@ import { SetupScreen } from '@/components/setup/setup-screen';
 export default async function SetupPage({
   params,
 }: {
-  params: Promise<{ clientId: string; callId: string }>;
+  params: Promise<{ fundId: string; callId: string }>;
 }) {
-  const { clientId, callId } = await params;
+  const { fundId, callId } = await params;
   const supabase = await getServerSupabase();
   const repo = createSupabaseRepository(supabase as unknown as SupabaseClient);
 
-  const [clients, call, calls] = await Promise.all([
-    repo.listClients(),
+  const [funds, call, calls] = await Promise.all([
+    repo.listFunds(),
     repo.getCall(callId),
-    repo.listCalls(clientId),
+    repo.listCalls(fundId),
   ]);
 
   if (!call) notFound();
@@ -38,11 +38,11 @@ export default async function SetupPage({
 
   return (
     <AppShell
-      clients={clients}
-      clientId={clientId}
+      funds={funds}
+      fundId={fundId}
       callCount={calls.length}
       crumb={{
-        module: { label: 'Capital calls', href: `/clients/${clientId}` },
+        module: { label: 'Capital calls', href: `/funds/${fundId}` },
         leaf: `Set up Call No. ${call.callNo}`,
       }}
       surface="setup"
@@ -50,7 +50,7 @@ export default async function SetupPage({
       preparedBy={call.model.setup.Prepared_By as string | undefined}
       askConnected={askStatusForClient().connected}
     >
-      <SetupScreen call={call} clientId={clientId} previousCall={previousCall} />
+      <SetupScreen call={call} fundId={fundId} previousCall={previousCall} />
     </AppShell>
   );
 }

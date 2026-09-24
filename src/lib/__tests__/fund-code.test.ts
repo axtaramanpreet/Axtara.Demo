@@ -15,7 +15,7 @@ describe('the code a fund is shown by', () => {
   });
 
   it('keeps the numeral, because that is what tells two funds apart', () => {
-    // These three sit in one firm's list and differ only here.
+    // These three sit in one client's list and differ only here.
     expect(fundCode('Illustrative Fund II, L.P.')).toBe('II');
     expect(fundCode('Illustrative Fund III, L.P.')).toBe('III');
     expect(fundCode('Illustrative Fund IV, L.P.')).toBe('IV');

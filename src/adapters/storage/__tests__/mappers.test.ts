@@ -38,7 +38,7 @@ import {
 } from '../mappers';
 
 const CALL_ID = '55555555-5555-5555-5555-555555555555';
-const CLIENT_ID = '22222222-2222-2222-2222-222222222222';
+const FUND_ID = '22222222-2222-2222-2222-222222222222';
 
 /** Push a model out to the database shape and read it back. */
 function roundTrip(model: CallModel): CallModel {
@@ -47,7 +47,7 @@ function roundTrip(model: CallModel): CallModel {
   const parts: CallParts = {
     call: {
       id: CALL_ID,
-      client_id: CLIENT_ID,
+      fund_id: FUND_ID,
       call_no: Number(model.setup.Call_Number ?? 1),
       ...callCols,
       source_setup: 'template',
@@ -66,7 +66,7 @@ function roundTrip(model: CallModel): CallModel {
 
     register: model.lps.map((l, i) => {
       const balances = fromLPRow(l, CALL_ID, `investor-${i}`, i);
-      const identity = fromLPRowIdentity(l, CLIENT_ID);
+      const identity = fromLPRowIdentity(l, FUND_ID);
       return {
         id: `reg-${i}`,
         ...balances,

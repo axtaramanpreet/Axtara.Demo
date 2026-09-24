@@ -52,7 +52,7 @@ function notice(lpId: string, status: NoticeStatus): NoticeState {
 function renderTab() {
   const call = {
     id: 'call-1',
-    clientId: 'client-1',
+    fundId: 'fund-1',
     callNo: 2,
     stage: 'in_progress',
     lockedAt: null,

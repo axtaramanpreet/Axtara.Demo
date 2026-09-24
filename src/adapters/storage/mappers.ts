@@ -321,16 +321,16 @@ export function fromLPRow(l: LPRow, callId: string, investorId: string, position
     mgmt_fee_rate_override: numericOrNull(l.Mgmt_Fee_Rate_Override),
     fee_exempt: fromYesNo(l.Fee_Exempt),
     // Any status other than Active means "not participating" to the engine, so
-    // a firm's own vocabulary survives storage.
+    // a client's own vocabulary survives storage.
     status: String(l.Status ?? 'Active'),
     position,
   };
 }
 
 /** The identity columns of an `investors` row. */
-export function fromLPRowIdentity(l: LPRow, clientId: string) {
+export function fromLPRowIdentity(l: LPRow, fundId: string) {
   return {
-    client_id: clientId,
+    fund_id: fundId,
     lp_id: l.LP_ID,
     lp_name: l.LP_Name || l.LP_ID,
     lp_type: l.LP_Type || 'LP',

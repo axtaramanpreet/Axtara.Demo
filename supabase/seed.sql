@@ -49,15 +49,15 @@ values (
 on conflict (provider_id, provider) do nothing;
 
 
-insert into firms (id, name)
+insert into clients (id, name)
 values ('00000000-0000-4000-8000-0000000000f1', 'Axtara Fund Services')
 on conflict (id) do nothing;
 
-insert into firm_members (firm_id, user_id, role)
+insert into client_members (client_id, user_id, role)
 values ('00000000-0000-4000-8000-0000000000f1', '00000000-0000-4000-8000-000000000001', 'owner')
 on conflict do nothing;
 
-insert into clients (id, firm_id, name)
+insert into funds (id, client_id, name)
 values
   ('00000000-0000-4000-8000-0000000000c1', '00000000-0000-4000-8000-0000000000f1', 'Illustrative Fund II, L.P.'),
   -- No calls: the Home screen's empty state.
@@ -66,7 +66,7 @@ on conflict (id) do nothing;
 
 
 -- Call No. 2 — the workbook's own example, which ties to Expected_Output.
-insert into calls (id, client_id, call_no, fund_name, reporting_currency)
+insert into calls (id, fund_id, call_no, fund_name, reporting_currency)
 values ('00000000-0000-4000-8000-0000000000a2',
         '00000000-0000-4000-8000-0000000000c1',
         2, 'Illustrative Fund II, L.P.', 'USD')

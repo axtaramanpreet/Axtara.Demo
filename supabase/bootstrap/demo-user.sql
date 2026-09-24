@@ -11,11 +11,11 @@
 --
 -- WHY IT IS NEEDED
 --
--- `firms` and `firm_members` carry read policies and no insert policy, and the
+-- `clients` and `client_members` carry read policies and no insert policy, and the
 -- app has no sign-up screen. So on a fresh database nobody can sign in, and a
 -- user created through the dashboard would still see nothing: with no
--- firm_members row, auth_firm_ids() returns empty and every fund is invisible.
--- This script creates the first firm and puts one user in it. Everything after
+-- client_members row, auth_client_ids() returns empty and every fund is invisible.
+-- This script creates the first client and puts one user in it. Everything after
 -- that is done through the app.
 --
 -- Replacing this with a real sign-up and invite-a-colleague flow is the proper
@@ -33,7 +33,7 @@
 -- second run changes nothing. That also means it will NOT change the password
 -- of an account that already exists.
 --
--- If you get "relation firms does not exist", the migrations have not been
+-- If you get "relation clients does not exist", the migrations have not been
 -- pushed yet. Run `supabase db push --linked` first.
 -- ---------------------------------------------------------------------------
 
@@ -84,13 +84,13 @@ values (
 )
 on conflict (provider_id, provider) do nothing;
 
--- --- The firm, and the one membership that makes the app visible -----------
+-- --- The client, and the one membership that makes the app visible -----------
 
-insert into firms (id, name)
+insert into clients (id, name)
 values ('00000000-0000-4000-8000-0000000000f1', 'Axtara Fund Services')
 on conflict (id) do nothing;
 
-insert into firm_members (firm_id, user_id, role)
+insert into client_members (client_id, user_id, role)
 values (
   '00000000-0000-4000-8000-0000000000f1',
   '00000000-0000-4000-8000-000000000002',
@@ -99,14 +99,14 @@ values (
 on conflict do nothing;
 
 -- --- Check it worked -------------------------------------------------------
--- Expect exactly one row: the email, the firm name, and the role 'owner'.
+-- Expect exactly one row: the email, the client name, and the role 'owner'.
 -- No row means the membership did not land, and the app will sign you in and
 -- then show no funds at all.
 
-select u.email, f.name as firm, m.role
+select u.email, f.name as client, m.role
   from auth.users u
-  join firm_members m on m.user_id = u.id
-  join firms f on f.id = m.firm_id
+  join client_members m on m.user_id = u.id
+  join clients f on f.id = m.client_id
  where u.id = '00000000-0000-4000-8000-000000000002';
 
 -- ---------------------------------------------------------------------------

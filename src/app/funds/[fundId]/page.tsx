@@ -20,24 +20,24 @@ import { askStatusForClient, noticeDefaults } from '@/lib/env';
  * A server component, so the figures are computed where the data is and the
  * browser is never asked to trust numbers it assembled itself.
  */
-export default async function ClientHomePage({
+export default async function FundHomePage({
   params,
 }: {
-  params: Promise<{ clientId: string }>;
+  params: Promise<{ fundId: string }>;
 }) {
-  const { clientId } = await params;
+  const { fundId } = await params;
   const supabase = await getServerSupabase();
   const repo = createSupabaseRepository(supabase as unknown as SupabaseClient);
 
-  const [clients, position, calls] = await Promise.all([
-    repo.listClients(),
-    repo.getClientPosition(clientId),
-    repo.listCalls(clientId),
+  const [funds, position, calls] = await Promise.all([
+    repo.listFunds(),
+    repo.getFundPosition(fundId),
+    repo.listCalls(fundId),
   ]);
 
   const defaults = noticeDefaults();
-  const client = clients.find((c) => c.id === clientId);
-  if (!client) notFound();
+  const fund = funds.find((c) => c.id === fundId);
+  if (!fund) notFound();
 
   const currency = 'USD';
   const { columns: drawdown, totals: liveTotals } = await buildDrawdown(repo, calls);
@@ -46,8 +46,8 @@ export default async function ClientHomePage({
 
   return (
     <AppShell
-      clients={clients}
-      clientId={clientId}
+      funds={funds}
+      fundId={fundId}
       callCount={calls.length}
       crumb={{ leaf: 'Capital calls' }}
       surface="home"
@@ -56,13 +56,13 @@ export default async function ClientHomePage({
       <>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20, flexWrap: 'wrap', maxWidth: 1200 }}>
           <div>
-            <h1>{client.name}</h1>
+            <h1>{fund.name}</h1>
             <p className="text-muted">{homeHint(calls, openCall)}</p>
           </div>
           <div style={{ marginLeft: 'auto' }}>
             <NewCallButton
-              clientId={clientId}
-              clientName={client.name}
+              fundId={fundId}
+              fundName={fund.name}
               defaults={defaults}
               reuseCallId={notStarted?.id}
             />
@@ -70,7 +70,7 @@ export default async function ClientHomePage({
         </div>
 
         {calls.length === 0 ? (
-          <EmptyState clientId={clientId} clientName={client.name} defaults={defaults} />
+          <EmptyState fundId={fundId} fundName={fund.name} defaults={defaults} />
         ) : (
           <>
             <CardGrid style={{ marginTop: 24 }}>
@@ -97,7 +97,7 @@ export default async function ClientHomePage({
                         <CallRow
                           key={c.id}
                           call={c}
-                          clientId={clientId}
+                          fundId={fundId}
                           liveTotal={liveTotals.get(c.id)}
                         />
                       ))}
@@ -150,18 +150,18 @@ export default async function ClientHomePage({
 
 function CallRow({
   call,
-  clientId,
+  fundId,
   liveTotal,
 }: {
   call: CallSummary;
-  clientId: string;
+  fundId: string;
   /** Recomputed total for a call that has no frozen snapshot yet. */
   liveTotal?: number;
 }) {
   const href =
     call.stage === 'not_started'
-      ? `/clients/${clientId}/calls/${call.id}/setup`
-      : `/clients/${clientId}/calls/${call.id}`;
+      ? `/funds/${fundId}/calls/${call.id}/setup`
+      : `/funds/${fundId}/calls/${call.id}`;
 
   const action =
     call.stage === 'not_started' ? 'Set up' : call.stage === 'issued' ? 'View' : 'Continue';
@@ -207,12 +207,12 @@ function CallRow({
 }
 
 function EmptyState({
-  clientId,
-  clientName,
+  fundId,
+  fundName,
   defaults,
 }: {
-  clientId: string;
-  clientName: string;
+  fundId: string;
+  fundName: string;
   defaults: CallDefaults;
 }) {
   return (
@@ -223,7 +223,7 @@ function EmptyState({
         hand, or loading the illustrative template to see how it works.
       </p>
       <div style={{ marginTop: 18 }}>
-        <NewCallButton clientId={clientId} clientName={clientName} defaults={defaults} />
+        <NewCallButton fundId={fundId} fundName={fundName} defaults={defaults} />
       </div>
     </Card>
   );

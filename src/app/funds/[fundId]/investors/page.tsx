@@ -7,39 +7,39 @@ import { AppShell } from '@/components/shell/app-shell';
 import { ModulePlaceholder } from '@/components/shell/module-placeholder';
 
 /**
- * Settings — named in the sidebar, not built.
+ * Investors — named in the sidebar, not built.
  *
  * A real page rather than a dead nav row, so the sidebar can say what is coming
  * without pretending it is already here.
  */
-export default async function SettingsPage({
+export default async function InvestorsPage({
   params,
 }: {
-  params: Promise<{ clientId: string }>;
+  params: Promise<{ fundId: string }>;
 }) {
-  const { clientId } = await params;
+  const { fundId } = await params;
   const supabase = await getServerSupabase();
   const repo = createSupabaseRepository(supabase as unknown as SupabaseClient);
 
-  const [clients, calls] = await Promise.all([repo.listClients(), repo.listCalls(clientId)]);
-  const client = clients.find((c) => c.id === clientId);
-  if (!client) notFound();
+  const [funds, calls] = await Promise.all([repo.listFunds(), repo.listCalls(fundId)]);
+  const fund = funds.find((c) => c.id === fundId);
+  if (!fund) notFound();
 
   return (
     <AppShell
-      clients={clients}
-      clientId={clientId}
-      module="settings"
+      funds={funds}
+      fundId={fundId}
+      module="investors"
       callCount={calls.length}
-      crumb={{ leaf: 'Settings' }}
+      crumb={{ leaf: 'Investors' }}
       surface="module"
       askConnected={askStatusForClient().connected}
     >
       <ModulePlaceholder
-        fundName={client.name}
-        title="Settings"
-        text="Fund-level settings — the signatory, the reporting currency, the notice wording and who may issue a call — are not editable yet. They come from the workbook and from deployment configuration in the meantime."
-        backHref={`/clients/${clientId}`}
+        fundName={fund.name}
+        title="Investors"
+        text="The register lives inside each capital call for now — open a call and edit its LP register there. A fund-level register, carrying transfers and side letters across calls, is what belongs here."
+        backHref={`/funds/${fundId}`}
       />
     </AppShell>
   );

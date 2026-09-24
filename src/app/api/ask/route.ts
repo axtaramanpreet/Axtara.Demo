@@ -29,7 +29,7 @@ export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   let body: {
-    clientId?: string;
+    fundId?: string;
     question?: string;
     history?: Message[];
     /** The call and tab on screen, so "this call" resolves to one. */
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   }
 
   const question = String(body.question ?? '').trim();
-  if (!body.clientId || !question) {
+  if (!body.fundId || !question) {
     return NextResponse.json({ error: 'A fund and a question are needed.' }, { status: 400 });
   }
 
@@ -56,18 +56,18 @@ export async function POST(request: Request) {
 
   // Reading as the user: a fund they cannot see simply is not in this list, and
   // the question is refused the same way a missing fund would be.
-  const clients = await repo.listClients();
-  const client = clients.find((c) => c.id === body.clientId);
-  if (!client) {
+  const funds = await repo.listFunds();
+  const fund = funds.find((c) => c.id === body.fundId);
+  if (!fund) {
     return NextResponse.json({ error: 'That fund could not be found.' }, { status: 404 });
   }
 
-  const summaries = await repo.listCalls(client.id);
+  const summaries = await repo.listCalls(fund.id);
   const calls = (await Promise.all(summaries.map((c) => repo.getCall(c.id)))).filter(
     (c): c is CallDetail => c !== null,
   );
 
-  const context = buildFundContext(client, calls);
+  const context = buildFundContext(fund, calls);
 
   // The last eight turns, as the contract says — enough for "and the one
   // before it?" to mean something, short enough that the snapshot dominates.
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
   const goto =
     pointer && target
       ? {
-          href: `/clients/${client.id}/calls/${target.id}?tab=${pointer.tab}`,
+          href: `/funds/${fund.id}/calls/${target.id}?tab=${pointer.tab}`,
           label: pointerLabel(pointer),
         }
       : null;

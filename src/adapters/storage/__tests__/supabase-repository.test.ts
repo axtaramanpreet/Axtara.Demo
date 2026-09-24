@@ -21,12 +21,12 @@ import { LOCAL_URL, createLocalServiceClient } from './local-stack';
 
 const db = createLocalServiceClient();
 
-const FIRM_ID = '0e57f19a-0000-4000-8000-00000000f127';
-const CLIENT_ID = '0e57f19a-0000-4000-8000-00000000c11e';
+const CLIENT_ID = '0e57f19a-0000-4000-8000-00000000f127';
+const FUND_ID = '0e57f19a-0000-4000-8000-00000000c11e';
 
 async function databaseIsUp(): Promise<boolean> {
   try {
-    const { error } = await db.from('firms').select('id').limit(1);
+    const { error } = await db.from('clients').select('id').limit(1);
     return !error;
   } catch {
     return false;
@@ -47,33 +47,33 @@ describe.skipIf(!up)('Supabase repository (integration)', () => {
   let repo: CallRepository;
 
   beforeAll(async () => {
-    await db.from('firms').delete().eq('id', FIRM_ID);
-    await db.from('firms').insert({ id: FIRM_ID, name: 'Integration Test Administrators' });
+    await db.from('clients').delete().eq('id', CLIENT_ID);
+    await db.from('clients').insert({ id: CLIENT_ID, name: 'Integration Test Client' });
     // Deliberately not named like the seeded fund: a shared name once made the
     // row-level-security test pick up this fixture's calls instead of the seed's.
     await db
-      .from('clients')
-      .insert({ id: CLIENT_ID, firm_id: FIRM_ID, name: 'Integration Test Fund, L.P.' });
+      .from('funds')
+      .insert({ id: FUND_ID, client_id: CLIENT_ID, name: 'Integration Test Fund, L.P.' });
     repo = createSupabaseRepository(db as unknown as SupabaseClient);
   });
 
   afterAll(async () => {
     // Order matters, and the result is checked. `call_register.investor_id` is
-    // ON DELETE RESTRICT, so deleting the firm while register rows still point
+    // ON DELETE RESTRICT, so deleting the client while register rows still point
     // at its investors fails — and an unchecked failure here quietly left more
     // than a hundred stray calls behind before this was noticed.
-    await db.from('calls').delete().eq('client_id', CLIENT_ID);
-    await db.from('investors').delete().eq('client_id', CLIENT_ID);
-    await db.from('clients').delete().eq('id', CLIENT_ID);
-    const { error } = await db.from('firms').delete().eq('id', FIRM_ID);
+    await db.from('calls').delete().eq('fund_id', FUND_ID);
+    await db.from('investors').delete().eq('fund_id', FUND_ID);
+    await db.from('funds').delete().eq('id', FUND_ID);
+    const { error } = await db.from('clients').delete().eq('id', CLIENT_ID);
     expect(error).toBeNull();
 
-    const { data: leftovers } = await db.from('calls').select('id').eq('client_id', CLIENT_ID);
+    const { data: leftovers } = await db.from('calls').select('id').eq('fund_id', FUND_ID);
     expect(leftovers ?? []).toEqual([]);
   });
 
   it('writes and reads back a call whose figures still tie to the workbook', async () => {
-    const created = await repo.createCall(CLIENT_ID, ILLUSTRATIVE_FUND, ALL_SOURCES);
+    const created = await repo.createCall(FUND_ID, ILLUSTRATIVE_FUND, ALL_SOURCES);
     const loaded = await repo.getCall(created.id);
     expect(loaded).not.toBeNull();
 
@@ -87,14 +87,14 @@ describe.skipIf(!up)('Supabase repository (integration)', () => {
   });
 
   it('numbers calls sequentially per fund', async () => {
-    const a = await repo.createCall(CLIENT_ID, ILLUSTRATIVE_FUND, ALL_SOURCES);
-    const b = await repo.createCall(CLIENT_ID, ILLUSTRATIVE_FUND, ALL_SOURCES);
+    const a = await repo.createCall(FUND_ID, ILLUSTRATIVE_FUND, ALL_SOURCES);
+    const b = await repo.createCall(FUND_ID, ILLUSTRATIVE_FUND, ALL_SOURCES);
     expect(b.callNo).toBe(a.callNo + 1);
   });
 
   it('reports a call with inputs as in progress', async () => {
-    const created = await repo.createCall(CLIENT_ID, ILLUSTRATIVE_FUND, ALL_SOURCES);
-    const calls = await repo.listCalls(CLIENT_ID);
+    const created = await repo.createCall(FUND_ID, ILLUSTRATIVE_FUND, ALL_SOURCES);
+    const calls = await repo.listCalls(FUND_ID);
     const found = calls.find((c) => c.id === created.id);
     expect(found?.stage).toBe('in_progress');
     expect(found?.activeInvestors).toBe(6);
@@ -103,7 +103,7 @@ describe.skipIf(!up)('Supabase repository (integration)', () => {
   });
 
   it('preserves the side-letter override and fee exemption through storage', async () => {
-    const created = await repo.createCall(CLIENT_ID, ILLUSTRATIVE_FUND, ALL_SOURCES);
+    const created = await repo.createCall(FUND_ID, ILLUSTRATIVE_FUND, ALL_SOURCES);
     const loaded = await repo.getCall(created.id);
     const lps = loaded!.model.lps;
     expect(lps.find((l) => l.LP_ID === 'LP03')?.Mgmt_Fee_Rate_Override).toBe(0.01);
@@ -121,7 +121,7 @@ describe.skipIf(!up)('Supabase repository (integration)', () => {
    * filled the field in was stored as rounding to whole units.
    */
   it('stores a blank call without inventing values for it', async () => {
-    const created = await repo.createCall(CLIENT_ID, emptyCall('Blank Fund, L.P.'), {
+    const created = await repo.createCall(FUND_ID, emptyCall('Blank Fund, L.P.'), {
       setup: 'empty',
       lps: 'empty',
       components: 'empty',
@@ -146,7 +146,7 @@ describe.skipIf(!up)('Supabase repository (integration)', () => {
   it('keeps a currency that was chosen, upper-cased for the column', async () => {
     const model = emptyCall('Cased Fund, L.P.');
     model.setup.Reporting_Currency = 'eur';
-    const created = await repo.createCall(CLIENT_ID, model, {
+    const created = await repo.createCall(FUND_ID, model, {
       setup: 'manual', lps: 'empty', components: 'empty', fee: 'empty', transfers: 'empty',
     });
     expect((await repo.getCall(created.id))!.model.setup.Reporting_Currency).toBe('EUR');
@@ -164,7 +164,7 @@ describe.skipIf(!up)('Supabase repository (integration)', () => {
   // introducing error into figures sent to investors.
   for (const [name, model] of Object.entries(SCENARIOS)) {
     it(`round-trips through Postgres unchanged: ${name}`, async () => {
-      const created = await repo.createCall(CLIENT_ID, model, ALL_SOURCES);
+      const created = await repo.createCall(FUND_ID, model, ALL_SOURCES);
       const loaded = await repo.getCall(created.id);
 
       const direct = compute(structuredClone(model));

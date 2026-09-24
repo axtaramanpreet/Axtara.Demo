@@ -46,38 +46,38 @@ describe.skipIf(!db)('reading the seeded fund as a signed-in user', () => {
    * Asserts membership rather than an exact list. Listing every fund by name
    * meant the test failed the moment anyone created one through the app, which
    * is a test that punishes using the product. What actually matters is the
-   * policy: this firm's funds are visible, another firm's are not.
+   * policy: this client's funds are visible, another client's are not.
    */
-  it('sees its own firm’s funds, and not another firm’s', async () => {
-    expect((await repo.listClients()).map((c) => c.id)).toEqual(
+  it('sees its own client’s funds, and not another client’s', async () => {
+    expect((await repo.listFunds()).map((c) => c.id)).toEqual(
       expect.arrayContaining([SEEDED_FUND_II, SEEDED_FUND_III]),
     );
 
     // Arranged with the service role because a signed-in user cannot create a
-    // fund outside their own firm — which is the thing being tested.
+    // fund outside their own client — which is the thing being tested.
     const service = createLocalServiceClient();
-    const firmId = crypto.randomUUID();
+    const clientId = crypto.randomUUID();
     const fundId = crypto.randomUUID();
 
-    const { error: firmError } = await service
-      .from('firms')
-      .insert({ id: firmId, name: `Rival Administrators ${firmId.slice(0, 8)}` });
-    expect(firmError).toBeNull();
+    const { error: clientError } = await service
+      .from('clients')
+      .insert({ id: clientId, name: `Rival Client ${clientId.slice(0, 8)}` });
+    expect(clientError).toBeNull();
 
     try {
       const { error: fundError } = await service
-        .from('clients')
-        .insert({ id: fundId, firm_id: firmId, name: 'Someone Else’s Fund, L.P.' });
+        .from('funds')
+        .insert({ id: fundId, client_id: clientId, name: 'Someone Else’s Fund, L.P.' });
       expect(fundError).toBeNull();
 
-      expect((await repo.listClients()).map((c) => c.id)).not.toContain(fundId);
+      expect((await repo.listFunds()).map((c) => c.id)).not.toContain(fundId);
     } finally {
       // Dependency order, and asserted: a silent cleanup failure once left 122
       // stray rows behind and broke later runs.
-      const { error: fundCleanup } = await service.from('clients').delete().eq('id', fundId);
-      const { error: firmCleanup } = await service.from('firms').delete().eq('id', firmId);
+      const { error: fundCleanup } = await service.from('funds').delete().eq('id', fundId);
+      const { error: clientCleanup } = await service.from('clients').delete().eq('id', clientId);
       expect(fundCleanup).toBeNull();
-      expect(firmCleanup).toBeNull();
+      expect(clientCleanup).toBeNull();
     }
   });
 
@@ -111,7 +111,7 @@ describe.skipIf(!db)('reading the seeded fund as a signed-in user', () => {
    * with 9.8m already contributed as having its full 50.5m outstanding.
    */
   it('reports a fund position whose lines reconcile', async () => {
-    const position = await repo.getClientPosition(SEEDED_FUND_II);
+    const position = await repo.getFundPosition(SEEDED_FUND_II);
 
     expect(position).not.toBeNull();
     expect(position!.totalCommitments).toBeCloseTo(50500000, 2);
@@ -135,19 +135,19 @@ describe.skipIf(!db)('reading the seeded fund as a signed-in user', () => {
    * test that breaks when the app is used is a test nobody keeps.
    */
   it('shows a fund with no calls as empty', async () => {
-    const fund = await repo.createClient(`Empty Fund ${Date.now()}`);
+    const fund = await repo.createFund(`Empty Fund ${Date.now()}`);
     try {
       expect(await repo.listCalls(fund.id)).toEqual([]);
-      expect((await repo.getClientPosition(fund.id))?.callsIssued).toBe(0);
+      expect((await repo.getFundPosition(fund.id))?.callsIssued).toBe(0);
     } finally {
-      await repo.deleteClient(fund.id);
+      await repo.deleteFund(fund.id);
     }
   });
 
   it('can delete a fund that has no history', async () => {
-    const fund = await repo.createClient(`Throwaway ${Date.now()}`);
-    await repo.deleteClient(fund.id);
-    expect((await repo.listClients()).map((c) => c.id)).not.toContain(fund.id);
+    const fund = await repo.createFund(`Throwaway ${Date.now()}`);
+    await repo.deleteFund(fund.id);
+    expect((await repo.listFunds()).map((c) => c.id)).not.toContain(fund.id);
   });
 });
 

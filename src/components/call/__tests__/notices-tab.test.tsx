@@ -48,7 +48,7 @@ function callWith(
 ) {
   const call = {
     id: 'call-1',
-    clientId: 'client-1',
+    fundId: 'fund-1',
     callNo: 2,
     stage: 'in_progress',
     lockedAt: null,
@@ -339,7 +339,7 @@ describe('what the notice says about its own delivery', () => {
     const own = compute(model);
     const call = {
       id: 'call-1',
-      clientId: 'client-1',
+      fundId: 'fund-1',
       callNo: 2,
       stage: 'in_progress',
       lockedAt: null,

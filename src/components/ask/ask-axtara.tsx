@@ -40,13 +40,13 @@ export type Surface = 'home' | 'setup' | 'call' | 'module';
  * should never leave that ambiguous.
  */
 export function AskAxtara({
-  clientId,
+  fundId,
   fundName,
   surface,
   callNo,
   connected,
 }: {
-  clientId: string;
+  fundId: string;
   fundName: string;
   surface: Surface;
   /** The call on screen, when there is one. Resolves "this call". */
@@ -60,7 +60,7 @@ export function AskAxtara({
   const state = useSyncExternalStore(subscribe, getState, getServerState);
   // Named separately so the scroll effect below can depend on the thread
   // itself: `?? []` would be a fresh array on every render and scroll forever.
-  const thread = state.threads[clientId];
+  const thread = state.threads[fundId];
   const turns = thread ?? NO_TURNS;
 
   const input = useRef<HTMLTextAreaElement>(null);
@@ -99,8 +99,8 @@ export function AskAxtara({
     const text = question.trim();
     if (!text || getState().busy) return;
 
-    const existing = turnsFor(clientId);
-    setTurns(clientId, [
+    const existing = turnsFor(fundId);
+    setTurns(fundId, [
       ...existing,
       { question: text, answer: null, shown: '', streaming: false, goto: null },
     ]);
@@ -121,7 +121,7 @@ export function AskAxtara({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          clientId,
+          fundId,
           question: text,
           // Which call is on screen. The snapshot holds every call, so without
           // this "this call" is the model's guess.
@@ -150,19 +150,19 @@ export function AskAxtara({
     // Revealed a word or two at a time. The answer is already complete — this
     // is pacing, not streaming, and it is what makes a wall of figures
     // readable as it lands rather than all at once.
-    patchLastTurn(clientId, { answer: reply, shown: '', streaming: true });
+    patchLastTurn(fundId, { answer: reply, shown: '', streaming: true });
     const words = reply.split(/(\s+)/);
     let i = 0;
     await new Promise<void>((done) => {
       const step = () => {
         if (i >= words.length) {
-          patchLastTurn(clientId, { streaming: false, shown: reply, goto });
+          patchLastTurn(fundId, { streaming: false, shown: reply, goto });
           return done();
         }
         const take = 1 + Math.floor(Math.random() * 2);
         const next = words.slice(0, i + take).join('');
         i += take;
-        patchLastTurn(clientId, { shown: next });
+        patchLastTurn(fundId, { shown: next });
         window.setTimeout(step, 18 + Math.random() * 30);
       };
       step();
@@ -275,7 +275,7 @@ export function AskAxtara({
 
             <div className="ax-foot">
               <span>Answers only from this fund’s data · read-only</span>
-              <button type="button" onClick={() => setTurns(clientId, [])}>
+              <button type="button" onClick={() => setTurns(fundId, [])}>
                 Clear conversation
               </button>
             </div>

@@ -107,7 +107,7 @@ Also outstanding before this reaches real investors:
   attached.
 - The notice carries **no payment instructions**, as the design specified. No
   investor can wire against it as it stands.
-- There is no way to invite a colleague: `firm_members` has no insert policy,
+- There is no way to invite a colleague: `client_members` has no insert policy,
   so adding one means running SQL.
 
 ## Known local quirks

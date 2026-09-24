@@ -136,7 +136,7 @@ export function emailStatusForClient() {
 /**
  * Defaults a new, blank call starts with.
  *
- * The signatory is the same person on every call a firm issues, and typing it
+ * The signatory is the same person on every call a client issues, and typing it
  * again each time is how it ends up wrong. Configuration rather than a literal
  * in the engine, so changing who signs is a setting and not a deployment.
  *

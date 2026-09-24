@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { createBrowserSupabase } from '@/adapters/storage/supabase-client';
 import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
-import type { Client } from '@/adapters/storage/types';
+import type { Fund } from '@/adapters/storage/types';
 import { fundCode } from '@/lib/fund-code';
 import { BrandMark, Wordmark } from '@/components/ui/wordmark';
 import { CallsIcon, ChevronDown, ChevronRight, InvestorsIcon, SettingsIcon } from './icons';
@@ -24,13 +24,13 @@ export type Module = 'capital-calls' | 'investors' | 'settings';
  * coming, which is better than a nav that pretends the product is finished.
  */
 export function Sidebar({
-  clients,
-  clientId,
+  funds,
+  fundId,
   module,
   callCount,
 }: {
-  clients: Client[];
-  clientId: string;
+  funds: Fund[];
+  fundId: string;
   module: Module;
   /** How many calls this fund has, shown under its name. */
   callCount: number;
@@ -42,7 +42,7 @@ export function Sidebar({
   const wrapper = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
 
-  const current = clients.find((c) => c.id === clientId);
+  const current = funds.find((c) => c.id === fundId);
   const name = current?.name ?? 'Fund';
 
   useEffect(() => {
@@ -65,7 +65,7 @@ export function Sidebar({
     };
   }, [open]);
 
-  async function onNewClient() {
+  async function onNewFund() {
     setOpen(false);
     const asked = window.prompt('Name of the new fund');
     if (!asked?.trim()) return;
@@ -73,9 +73,9 @@ export function Sidebar({
     setError(null);
     try {
       const repo = createSupabaseRepository(createBrowserSupabase());
-      const created = await repo.createClient(asked.trim());
+      const created = await repo.createFund(asked.trim());
       startTransition(() => {
-        router.push(`/clients/${created.id}`);
+        router.push(`/funds/${created.id}`);
         router.refresh();
       });
     } catch (e) {
@@ -108,12 +108,12 @@ export function Sidebar({
 
         {open && (
           <div className="ws-menu" role="menu">
-            {clients.map((c) => (
+            {funds.map((c) => (
               <Link
                 key={c.id}
                 role="menuitem"
-                href={`/clients/${c.id}`}
-                className={['ws-item', c.id === clientId ? 'on' : ''].filter(Boolean).join(' ')}
+                href={`/funds/${c.id}`}
+                className={['ws-item', c.id === fundId ? 'on' : ''].filter(Boolean).join(' ')}
                 onClick={() => setOpen(false)}
               >
                 <span className="ws-tile">{fundCode(c.name)}</span>
@@ -131,9 +131,9 @@ export function Sidebar({
               </Link>
             ))}
             <div className="ws-sep" />
-            <button type="button" role="menuitem" className="ws-item add" onClick={onNewClient}>
+            <button type="button" role="menuitem" className="ws-item add" onClick={onNewFund}>
               <span style={{ width: 22, textAlign: 'center', fontSize: 16, lineHeight: 1 }}>+</span>
-              New client
+              New fund
             </button>
           </div>
         )}
@@ -147,7 +147,7 @@ export function Sidebar({
 
       <div className="nav-group">Fund operations</div>
       <Link
-        href={`/clients/${clientId}`}
+        href={`/funds/${fundId}`}
         className={['nav-item', module === 'capital-calls' ? 'on' : ''].filter(Boolean).join(' ')}
         title="Capital calls"
       >
@@ -158,14 +158,14 @@ export function Sidebar({
 
       <div className="nav-group">Administration</div>
       <SoonItem
-        href={`/clients/${clientId}/investors`}
+        href={`/funds/${fundId}/investors`}
         label="Investors"
         on={module === 'investors'}
         icon={<InvestorsIcon />}
         chevron
       />
       <SoonItem
-        href={`/clients/${clientId}/settings`}
+        href={`/funds/${fundId}/settings`}
         label="Settings"
         on={module === 'settings'}
         icon={<SettingsIcon />}

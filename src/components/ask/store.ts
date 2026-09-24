@@ -49,20 +49,20 @@ export function setState(patch: Partial<State>) {
   listeners.forEach((l) => l());
 }
 
-export function turnsFor(clientId: string): Turn[] {
-  return state.threads[clientId] ?? EMPTY_TURNS;
+export function turnsFor(fundId: string): Turn[] {
+  return state.threads[fundId] ?? EMPTY_TURNS;
 }
 const EMPTY_TURNS: Turn[] = [];
 
-export function setTurns(clientId: string, turns: Turn[]) {
-  setState({ threads: { ...state.threads, [clientId]: turns } });
+export function setTurns(fundId: string, turns: Turn[]) {
+  setState({ threads: { ...state.threads, [fundId]: turns } });
 }
 
 /** Replace the last turn — the one being answered. */
-export function patchLastTurn(clientId: string, patch: Partial<Turn>) {
-  const turns = turnsFor(clientId);
+export function patchLastTurn(fundId: string, patch: Partial<Turn>) {
+  const turns = turnsFor(fundId);
   if (!turns.length) return;
   const next = turns.slice();
   next[next.length - 1] = { ...next[next.length - 1], ...patch };
-  setTurns(clientId, next);
+  setTurns(fundId, next);
 }

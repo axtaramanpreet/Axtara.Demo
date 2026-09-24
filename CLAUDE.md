@@ -59,6 +59,14 @@ src/components/         client islands (setup, call tabs, shell, ask dock)
 supabase/migrations/    schema, immutability triggers, RLS, views, RPCs
 ```
 
+### Names: clients on top, funds underneath
+
+`clients` is the top level (a GP or manager; users belong to one through
+`client_members`), and `funds` sit under it. Everything a fund owns hangs off
+`fund_id`. Pages live at `/funds/[fundId]/…`; `/clients/…` links from before the
+rename forward there (`next.config.ts`). Plain `client` in the code can also mean
+a Supabase or email client, or a client component, so read it in context.
+
 ### The engine is the source of truth
 
 `compute(model: CallModel): ComputeResult` in `src/engine/compute.ts` is pure

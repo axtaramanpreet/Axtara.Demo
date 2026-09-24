@@ -5,7 +5,7 @@
  * consequences, both deliberate:
  *
  *  - The browser never holds the register. Asking "who has no contact email"
- *    does not require shipping every investor's address to the client first.
+ *    does not require shipping every investor's address to the browser first.
  *  - The figures are recomputed rather than remembered, so an answer can never
  *    cite a number the screen no longer shows.
  *
@@ -13,27 +13,27 @@
  */
 
 import { compute, num, serialToISO } from '@/engine';
-import type { CallDetail, Client, NoticeState, NoticeStatus } from '@/adapters/storage/types';
+import type { CallDetail, Fund, NoticeState, NoticeStatus } from '@/adapters/storage/types';
 
 /** Roughly the point past which a snapshot stops fitting in a request. */
 const MAX_CHARS = 400_000;
 
 export interface FundContext {
-  client: string;
+  fund: string;
   today: string;
   /** Present only when older calls had to be dropped to fit. */
   omitted?: string;
   calls: unknown[];
 }
 
-export function buildFundContext(client: Client, calls: CallDetail[]): FundContext {
+export function buildFundContext(fund: Fund, calls: CallDetail[]): FundContext {
   // Newest first, so the trim below drops the oldest — a question is almost
   // always about the call in hand.
   const ordered = [...calls].sort((a, b) => b.callNo - a.callNo);
   const described = ordered.map(describeCall);
 
   const context: FundContext = {
-    client: client.name,
+    fund: fund.name,
     today: new Date().toISOString().slice(0, 10),
     calls: described,
   };

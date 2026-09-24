@@ -2,7 +2,7 @@
  * Round-trips the real input template through the parser and the engine.
  *
  * This guards the path an accountant actually takes on day one: open the app,
- * upload the workbook the firm already uses, and expect it to come back clean.
+ * upload the workbook the client already uses, and expect it to come back clean.
  */
 
 import { readFileSync } from 'node:fs';

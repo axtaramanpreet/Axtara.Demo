@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
  * The header carries the same action, but the header only renders on a fund's
  * own pages — so before there is a fund there is nowhere to click, and the
  * empty state has to carry its own way out. Without this the first sign-in is a
- * dead end: an account with a firm, no funds, and no control that makes one.
+ * dead end: an account with a client, no funds, and no control that makes one.
  */
 export function CreateFirstFund() {
   const router = useRouter();
@@ -26,9 +26,9 @@ export function CreateFirstFund() {
     setError(null);
     try {
       const repo = createSupabaseRepository(createBrowserSupabase());
-      const created = await repo.createClient(name.trim());
+      const created = await repo.createFund(name.trim());
       startTransition(() => {
-        router.push(`/clients/${created.id}`);
+        router.push(`/funds/${created.id}`);
         router.refresh();
       });
     } catch (e) {

@@ -45,7 +45,7 @@ export type Database = {
           client_id: string | null
           entity_id: string | null
           entity_type: string | null
-          firm_id: string | null
+          fund_id: string | null
           id: number
         }
         Insert: {
@@ -58,7 +58,7 @@ export type Database = {
           client_id?: string | null
           entity_id?: string | null
           entity_type?: string | null
-          firm_id?: string | null
+          fund_id?: string | null
           id?: never
         }
         Update: {
@@ -71,7 +71,7 @@ export type Database = {
           client_id?: string | null
           entity_id?: string | null
           entity_type?: string | null
-          firm_id?: string | null
+          fund_id?: string | null
           id?: never
         }
         Relationships: [
@@ -93,21 +93,21 @@ export type Database = {
             foreignKeyName: "audit_log_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
-            referencedRelation: "client_positions"
-            referencedColumns: ["client_id"]
-          },
-          {
-            foreignKeyName: "audit_log_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
             referencedRelation: "clients"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "audit_log_firm_id_fkey"
-            columns: ["firm_id"]
+            foreignKeyName: "audit_log_fund_id_fkey"
+            columns: ["fund_id"]
             isOneToOne: false
-            referencedRelation: "firms"
+            referencedRelation: "fund_positions"
+            referencedColumns: ["fund_id"]
+          },
+          {
+            foreignKeyName: "audit_log_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
             referencedColumns: ["id"]
           },
         ]
@@ -438,7 +438,6 @@ export type Database = {
         Row: {
           call_date: string | null
           call_no: number
-          client_id: string
           created_at: string
           created_by: string | null
           default_mgmt_fee_basis: string | null
@@ -448,6 +447,7 @@ export type Database = {
           fee_exempt_lp_ids: string[]
           fee_period_fraction: number | null
           fee_reduces_unfunded: boolean
+          fund_id: string
           fund_name: string
           gp_name: string | null
           id: string
@@ -473,7 +473,6 @@ export type Database = {
         Insert: {
           call_date?: string | null
           call_no: number
-          client_id: string
           created_at?: string
           created_by?: string | null
           default_mgmt_fee_basis?: string | null
@@ -483,6 +482,7 @@ export type Database = {
           fee_exempt_lp_ids?: string[]
           fee_period_fraction?: number | null
           fee_reduces_unfunded?: boolean
+          fund_id: string
           fund_name: string
           gp_name?: string | null
           id?: string
@@ -508,7 +508,6 @@ export type Database = {
         Update: {
           call_date?: string | null
           call_no?: number
-          client_id?: string
           created_at?: string
           created_by?: string | null
           default_mgmt_fee_basis?: string | null
@@ -518,6 +517,7 @@ export type Database = {
           fee_exempt_lp_ids?: string[]
           fee_period_fraction?: number | null
           fee_reduces_unfunded?: boolean
+          fund_id?: string
           fund_name?: string
           gp_name?: string | null
           id?: string
@@ -542,14 +542,43 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "calls_client_id_fkey"
-            columns: ["client_id"]
+            foreignKeyName: "calls_fund_id_fkey"
+            columns: ["fund_id"]
             isOneToOne: false
-            referencedRelation: "client_positions"
-            referencedColumns: ["client_id"]
+            referencedRelation: "fund_positions"
+            referencedColumns: ["fund_id"]
           },
           {
-            foreignKeyName: "calls_client_id_fkey"
+            foreignKeyName: "calls_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_members: {
+        Row: {
+          client_id: string
+          created_at: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_members_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
@@ -558,70 +587,6 @@ export type Database = {
         ]
       }
       clients: {
-        Row: {
-          archived_at: string | null
-          created_at: string
-          firm_id: string
-          id: string
-          name: string
-          updated_at: string
-        }
-        Insert: {
-          archived_at?: string | null
-          created_at?: string
-          firm_id: string
-          id?: string
-          name: string
-          updated_at?: string
-        }
-        Update: {
-          archived_at?: string | null
-          created_at?: string
-          firm_id?: string
-          id?: string
-          name?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "clients_firm_id_fkey"
-            columns: ["firm_id"]
-            isOneToOne: false
-            referencedRelation: "firms"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      firm_members: {
-        Row: {
-          created_at: string
-          firm_id: string
-          role: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          firm_id: string
-          role?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          firm_id?: string
-          role?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "firm_members_firm_id_fkey"
-            columns: ["firm_id"]
-            isOneToOne: false
-            referencedRelation: "firms"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      firms: {
         Row: {
           created_at: string
           id: string
@@ -639,11 +604,46 @@ export type Database = {
         }
         Relationships: []
       }
+      funds: {
+        Row: {
+          archived_at: string | null
+          client_id: string
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          client_id: string
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          client_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funds_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       investors: {
         Row: {
-          client_id: string
           contact_email: string | null
           created_at: string
+          fund_id: string
           id: string
           lp_id: string
           lp_name: string
@@ -653,9 +653,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          client_id: string
           contact_email?: string | null
           created_at?: string
+          fund_id: string
           id?: string
           lp_id: string
           lp_name: string
@@ -665,9 +665,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          client_id?: string
           contact_email?: string | null
           created_at?: string
+          fund_id?: string
           id?: string
           lp_id?: string
           lp_name?: string
@@ -678,17 +678,17 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "investors_client_id_fkey"
-            columns: ["client_id"]
+            foreignKeyName: "investors_fund_id_fkey"
+            columns: ["fund_id"]
             isOneToOne: false
-            referencedRelation: "client_positions"
-            referencedColumns: ["client_id"]
+            referencedRelation: "fund_positions"
+            referencedColumns: ["fund_id"]
           },
           {
-            foreignKeyName: "investors_client_id_fkey"
-            columns: ["client_id"]
+            foreignKeyName: "investors_fund_id_fkey"
+            columns: ["fund_id"]
             isOneToOne: false
-            referencedRelation: "clients"
+            referencedRelation: "funds"
             referencedColumns: ["id"]
           },
         ]
@@ -824,8 +824,8 @@ export type Database = {
           active_investors: number | null
           call_id: string | null
           call_no: number | null
-          client_id: string | null
           components: number | null
+          fund_id: string | null
           locked_at: string | null
           notices_approved: number | null
           notices_draft: number | null
@@ -834,27 +834,27 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "calls_client_id_fkey"
-            columns: ["client_id"]
+            foreignKeyName: "calls_fund_id_fkey"
+            columns: ["fund_id"]
             isOneToOne: false
-            referencedRelation: "client_positions"
-            referencedColumns: ["client_id"]
+            referencedRelation: "fund_positions"
+            referencedColumns: ["fund_id"]
           },
           {
-            foreignKeyName: "calls_client_id_fkey"
-            columns: ["client_id"]
+            foreignKeyName: "calls_fund_id_fkey"
+            columns: ["fund_id"]
             isOneToOne: false
-            referencedRelation: "clients"
+            referencedRelation: "funds"
             referencedColumns: ["id"]
           },
         ]
       }
-      client_positions: {
+      fund_positions: {
         Row: {
           called_against_commitment: number | null
           called_to_date: number | null
           calls_issued: number | null
-          client_id: string | null
+          fund_id: string | null
           investors: number | null
           latest_call_no: number | null
           name: string | null
@@ -873,9 +873,9 @@ export type Database = {
         Args: { target_client: string }
         Returns: boolean
       }
-      auth_can_write_firm: { Args: { target_firm: string }; Returns: boolean }
+      auth_can_write_fund: { Args: { target_fund: string }; Returns: boolean }
       auth_client_ids: { Args: never; Returns: string[] }
-      auth_firm_ids: { Args: never; Returns: string[] }
+      auth_fund_ids: { Args: never; Returns: string[] }
       save_call_inputs: {
         Args: {
           p_call: Json

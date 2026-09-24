@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense } from 'react';
-import type { Client } from '@/adapters/storage/types';
+import type { Fund } from '@/adapters/storage/types';
 import { AskAxtara, AskTrigger, type Surface } from '@/components/ask/ask-axtara';
 import { Sidebar, type Module } from './sidebar';
 import { initialsOf, TopBar, type Crumb } from './topbar';
@@ -16,8 +16,8 @@ import { initialsOf, TopBar, type Crumb } from './topbar';
  * conversation survives that remount by living outside React.
  */
 export function AppShell({
-  clients,
-  clientId,
+  funds,
+  fundId,
   module = 'capital-calls',
   callCount,
   crumb,
@@ -27,8 +27,8 @@ export function AppShell({
   askConnected,
   children,
 }: {
-  clients: Client[];
-  clientId: string;
+  funds: Fund[];
+  fundId: string;
   module?: Module;
   callCount: number;
   crumb: Crumb;
@@ -41,11 +41,11 @@ export function AppShell({
   askConnected: boolean;
   children: React.ReactNode;
 }) {
-  const fundName = clients.find((c) => c.id === clientId)?.name ?? 'Fund';
+  const fundName = funds.find((c) => c.id === fundId)?.name ?? 'Fund';
 
   return (
     <div className="app">
-      <Sidebar clients={clients} clientId={clientId} module={module} callCount={callCount} />
+      <Sidebar funds={funds} fundId={fundId} module={module} callCount={callCount} />
 
       <div className="content">
         <TopBar
@@ -61,7 +61,7 @@ export function AppShell({
           a search param, hence the boundary. */}
       <Suspense fallback={null}>
         <AskAxtara
-          clientId={clientId}
+          fundId={fundId}
           fundName={fundName}
           surface={surface}
           callNo={callNo}

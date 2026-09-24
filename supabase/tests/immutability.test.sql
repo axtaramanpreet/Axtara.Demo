@@ -18,15 +18,15 @@ select plan(20);
 
 -- --- Fixtures --------------------------------------------------------------
 
-insert into firms (id, name)
+insert into clients (id, name)
 values ('11111111-1111-1111-1111-111111111111', 'Test Fund Administrators');
 
-insert into clients (id, firm_id, name)
+insert into funds (id, client_id, name)
 values ('22222222-2222-2222-2222-222222222222',
         '11111111-1111-1111-1111-111111111111',
         'Illustrative Fund II, L.P.');
 
-insert into investors (id, client_id, lp_id, lp_name, contact_email)
+insert into investors (id, fund_id, lp_id, lp_name, contact_email)
 values ('33333333-3333-3333-3333-333333333333',
         '22222222-2222-2222-2222-222222222222',
         'LP01', 'Alpha Pension Trust', 'treasury@alphapension.example'),
@@ -34,7 +34,7 @@ values ('33333333-3333-3333-3333-333333333333',
         '22222222-2222-2222-2222-222222222222',
         'LP02', 'Beta University Endowment', 'investments@betaendowment.example');
 
-insert into calls (id, client_id, call_no, fund_name, call_date, payment_due_date)
+insert into calls (id, fund_id, call_no, fund_name, call_date, payment_due_date)
 values ('55555555-5555-5555-5555-555555555555',
         '22222222-2222-2222-2222-222222222222',
         2, 'Illustrative Fund II, L.P.', '2026-09-30', '2026-10-14');
@@ -223,7 +223,7 @@ select lives_ok(
 
 -- --- Audit log is append-only ----------------------------------------------
 
-insert into audit_log (firm_id, client_id, call_id, action)
+insert into audit_log (client_id, fund_id, call_id, action)
 values ('11111111-1111-1111-1111-111111111111',
         '22222222-2222-2222-2222-222222222222',
         '55555555-5555-5555-5555-555555555555',

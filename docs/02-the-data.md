@@ -4,7 +4,7 @@ Chapter 1 was the maths. This chapter is **where the numbers live, and who is
 allowed to change them.**
 
 The database is Postgres, hosted by Supabase. Everything about its shape is in
-14 files in [supabase/migrations/](../supabase/migrations/). A **migration** is
+15 files in [supabase/migrations/](../supabase/migrations/). A **migration** is
 a SQL file that changes the database one step. They run in date order, oldest
 first, and never get edited after they've run. Each fix is a new file.
 
@@ -51,9 +51,9 @@ They're stored exactly once: at the moment of sending.
 ### Who owns what
 
 ```
-firms              the fund administrator (Axtara's customer)
- └─ firm_members   which users belong to it, and their role
- └─ clients        a fund they administer ("client" in the UI = a fund)
+clients            the client: a GP or manager (Axtara's customer)
+ └─ client_members which users belong to it, and their role
+ └─ funds          its funds: Fund I, Fund II, …
      └─ investors  LP01, LP02… same investor across every call
      └─ calls      Call No. 1, Call No. 2…
          └─ call_register, call_components, call_fee_offsets,
@@ -61,7 +61,7 @@ firms              the fund administrator (Axtara's customer)
          └─ call_results, notices
 ```
 
-Every row belongs to exactly one firm, through this chain. That chain is what
+Every row belongs to exactly one client, through this chain. That chain is what
 the security rules in §2.4 follow.
 
 ### Why investors and the register are two tables
@@ -189,14 +189,14 @@ It's all in
 ### Rule 1 — tenancy (who you are)
 
 ```
-you → firm_members → your firms → their clients → their calls → everything under them
+you → client_members → your clients → their funds → their calls → everything under them
 ```
 
 Built from small helper functions:
 
 ```sql
-auth_firm_ids()    -- firms I belong to
-auth_client_ids()  -- funds in those firms
+auth_client_ids()  -- clients I belong to
+auth_fund_ids()    -- funds of those clients
 auth_call_ids()    -- calls in those funds
 ```
 
@@ -205,15 +205,15 @@ Every read policy is one line using one of those:
 ```sql
 create policy calls_read on calls
   for select to authenticated
-  using (client_id in (select auth_client_ids()));
+  using (fund_id in (select auth_fund_ids()));
 ```
 
-A user from another firm asking for our Call 2 gets **nothing back**. Not
+A user from another client asking for our Call 2 gets **nothing back**. Not
 "forbidden", just nothing. The app never even learns that the call exists.
 
 ### Rule 2 — roles (what you may do)
 
-`firm_members.role` is one of four:
+`client_members.role` is one of four:
 
 | Role | Read | Edit inputs |
 |---|---|---|
@@ -222,7 +222,7 @@ A user from another firm asking for our Call 2 gets **nothing back**. Not
 | `preparer` | ✓ | ✓ |
 | `viewer` | ✓ | ✗ |
 
-`auth_can_write_firm()` is literally `role in ('owner', 'admin', 'preparer')`.
+`auth_can_write_client()` is literally `role in ('owner', 'admin', 'preparer')`.
 
 ### Rule 3 — authority (what nobody can do from a browser)
 
@@ -469,7 +469,7 @@ has three, plus a fix in
 [position_paid_in.sql](../supabase/migrations/20260917120600_position_paid_in.sql).
 
 All three use `security_invoker = on`. Without that, a view reads with its
-**owner's** rights, not yours, and quietly becomes a way to see other firms'
+**owner's** rights, not yours, and quietly becomes a way to see other clients'
 data. With it, RLS applies as if you'd queried the tables yourself.
 
 ### `call_stages` — the status tag on each call
@@ -498,7 +498,7 @@ select distinct on (call_id) … order by call_id, computed_at desc
 
 "For each call, keep only the newest row."
 
-### `client_positions` — the Fund position card on Home
+### `fund_positions` — the Fund position card on Home
 
 ```
 FORMULA
@@ -534,7 +534,7 @@ register: every line 0.00, and the chart saying *"27.9% of USD 0"*.
 [position_from_set_up_call.sql](../supabase/migrations/20260924090000_position_from_set_up_call.sql)
 skips calls with no active investor yet, and `latest_call_no` names the call the
 figures came from. Tested in
-[client_positions.test.sql](../supabase/tests/client_positions.test.sql).
+[fund_positions.test.sql](../supabase/tests/fund_positions.test.sql).
 
 Draft calls are left out of `called_to_date` on purpose. Their figures aren't
 stored (§2.1), so only money that was actually called gets counted.
@@ -568,7 +568,7 @@ looks at the result. If it fails, the send still succeeds, with no audit line.
 **4. The engine version may not be recorded.** See §2.6. It's unchecked on a
 CLI deploy. Worth one look at a real snapshot before this matters.
 
-**5. Nobody can add a colleague.** `firm_members` has a read policy and no insert
+**5. Nobody can add a colleague.** `client_members` has a read policy and no insert
 policy, so inviting a user means running SQL by hand. (The README says this
 too.)
 
@@ -626,7 +626,7 @@ That's the seeded Call 2 from §2.10. You get:
 ```
 
 This connects as `postgres`, the database superuser, so **RLS doesn't apply**
-here. You'll see every firm's data. That's the view the service role key gets,
+here. You'll see every client's data. That's the view the service role key gets,
 and it's why that key is dangerous. `\q` to leave.
 
 ---
@@ -645,6 +645,7 @@ and it's why that key is dangerous. `\q` to leave.
 | [notice_delivery.sql](../supabase/migrations/20260919090000_notice_delivery.sql) | sent ≠ delivered |
 | [sent_is_final.sql](../supabase/migrations/20260923120000_sent_is_final.sql) | a sent notice can't be moved out of `sent` (chapter 5 §5.9) |
 | [position_from_set_up_call.sql](../supabase/migrations/20260924090000_position_from_set_up_call.sql) | fund position reads the newest call that has a register (§2.10) |
+| [client_above_fund.sql](../supabase/migrations/20260925090000_client_above_fund.sql) | the rename: `firms` → `clients` on top, `clients` → `funds` under it (§2.2); undone by [the rollback script](../supabase/rollback/20260925090000_client_above_fund.down.sql) |
 | the other 4 migrations | small additions: delete an empty fund, optional setup fields, GP name, signatory |
 | [supabase-client.ts](../src/adapters/storage/supabase-client.ts) | the three clients |
 | [supabase-repository.ts](../src/adapters/storage/supabase-repository.ts) | every read, and the one save |

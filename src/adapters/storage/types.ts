@@ -25,8 +25,8 @@ export type CallStage = 'not_started' | 'in_progress' | 'partially_sent' | 'issu
 
 export type NoticeStatus = 'draft' | 'approved' | 'sent';
 
-/** A fund the firm administers. */
-export interface Client {
+/** A fund, which belongs to one client. */
+export interface Fund {
   id: string;
   name: string;
 }
@@ -69,7 +69,7 @@ export interface CallSummary {
 /** A call with everything needed to compute it. */
 export interface CallDetail {
   id: string;
-  clientId: string;
+  fundId: string;
   callNo: number;
   stage: CallStage;
   lockedAt: string | null;
@@ -81,8 +81,8 @@ export interface CallDetail {
 }
 
 /** Fund position for the Home card, aggregated over issued calls only. */
-export interface ClientPosition {
-  clientId: string;
+export interface FundPosition {
+  fundId: string;
   name: string;
   totalCommitments: number;
   /** Contributions received before the call currently open. */
@@ -105,21 +105,21 @@ export interface ClientPosition {
  * accident from a component.
  */
 export interface CallRepository {
-  listClients(): Promise<Client[]>;
-  createClient(name: string): Promise<Client>;
+  listFunds(): Promise<Fund[]>;
+  createFund(name: string): Promise<Fund>;
   /**
    * Remove a fund. The database refuses this once the fund has any call
    * history, so it only ever undoes a mistake.
    */
-  deleteClient(clientId: string): Promise<void>;
+  deleteFund(fundId: string): Promise<void>;
 
-  getClientPosition(clientId: string): Promise<ClientPosition | null>;
-  listCalls(clientId: string): Promise<CallSummary[]>;
+  getFundPosition(fundId: string): Promise<FundPosition | null>;
+  listCalls(fundId: string): Promise<CallSummary[]>;
 
   getCall(callId: string): Promise<CallDetail | null>;
 
   /** Create the next call for a fund, seeded with `model`. */
-  createCall(clientId: string, model: CallModel, sources: CallSources): Promise<CallDetail>;
+  createCall(fundId: string, model: CallModel, sources: CallSources): Promise<CallDetail>;
 
   /** Replace a call's inputs. Rejected by the database once the call is issued. */
   saveCall(callId: string, model: CallModel, sources: Partial<CallSources>): Promise<void>;

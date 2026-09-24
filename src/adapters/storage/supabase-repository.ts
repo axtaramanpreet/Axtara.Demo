@@ -32,8 +32,8 @@ import type {
   CallSources,
   CallStage,
   CallSummary,
-  Client,
-  ClientPosition,
+  Fund,
+  FundPosition,
   NoticeState,
   NoticeStatus,
 } from './types';
@@ -47,49 +47,49 @@ const REGISTER_SELECT = `
 
 export function createSupabaseRepository(db: SupabaseClient): CallRepository {
   return {
-    async listClients(): Promise<Client[]> {
+    async listFunds(): Promise<Fund[]> {
       const { data, error } = await db
-        .from('clients')
+        .from('funds')
         .select('id, name')
         .is('archived_at', null)
         .order('name');
-      if (error) throw asError(error, 'load the client list');
+      if (error) throw asError(error, 'load the fund list');
       return data ?? [];
     },
 
-    async createClient(name: string): Promise<Client> {
-      // A firm must exist to own the fund. Where a user belongs to several,
-      // this takes the first — a firm picker is a later concern.
-      const { data: firms, error: firmError } = await db.from('firms').select('id').limit(1);
-      if (firmError) throw asError(firmError, 'find your firm');
-      if (!firms?.length) {
-        throw new Error('You are not a member of any firm yet, so there is nowhere to put this fund.');
+    async createFund(name: string): Promise<Fund> {
+      // A client must exist to own the fund. Where a user belongs to several,
+      // this takes the first — a client picker is a later concern.
+      const { data: clients, error: clientError } = await db.from('clients').select('id').limit(1);
+      if (clientError) throw asError(clientError, 'find your client');
+      if (!clients?.length) {
+        throw new Error('You are not a member of any client yet, so there is nowhere to put this fund.');
       }
 
       const { data, error } = await db
-        .from('clients')
-        .insert({ firm_id: firms[0].id, name })
+        .from('funds')
+        .insert({ client_id: clients[0].id, name })
         .select('id, name')
         .single();
       if (error) throw asError(error, `create the fund "${name}"`);
       return data;
     },
 
-    async deleteClient(clientId: string): Promise<void> {
-      const { error } = await db.from('clients').delete().eq('id', clientId);
+    async deleteFund(fundId: string): Promise<void> {
+      const { error } = await db.from('funds').delete().eq('id', fundId);
       if (error) throw asError(error, 'delete this fund');
     },
 
-    async getClientPosition(clientId: string): Promise<ClientPosition | null> {
+    async getFundPosition(fundId: string): Promise<FundPosition | null> {
       const { data, error } = await db
-        .from('client_positions')
+        .from('fund_positions')
         .select('*')
-        .eq('client_id', clientId)
+        .eq('fund_id', fundId)
         .maybeSingle();
       if (error) throw asError(error, 'load the fund position');
       if (!data) return null;
       return {
-        clientId: data.client_id as string,
+        fundId: data.fund_id as string,
         name: data.name as string,
         totalCommitments: toNumber(data.total_commitments),
         paidInCapital: toNumber(data.paid_in_capital),
@@ -103,11 +103,11 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
       };
     },
 
-    async listCalls(clientId: string): Promise<CallSummary[]> {
+    async listCalls(fundId: string): Promise<CallSummary[]> {
       const { data: calls, error } = await db
         .from('calls')
         .select('id, call_no, call_date, payment_due_date, locked_at')
-        .eq('client_id', clientId)
+        .eq('fund_id', fundId)
         .order('call_no', { ascending: false });
       if (error) throw asError(error, 'load the call history');
       if (!calls?.length) return [];
@@ -198,7 +198,7 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
 
       return {
         id: call.id,
-        clientId: call.client_id,
+        fundId: call.fund_id,
         callNo: call.call_no,
         stage: (stage.data?.stage as CallStage) ?? 'not_started',
         lockedAt: call.locked_at,
@@ -222,7 +222,7 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
     },
 
     async createCall(
-      clientId: string,
+      fundId: string,
       model: CallModel,
       sources: CallSources,
     ): Promise<CallDetail> {
@@ -231,7 +231,7 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
       const { data: existing, error: maxError } = await db
         .from('calls')
         .select('call_no')
-        .eq('client_id', clientId)
+        .eq('fund_id', fundId)
         .order('call_no', { ascending: false })
         .limit(1);
       if (maxError) throw asError(maxError, 'work out the next call number');
@@ -241,7 +241,7 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
 
       const { data: created, error: insertError } = await db
         .from('calls')
-        .insert({ ...columns, client_id: clientId, call_no: callNo })
+        .insert({ ...columns, fund_id: fundId, call_no: callNo })
         .select('id')
         .single();
       if (insertError) throw asError(insertError, `create Capital Call No. ${callNo}`);
@@ -276,7 +276,7 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
             // These two are resolved inside the function from lp_id.
             call_id: undefined,
             investor_id: undefined,
-            client_id: undefined,
+            fund_id: undefined,
           })),
         p_components: model.components
           .filter((c) => String(c.Component_ID ?? '').trim() !== '')

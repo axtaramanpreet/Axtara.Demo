@@ -216,13 +216,18 @@ The rules for writing one (chapter 2):
 - **Never edit a migration that has already run.** Add a new one.
 - **Deploy order:** push the migration **first**, then deploy code that needs
   it. The other way round, the new code runs against the old tables.
+- **Except for a rename.** When a migration renames a table or column, the old
+  app breaks the moment it lands, and the new app breaks until it does. There's
+  no safe order: push and deploy back to back, when nobody is using the app, with
+  the undo script ready (the client/fund rename's is in
+  [supabase/rollback/](../supabase/rollback/)).
 - There's no "down" migration. Undoing one means writing another.
 
 ### A fresh database
 
-A new Supabase project has tables but **no one can sign in**. `firms` and
-`firm_members` have no insert policy, and there's no sign-up screen. So the first
-firm and user are made by hand, once:
+A new Supabase project has tables but **no one can sign in**. `clients` and
+`client_members` have no insert policy, and there's no sign-up screen. So the
+first client and user are made by hand, once:
 
 [supabase/bootstrap/demo-user.sql](../supabase/bootstrap/demo-user.sql), pasted
 into Supabase's SQL editor. It's deliberately **not** a migration: a migration
@@ -255,7 +260,7 @@ Slack or WhatsApp. Move to another domain and change it there too.
 | `JWT issued at future` locally | Docker's clock drifted while the laptop slept | `npm run db:stop && npm run db:start` |
 | Vitest fails to start after `npm install`, about a native binding | an npm bug with optional dependencies | `rm -rf node_modules package-lock.json && npm install` |
 | React error **#418** in production only | a date printed without `timeZone: 'UTC'` (chapter 4 §4.8) | find the `toLocale…` call; use `fmtDate` or `fmtStamp` |
-| A call you know exists is a 404 | RLS: that user's firm doesn't own it | check `firm_members` for that user |
+| A call you know exists is a 404 | RLS: that user's client doesn't own it | check `client_members` for that user |
 | *"This capital call has been issued, so its inputs can no longer be changed"* | working as designed: the call is locked (chapter 2 §2.7) | raise a new call |
 | *"3 checks are failing. Resolve them before approving notices."* | working as designed | the Checks tab says which |
 | Ask Axtara says it isn't connected | `ANTHROPIC_FOUNDRY_ENDPOINT` or `_KEY` missing **in Vercel** | `npx vercel env ls` |
@@ -314,7 +319,7 @@ the accountant's .xlsx                                      chapter 3
     │  read in the browser, SheetJS, never uploaded
     ▼
 CallModel ──── save_call_inputs, all or nothing ────▶ Postgres   chapter 2
-    │                                                  RLS: your firm only
+    │                                                  RLS: your client only
     ▼                                                  triggers: sent = frozen
 compute()  pure; same numbers everywhere               chapter 1
     │  allocate → fee → offsets → roll-forward → checks → golden

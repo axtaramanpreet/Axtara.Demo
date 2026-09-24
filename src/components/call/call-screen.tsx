@@ -29,11 +29,11 @@ type Tab = (typeof TABS)[number];
  */
 export function CallScreen({
   call,
-  clientId,
+  fundId,
   email,
 }: {
   call: CallDetail;
-  clientId: string;
+  fundId: string;
   /** Whether notices can be emailed, and whether they are being redirected. */
   email: { configured: boolean; overrideTo: string | null };
 }) {
@@ -41,7 +41,7 @@ export function CallScreen({
   const [isNavigating, startNavigation] = useTransition();
   const params = useSearchParams();
 
-  const basePath = `/clients/${clientId}/calls/${call.id}`;
+  const basePath = `/funds/${fundId}/calls/${call.id}`;
   const tabParam = params.get('tab');
   const tab: Tab = TABS.includes(tabParam as Tab) ? (tabParam as Tab) : 'summary';
   const selectedLp = params.get('lp') ?? undefined;
@@ -65,7 +65,7 @@ export function CallScreen({
 
   return (
     <div style={{ maxWidth: 1200 }}>
-      <Link href={`/clients/${clientId}`} className="crumb" data-noprint="1">
+      <Link href={`/funds/${fundId}`} className="crumb" data-noprint="1">
         ‹ All calls
       </Link>
 

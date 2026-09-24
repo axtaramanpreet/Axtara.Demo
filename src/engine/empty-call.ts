@@ -3,7 +3,7 @@
  *
  * Everything is blank except the fund's own name, which is a fact the app
  * already knows, and whatever `defaults` carries — the general partner and who
- * signs, which a firm sets once and reuses rather than retyping per call. Currency, dates, the fee, the rounding
+ * signs, which a client sets once and reuses rather than retyping per call. Currency, dates, the fee, the rounding
  * policy and the plug investor are all decisions belonging to this fund, and
  * they arrive from the uploaded workbook, from carrying the previous call
  * forward, or from being typed in.
@@ -20,7 +20,7 @@
 
 import type { CallModel } from './types';
 
-/** Fields a firm sets once and reuses on every call. */
+/** Fields a client sets once and reuses on every call. */
 export interface CallDefaults {
   gpName?: string;
   signatoryName?: string;

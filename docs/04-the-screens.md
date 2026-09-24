@@ -55,16 +55,16 @@ hands it to a client component that does the interactive part.
 ## 4.2 The pages
 
 Next.js App Router works on one rule: **the folder path is the URL.** A folder
-named `[clientId]` in square brackets is a blank to fill in, so
-`/clients/abc/calls/xyz` fills in `clientId=abc` and `callId=xyz`.
+named `[fundId]` in square brackets is a blank to fill in, so
+`/funds/abc/calls/xyz` fills in `fundId=abc` and `callId=xyz`.
 
 | URL | File | Shows |
 |---|---|---|
 | `/login` | [login/page.tsx](../src/app/login/page.tsx) | sign in |
 | `/` | [page.tsx](../src/app/page.tsx) | nothing, it forwards you to your first fund (or "No funds yet") |
-| `/clients/[clientId]` | [page.tsx](../src/app/clients/[clientId]/page.tsx) | Home: the calls table, Fund position, drawdown chart |
-| `…/calls/[callId]/setup` | [setup/page.tsx](../src/app/clients/[clientId]/calls/[callId]/setup/page.tsx) | Set up call |
-| `…/calls/[callId]` | [page.tsx](../src/app/clients/[clientId]/calls/[callId]/page.tsx) | the call: Summary, Allocation, Checks, Notices |
+| `/funds/[fundId]` | [page.tsx](../src/app/funds/[fundId]/page.tsx) | Home: the calls table, Fund position, drawdown chart |
+| `…/calls/[callId]/setup` | [setup/page.tsx](../src/app/funds/[fundId]/calls/[callId]/setup/page.tsx) | Set up call |
+| `…/calls/[callId]` | [page.tsx](../src/app/funds/[fundId]/calls/[callId]/page.tsx) | the call: Summary, Allocation, Checks, Notices |
 | `…/investors`, `…/settings` | | placeholders, "named in the sidebar, not built" |
 
 Plus three **API routes**. A route is a URL that returns data, not a page:
@@ -82,14 +82,14 @@ Plus three **API routes**. A route is a URL that returns data, not a page:
 Here's what happens when you open Call No. 2.
 
 ```
-1. BROWSER   GET /clients/c1/calls/a2
+1. BROWSER   GET /funds/f1/calls/a2
 
 2. SERVER    src/middleware.ts                                     (§4.4)
-             → signed in? no → redirect to /login?next=/clients/c1/calls/a2
+             → signed in? no → redirect to /login?next=/funds/f1/calls/a2
 
 3. SERVER    calls/[callId]/page.tsx   (a server component)
              → getServerSupabase()  acts as YOU, RLS on          (chapter 2 §2.5)
-             → in parallel:  listClients(), getCall(a2), listCalls(c1)
+             → in parallel:  listFunds(), getCall(a2), listCalls(f1)
              → call not visible to you? → 404
 
 4. SERVER    draws <AppShell> + <CallScreen call={…}> to HTML
@@ -108,7 +108,7 @@ different pages and throws the server's version away (§4.8).
 
 | Where | File | Why |
 |---|---|---|
-| Home page, server | [clients/[clientId]/page.tsx](../src/app/clients/[clientId]/page.tsx) | live totals for calls that haven't been sent, and the drawdown chart |
+| Home page, server | [funds/[fundId]/page.tsx](../src/app/funds/[fundId]/page.tsx) | live totals for calls that haven't been sent, and the drawdown chart |
 | Call screen, server and browser | [call-screen.tsx](../src/components/call/call-screen.tsx) | every figure on all four tabs |
 | Approve and send, server | [call-actions.ts](../src/server/call-actions.ts) | re-worked out from stored inputs, never trusted from the browser |
 | Ask Axtara, server | [fund-context.ts](../src/server/fund-context.ts) | the numbers the AI reads |
@@ -186,7 +186,7 @@ The call screen keeps **which tab** and **which investor** in the address bar,
 not in memory:
 
 ```
-/clients/c1/calls/a2?tab=notices&lp=LP03
+/funds/f1/calls/a2?tab=notices&lp=LP03
 ```
 
 ```ts
@@ -344,9 +344,9 @@ when they run in a browser. That catches the mistake **at run time**. Adding
 `import 'server-only'` would catch it **at build time**, before anything ships.
 
 **3. The fund in the URL isn't checked against the call.** `CallPage` loads
-`callId` and uses `clientId` from the URL without checking the call belongs to
-that fund. RLS still stops you seeing another **firm's** call. But
-`/clients/FUND-A/calls/<a call from FUND-B>` shows Fund B's call inside Fund A's
+`callId` and uses `fundId` from the URL without checking the call belongs to
+that fund. RLS still stops you seeing another **client's** call. But
+`/funds/FUND-A/calls/<a call from FUND-B>` shows Fund B's call inside Fund A's
 frame, with the wrong name in the sidebar and breadcrumb.
 
 **4. An issued call shows today's maths, not what was sent.** `CallScreen`

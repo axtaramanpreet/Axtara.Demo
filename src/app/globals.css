@@ -131,7 +131,7 @@ body {
   flex-direction: column;
 }
 
-/* --- Client switcher ------------------------------------------------------ */
+/* --- Fund switcher ------------------------------------------------------ */
 
 .ws {
   position: relative;
@@ -809,7 +809,7 @@ p {
   font-weight: 600;
 }
 
-select.client {
+select.fund {
   font: inherit;
   font-size: 20px;
   font-weight: 600;
@@ -821,11 +821,11 @@ select.client {
   padding: 2px 0 4px;
   cursor: pointer;
 }
-select.client option {
+select.fund option {
   background: var(--card);
   color: var(--foreground);
 }
-select.client:focus-visible {
+select.fund:focus-visible {
   outline: none;
   border-bottom-color: var(--ring);
 }

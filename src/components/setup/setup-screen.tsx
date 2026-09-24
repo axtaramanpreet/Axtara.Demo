@@ -37,11 +37,11 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 export function SetupScreen({
   call,
-  clientId,
+  fundId,
   previousCall,
 }: {
   call: CallDetail;
-  clientId: string;
+  fundId: string;
   /** The call before this one, for carrying the register forward. */
   previousCall?: CallDetail | null;
 }) {
@@ -176,7 +176,7 @@ export function SetupScreen({
     if (dirty.current) await save(model, sources);
     setOverlay({
       ...REVIEW_STEPS(model.setup.Call_Number ?? ''),
-      then: () => router.push(`/clients/${clientId}/calls/${call.id}`),
+      then: () => router.push(`/funds/${fundId}/calls/${call.id}`),
     });
   }
 
@@ -185,7 +185,7 @@ export function SetupScreen({
       return;
     try {
       await repo.deleteCall(call.id);
-      router.push(`/clients/${clientId}`);
+      router.push(`/funds/${fundId}`);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not delete this call.');
@@ -204,7 +204,7 @@ export function SetupScreen({
       )}
 
       <div style={{ maxWidth: 1200 }}>
-        <Link href={`/clients/${clientId}`} className="crumb">
+        <Link href={`/funds/${fundId}`} className="crumb">
           ‹ All calls
         </Link>
 

@@ -28,7 +28,7 @@ const active = result.rows.filter((r) => r.isActive);
 function call(callNo: number): CallDetail {
   return {
     id: `call-${callNo}`,
-    clientId: 'client-1',
+    fundId: 'fund-1',
     callNo,
     stage: 'in_progress',
     lockedAt: null,
@@ -49,7 +49,7 @@ function call(callNo: number): CallDetail {
   } as unknown as CallDetail;
 }
 
-const context = buildFundContext({ id: 'client-1', name: 'Illustrative Fund II, L.P.' }, [call(2)]);
+const context = buildFundContext({ id: 'fund-1', name: 'Illustrative Fund II, L.P.' }, [call(2)]);
 
 describe('what the model is told', () => {
   it('states every rule the handoff sets', () => {

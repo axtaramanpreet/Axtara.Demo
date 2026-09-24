@@ -104,7 +104,7 @@ export async function approveNotices(callId: string, lpIds?: string[]) {
   if (!targets.length) throw new ActionError('There are no draft notices to approve.', 400);
 
   const service = createServiceSupabase();
-  const investors = await investorIdsByLp(service, call.clientId, targets);
+  const investors = await investorIdsByLp(service, call.fundId, targets);
   const now = new Date().toISOString();
 
   const { error } = await service.from('notices').upsert(
@@ -127,7 +127,7 @@ export async function approveNotices(callId: string, lpIds?: string[]) {
 export async function revertNotices(callId: string, lpIds: string[]) {
   const { call, user } = await loadAuthorised(callId);
   const service = createServiceSupabase();
-  const investors = await investorIdsByLp(service, call.clientId, lpIds);
+  const investors = await investorIdsByLp(service, call.fundId, lpIds);
 
   const { error } = await service
     .from('notices')
@@ -180,7 +180,7 @@ export async function sendNotices(callId: string, lpIds?: string[]) {
     .single();
   if (snapshotError) throw new ActionError(snapshotError.message, 400);
 
-  const investors = await investorIdsByLp(service, call.clientId, targets);
+  const investors = await investorIdsByLp(service, call.fundId, targets);
   const now = new Date().toISOString();
 
   const rows = targets.map((lpId) => {
@@ -341,13 +341,13 @@ function roundTotals(totals: ComputeResult['totals'], decimals: number): Compute
 /** Map LP_IDs to investor ids for one fund. */
 async function investorIdsByLp(
   service: ReturnType<typeof createServiceSupabase>,
-  clientId: string,
+  fundId: string,
   lpIds: string[],
 ): Promise<Record<string, string>> {
   const { data, error } = await service
     .from('investors')
     .select('id, lp_id')
-    .eq('client_id', clientId)
+    .eq('fund_id', fundId)
     .in('lp_id', lpIds);
   if (error) throw new ActionError(error.message, 400);
 
@@ -366,15 +366,15 @@ async function audit(
   action: string,
   after: Record<string, unknown>,
 ) {
-  const { data: client } = await service
-    .from('clients')
-    .select('firm_id')
-    .eq('id', call.clientId)
+  const { data: fund } = await service
+    .from('funds')
+    .select('client_id')
+    .eq('id', call.fundId)
     .single();
 
   await service.from('audit_log').insert({
-    firm_id: client?.firm_id ?? null,
-    client_id: call.clientId,
+    client_id: fund?.client_id ?? null,
+    fund_id: call.fundId,
     call_id: call.id,
     actor,
     action,

@@ -77,7 +77,7 @@ export interface LPRow {
   Contact_Email?: string;
   Notes?: string;
   /**
-   * Extra columns a firm's own register may carry. `unknown` rather than `Cell`
+   * Extra columns a client's own register may carry. `unknown` rather than `Cell`
    * so that `ComputedRow` can extend this row with richer computed fields; the
    * named fields above stay strictly typed, which is where the engine reads.
    */

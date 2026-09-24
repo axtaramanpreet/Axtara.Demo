@@ -30,7 +30,7 @@ It's one idea, done plainly:
 BROWSER   you type "Which notices are still unsent?"
           POST /api/ask
           {
-            clientId:  "c1",
+            fundId:    "f1",
             question:  "Which notices are still unsent?",
             viewing:   { callNo: 2, tab: "notices" },
             history:   [ the last 4 questions and answers ]
@@ -38,9 +38,9 @@ BROWSER   you type "Which notices are still unsent?"
                         ▲ no fund data in here. None.
 
 SERVER    1. signed in?                          no → 401
-          2. listClients() AS YOU                (RLS, chapter 2 §2.4)
-             is c1 one of yours?                 no → 404
-          3. load EVERY call for c1, AS YOU
+          2. listFunds() AS YOU                (RLS, chapter 2 §2.4)
+             is f1 one of yours?                 no → 404
+          3. load EVERY call for f1, AS YOU
           4. buildFundContext(): compute() each call → one JSON snapshot
           5. systemPrompt(snapshot, viewing)
           6. complete(): send it to Claude on Microsoft Foundry
@@ -62,7 +62,7 @@ made-up figures.
 
 **The server reads as you, never with the service key.** Step 2 and 3 use
 `getServerSupabase()`, so RLS decides which funds exist for you. With the
-service-role key, anyone signed in could ask about any firm's register. The
+service-role key, anyone signed in could ask about any client's register. The
 route's own comment says exactly that.
 
 ---
@@ -74,7 +74,7 @@ question**:
 
 ```
 {
-  client: "Illustrative Fund II, L.P.",
+  fund: "Illustrative Fund II, L.P.",
   today:  "2026-09-23",
   calls: [                                   newest first
     {
@@ -186,7 +186,7 @@ Then the **server** turns it into a link, because only the server knows which
 database id Call No. 2 has:
 
 ```
-/clients/c1/calls/<id of call 2>?tab=notices     "Open Call No. 2 · Notices"
+/funds/f1/calls/<id of call 2>?tab=notices     "Open Call No. 2 · Notices"
 ```
 
 A GOTO pointing at a call this fund doesn't have becomes **no link**, not a

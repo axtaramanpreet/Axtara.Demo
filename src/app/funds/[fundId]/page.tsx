@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { compute, fmt, fmtDate } from '@/engine';
+import { compute, fmt, fmtDate, termsOn } from '@/engine';
 import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
 import type { SupabaseClient } from '@/adapters/storage/supabase-client';
-import type { CallDefaults } from '@/engine';
+import type { CallDefaults, FundTerms } from '@/engine';
 import type { CallSummary } from '@/adapters/storage/types';
 import { getServerSupabase } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/app-shell';
@@ -29,13 +29,17 @@ export default async function FundHomePage({
   const supabase = await getServerSupabase();
   const repo = createSupabaseRepository(supabase as unknown as SupabaseClient);
 
-  const [funds, position, calls] = await Promise.all([
+  const [funds, position, calls, terms] = await Promise.all([
     repo.listFunds(),
     repo.getFundPosition(fundId),
     repo.listCalls(fundId),
+    repo.listFundTerms(fundId),
   ]);
 
+  // A new call starts from the deployment's configured signatory and GP, with
+  // the fund's terms in force today applied on top.
   const defaults = noticeDefaults();
+  const termsToday = termsOn(terms, new Date().toISOString().slice(0, 10));
   const fund = funds.find((c) => c.id === fundId);
   if (!fund) notFound();
 
@@ -64,13 +68,14 @@ export default async function FundHomePage({
               fundId={fundId}
               fundName={fund.name}
               defaults={defaults}
+              terms={termsToday}
               reuseCallId={notStarted?.id}
             />
           </div>
         </div>
 
         {calls.length === 0 ? (
-          <EmptyState fundId={fundId} fundName={fund.name} defaults={defaults} />
+          <EmptyState fundId={fundId} fundName={fund.name} defaults={defaults} terms={termsToday} />
         ) : (
           <>
             <CardGrid style={{ marginTop: 24 }}>
@@ -210,10 +215,12 @@ function EmptyState({
   fundId,
   fundName,
   defaults,
+  terms,
 }: {
   fundId: string;
   fundName: string;
   defaults: CallDefaults;
+  terms: FundTerms | null;
 }) {
   return (
     <Card style={{ maxWidth: 560, marginTop: 24 }} bodyPadding="28px">
@@ -223,7 +230,7 @@ function EmptyState({
         hand, or loading the illustrative template to see how it works.
       </p>
       <div style={{ marginTop: 18 }}>
-        <NewCallButton fundId={fundId} fundName={fundName} defaults={defaults} />
+        <NewCallButton fundId={fundId} fundName={fundName} defaults={defaults} terms={terms} />
       </div>
     </Card>
   );

@@ -28,6 +28,7 @@ import type {
 } from '@/engine/types';
 import type { Database } from './database.types';
 import type { CallSources, InputSource } from './types';
+import type { FundTerms } from '@/engine/fund-terms';
 
 type Row<T extends keyof Database['public']['Tables']> =
   Database['public']['Tables'][T]['Row'];
@@ -38,6 +39,7 @@ export type ComponentDbRow = Row<'call_components'>;
 export type OffsetDbRow = Row<'call_fee_offsets'>;
 export type TransferDbRow = Row<'call_transfers'>;
 export type ExpectedOutputRow = Row<'call_expected_output'>;
+export type FundTermsRow = Row<'fund_terms'>;
 export type InvestorRow = Row<'investors'>;
 
 /** A register row with its investor joined on. */
@@ -385,4 +387,73 @@ function decimalsOrNull(v: unknown): number | null {
 function numericOrNull(v: unknown): number | null {
   if (v === null || v === undefined || String(v).trim() === '') return null;
   return toStoredAmount(v);
+}
+
+
+// ---------------------------------------------------------------------------
+// Fund terms
+// ---------------------------------------------------------------------------
+
+/** Numeric columns arrive from PostgREST as numbers or strings. Null stays null. */
+const orNull = (v: string | number | null): number | null => (v === null ? null : toNumber(v));
+
+export function toFundTerms(r: FundTermsRow): FundTerms {
+  return {
+    effectiveFrom: r.effective_from,
+    createdAt: r.created_at,
+    reportingCurrency: r.reporting_currency,
+    roundingDecimals: r.rounding_decimals,
+    roundingPlugLpId: r.rounding_plug_lp_id,
+    feeBasis: r.fee_basis,
+    feeRateAnnual: orNull(r.fee_rate_annual),
+    feePeriodFraction: orNull(r.fee_period_fraction),
+    feeReducesUnfunded: r.fee_reduces_unfunded,
+    feeExemptLpIds: r.fee_exempt_lp_ids ?? [],
+    orgExpenseCap: orNull(r.org_expense_cap),
+    gpName: r.gp_name,
+    signatoryName: r.signatory_name,
+    signatoryTitle: r.signatory_title,
+    investmentPeriodEnd: r.investment_period_end,
+    fundTermEnd: r.fund_term_end,
+    feeTiming: r.fee_timing as FundTerms['feeTiming'],
+    feeDayCount: r.fee_day_count as FundTerms['feeDayCount'],
+    lateCloseInterestRate: orNull(r.late_close_interest_rate),
+    lateCloseInterestBasis: r.late_close_interest_basis as FundTerms['lateCloseInterestBasis'],
+    catchUpFeeTo: r.catch_up_fee_to as FundTerms['catchUpFeeTo'],
+    equalizationInterestTo: r.equalization_interest_to as FundTerms['equalizationInterestTo'],
+    note: r.note,
+  };
+}
+
+/**
+ * A new terms row. Blanks go in as null, never as '' or 0: a blank term is
+ * "not set", and the Settings screen has to be able to tell that apart.
+ */
+export function fromFundTerms(fundId: string, t: Omit<FundTerms, 'createdAt'>) {
+  const text = (v: string | null) => emptyToNull(v);
+  return {
+    fund_id: fundId,
+    effective_from: t.effectiveFrom,
+    reporting_currency: text(t.reportingCurrency)?.toUpperCase() ?? null,
+    rounding_decimals: t.roundingDecimals,
+    rounding_plug_lp_id: text(t.roundingPlugLpId),
+    fee_basis: text(t.feeBasis),
+    fee_rate_annual: t.feeRateAnnual,
+    fee_period_fraction: t.feePeriodFraction,
+    fee_reduces_unfunded: t.feeReducesUnfunded,
+    fee_exempt_lp_ids: t.feeExemptLpIds.map((id) => id.trim()).filter(Boolean),
+    org_expense_cap: t.orgExpenseCap,
+    gp_name: text(t.gpName),
+    signatory_name: text(t.signatoryName),
+    signatory_title: text(t.signatoryTitle),
+    investment_period_end: text(t.investmentPeriodEnd),
+    fund_term_end: text(t.fundTermEnd),
+    fee_timing: t.feeTiming,
+    fee_day_count: t.feeDayCount,
+    late_close_interest_rate: t.lateCloseInterestRate,
+    late_close_interest_basis: t.lateCloseInterestBasis,
+    catch_up_fee_to: t.catchUpFeeTo,
+    equalization_interest_to: t.equalizationInterestTo,
+    note: text(t.note),
+  };
 }

@@ -4,7 +4,7 @@ Chapter 1 was the maths. This chapter is **where the numbers live, and who is
 allowed to change them.**
 
 The database is Postgres, hosted by Supabase. Everything about its shape is in
-16 files in [supabase/migrations/](../supabase/migrations/). A **migration** is
+17 files in [supabase/migrations/](../supabase/migrations/). A **migration** is
 a SQL file that changes the database one step. They run in date order, oldest
 first, and never get edited after they've run. Each fix is a new file.
 
@@ -63,6 +63,50 @@ clients            the client: a GP or manager (Axtara's customer)
 
 Every row belongs to exactly one client, through this chain. That chain is what
 the security rules in §2.4 follow.
+
+### A fund's own terms: `fund_terms`
+
+A fund's settings (currency, fee, rounding, GP, signatory, fund life, and its
+LPA terms) are **one row per change**, dated by `effective_from`:
+
+```
+RULE   terms on a date = the latest row on or before that date
+       two rows for the same date → the one entered later wins (a correction)
+       rows are never edited or deleted, except when the whole fund is deleted
+       blank = "not set", and the Settings page flags it as such
+```
+
+**Suggestions are not terms.** For a term nobody has set, the Settings form
+offers the common choice (USD, 2 decimals, commitment basis, 0.25 a quarter,
+billed in advance…), marked *Suggested — check against the LPA*. Nothing is
+stored until someone presses Record, and until then the page says *Not set*.
+
+**The fee after the investment period** is a second dated row, not a separate
+setting. The form's *Fee changes after it* box records the terms now and the
+same terms with the new basis and rate from the day after the period ends, in
+one all-or-nothing insert. It then shows under *Scheduled changes* until that
+date.
+
+**A draft call follows them.** On a call that hasn't been issued, the terms in
+force on **the call's date** are applied to its fund-level fields: currency,
+fee, rounding decimals, expense cap, GP and signatory. Those fields show
+*From Settings*, read-only, with a link to change them.
+
+```
+RULE   Settings has a value for the term  →  the call uses it, read-only
+       Settings has it blank              →  the call's own value, editable
+       the fund has no terms at all       →  exactly as before: all editable
+       the call has been issued           →  never touched
+```
+
+It's applied as the call loads, on every edit (a new call date can bring
+different terms into force), and when a workbook, the template or the previous
+call replaces the inputs. A status line says what it replaced, e.g.
+*Default_Fee_Rate_Annual 0.02 → 0.0175*. The rounding plug is never locked:
+it's picked per call, and Settings only pre-fills it on a new one. The call
+still stores its own copy, so an issued call keeps exactly what it was sent
+with. The engine side is [fund-terms.ts](../src/engine/fund-terms.ts); the
+screen is Settings.
 
 ### Why investors and the register are two tables
 
@@ -590,8 +634,8 @@ npm run db:start
 npm run db:test
 ```
 
-`db:test` runs 62 **pgTAP** tests (tests written in SQL, run inside the
-database) from [supabase/tests/](../supabase/tests/). All 62 pass. Open
+`db:test` runs 74 **pgTAP** tests (tests written in SQL, run inside the
+database) from [supabase/tests/](../supabase/tests/). All 74 pass. Open
 [immutability.test.sql](../supabase/tests/immutability.test.sql) next to the
 output. It sends a notice, then tries to edit the register:
 
@@ -652,6 +696,7 @@ and it's why that key is dangerous. `\q` to leave.
 | [position_from_set_up_call.sql](../supabase/migrations/20260924090000_position_from_set_up_call.sql) | fund position reads the newest call that has a register (§2.10) |
 | [save_every_setup_field.sql](../supabase/migrations/20260925100000_save_every_setup_field.sql) | GP name and signatory are saved, and a blanked field stays blank (§2.9) |
 | [client_above_fund.sql](../supabase/migrations/20260925110000_client_above_fund.sql) | the rename: `firms` → `clients` on top, `clients` → `funds` under it (§2.2); undone by [the rollback script](../supabase/rollback/20260925110000_client_above_fund.down.sql) |
+| [fund_terms.sql](../supabase/migrations/20260925120000_fund_terms.sql) | a fund's terms, dated and add-only (see below) |
 | the other 4 migrations | small additions: delete an empty fund, optional setup fields, GP name, signatory |
 | [supabase-client.ts](../src/adapters/storage/supabase-client.ts) | the three clients |
 | [supabase-repository.ts](../src/adapters/storage/supabase-repository.ts) | every read, and the one save |

@@ -17,6 +17,7 @@ import { SCENARIOS } from '@/engine/fixtures/scenarios';
 import { createSupabaseRepository } from '../supabase-repository';
 import type { SupabaseClient } from '../supabase-client';
 import type { CallRepository, CallSources } from '../types';
+import { BLANK_TERMS, termsOn } from '@/engine/fund-terms';
 import { LOCAL_URL, createLocalServiceClient } from './local-stack';
 
 const db = createLocalServiceClient();
@@ -84,6 +85,62 @@ describe.skipIf(!up)('Supabase repository (integration)', () => {
     expect(viaDb.checks.filter((c) => c.level === 'fail')).toEqual([]);
     expect(viaDb.rows.map((r) => r.total)).toEqual(direct.rows.map((r) => r.total));
     expect(viaDb.totals.total).toBeCloseTo(7037500, 2);
+  });
+
+  it('keeps fund terms as a dated history, blanks as blanks', async () => {
+    const [first] = await repo.addFundTerms(FUND_ID, [{
+      ...BLANK_TERMS,
+      effectiveFrom: '2024-01-01',
+      reportingCurrency: 'usd',
+      feeBasis: 'Commitment',
+      feeRateAnnual: 0.02,
+      feeReducesUnfunded: true,
+      feeExemptLpIds: ['GP01', ' '],
+      feeTiming: 'arrears',
+    }]);
+    await repo.addFundTerms(FUND_ID, [{
+      ...BLANK_TERMS,
+      effectiveFrom: '2029-01-01',
+      feeBasis: 'Invested_Capital',
+      feeRateAnnual: 0.015,
+    }]);
+
+    const history = await repo.listFundTerms(FUND_ID);
+    expect(history.map((t) => t.effectiveFrom)).toEqual(['2024-01-01', '2029-01-01']);
+
+    // What went in is what comes back, bar the tidying a column needs.
+    expect(first.reportingCurrency).toBe('USD');
+    expect(first.feeRateAnnual).toBe(0.02);
+    expect(first.feeReducesUnfunded).toBe(true);
+    expect(first.feeExemptLpIds).toEqual(['GP01']);
+    expect(first.feeTiming).toBe('arrears');
+
+    // Blank is "not set", not zero and not false — the screen depends on it.
+    expect(first.orgExpenseCap).toBeNull();
+    expect(first.roundingDecimals).toBeNull();
+    expect(first.feeDayCount).toBeNull();
+
+    expect(termsOn(history, '2030-06-30')?.feeRateAnnual).toBe(0.015);
+    expect(termsOn(history, '2026-06-30')?.feeRateAnnual).toBe(0.02);
+  });
+
+  it('records several dated rows as one, or none of them', async () => {
+    const before = (await repo.listFundTerms(FUND_ID)).length;
+    // The second row breaks a column rule, so the first must not land either.
+    await expect(
+      repo.addFundTerms(FUND_ID, [
+        { ...BLANK_TERMS, effectiveFrom: '2030-01-01', feeRateAnnual: 0.01 },
+        { ...BLANK_TERMS, effectiveFrom: '2031-01-01', roundingDecimals: 9 },
+      ]),
+    ).rejects.toThrow();
+    expect((await repo.listFundTerms(FUND_ID)).length).toBe(before);
+  });
+
+  it('lists the fund\u2019s investors by LP_ID', async () => {
+    await repo.createCall(FUND_ID, ILLUSTRATIVE_FUND, ALL_SOURCES);
+    const investors = await repo.listInvestors(FUND_ID);
+    expect(investors.map((i) => i.lpId)).toEqual(['GP01', 'LP01', 'LP02', 'LP03', 'LP04', 'LP05']);
+    expect(investors.find((i) => i.lpId === 'LP04')?.name).toBe('Delta Insurance Co');
   });
 
   it('numbers calls sequentially per fund', async () => {

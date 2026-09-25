@@ -22,10 +22,11 @@ export default async function SetupPage({
   const supabase = await getServerSupabase();
   const repo = createSupabaseRepository(supabase as unknown as SupabaseClient);
 
-  const [funds, call, calls] = await Promise.all([
+  const [funds, call, calls, fundTerms] = await Promise.all([
     repo.listFunds(),
     repo.getCall(callId),
     repo.listCalls(fundId),
+    repo.listFundTerms(fundId),
   ]);
 
   if (!call) notFound();
@@ -50,7 +51,14 @@ export default async function SetupPage({
       preparedBy={call.model.setup.Prepared_By as string | undefined}
       askConnected={askStatusForClient().connected}
     >
-      <SetupScreen call={call} fundId={fundId} previousCall={previousCall} />
+      <SetupScreen
+        call={call}
+        fundId={fundId}
+        previousCall={previousCall}
+        fundTerms={fundTerms}
+        // UTC, so the server and the browser agree on which terms are in force.
+        today={new Date().toISOString().slice(0, 10)}
+      />
     </AppShell>
   );
 }

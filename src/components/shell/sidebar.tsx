@@ -164,12 +164,14 @@ export function Sidebar({
         icon={<InvestorsIcon />}
         chevron
       />
-      <SoonItem
+      <Link
         href={`/funds/${fundId}/settings`}
-        label="Settings"
-        on={module === 'settings'}
-        icon={<SettingsIcon />}
-      />
+        className={['nav-item', module === 'settings' ? 'on' : ''].filter(Boolean).join(' ')}
+        title="Settings — the fund's terms"
+      >
+        <SettingsIcon />
+        <span>Settings</span>
+      </Link>
 
       <div className="side-foot">
         {/* The one brand mark in the product. The handoff put "Fund

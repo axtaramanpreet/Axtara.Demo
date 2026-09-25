@@ -2,11 +2,11 @@
  * A new, empty capital call.
  *
  * Everything is blank except the fund's own name, which is a fact the app
- * already knows, and whatever `defaults` carries — the general partner and who
- * signs, which a client sets once and reuses rather than retyping per call. Currency, dates, the fee, the rounding
- * policy and the plug investor are all decisions belonging to this fund, and
- * they arrive from the uploaded workbook, from carrying the previous call
- * forward, or from being typed in.
+ * already knows, and the deployment's configured signatory and general
+ * partner. The fund's own terms, recorded once on the Settings page, go on top
+ * with `applyFundTerms`. What neither gives stays blank, and arrives from the
+ * uploaded workbook, from carrying the previous call forward, or from being
+ * typed in. Dates are never defaulted: they belong to the call.
  *
  * A new call used to start from the illustrative fixture instead, so a real
  * first call arrived carrying another fund's economics — a 2% fee, a 1.5m
@@ -20,7 +20,11 @@
 
 import type { CallModel } from './types';
 
-/** Fields a client sets once and reuses on every call. */
+/**
+ * The deployment's configured signatory and general partner, from before funds
+ * had terms of their own. A fund's recorded terms are applied on top of these
+ * with `applyFundTerms`.
+ */
 export interface CallDefaults {
   gpName?: string;
   signatoryName?: string;

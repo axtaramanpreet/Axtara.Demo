@@ -17,7 +17,7 @@ import type { CallDetail, CallSources } from '@/adapters/storage/types';
 // Type-only, so this does not pull SheetJS into the bundle; the module itself
 // is imported on demand when a workbook is actually opened.
 import type { WorkbookLike, WorkbookReader } from '@/adapters/workbook/parse-workbook';
-import { fmt, num, serialToISO } from '@/engine';
+import { applyFundTerms, fmt, fmtDate, num, serialToISO, termsOn, type FundTerms } from '@/engine';
 import { nextCallFrom } from '@/engine/carry-forward';
 import type { CallModel, ComponentRow, LPRow, OffsetRow, TransferRow } from '@/engine/types';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,27 @@ import { ProcessingOverlay, REVIEW_STEPS, UPLOAD_STEPS } from './processing-over
 import { SourceStep } from './source-step';
 import { STEPS, Stepper, type StepId } from './stepper';
 
+/**
+ * A call with the fund's terms in force on its date applied, and a sentence
+ * saying what that changed — or null when it changed nothing.
+ */
+function withTerms(
+  model: CallModel,
+  fundTerms: FundTerms[],
+  today: string,
+  readOnly: boolean,
+): { model: CallModel; message: string | null } {
+  if (readOnly) return { model, message: null };
+  const on = serialToISO(model.setup.Call_Date) || today;
+  const { model: next, changed } = applyFundTerms(model, termsOn(fundTerms, on));
+  if (!changed.length) return { model: next, message: null };
+  const seen = new Set<string>();
+  const lines = changed
+    .filter((c) => !seen.has(c.key) && Boolean(seen.add(c.key)))
+    .map((c) => `${c.key} ${String(c.was ?? '') || 'blank'} → ${String(c.now ?? '')}`);
+  return { model: next, message: `Updated from the fund's terms in force on ${fmtDate(on)}: ${lines.join(', ')}.` };
+}
+
 /** How long to wait after the last keystroke before saving. */
 const SAVE_DEBOUNCE_MS = 800;
 
@@ -39,30 +60,58 @@ export function SetupScreen({
   call,
   fundId,
   previousCall,
+  fundTerms,
+  today,
 }: {
   call: CallDetail;
   fundId: string;
   /** The call before this one, for carrying the register forward. */
   previousCall?: CallDetail | null;
+  /** The fund's terms, every row. The ones in force on the call date apply. */
+  fundTerms: FundTerms[];
+  /** YYYY-MM-DD, from the server: the date terms are read on before the call has one. */
+  today: string;
 }) {
   const router = useRouter();
   const repo = useMemo(() => createSupabaseRepository(createBrowserSupabase()), []);
 
-  const [model, setModel] = useState<CallModel>(call.model);
+  const readOnlyAtLoad = call.lockedAt !== null;
+  const [initial] = useState(() => withTerms(call.model, fundTerms, today, readOnlyAtLoad));
+  const [model, setModel] = useState<CallModel>(initial.model);
   const [sources, setSources] = useState<CallSources>(call.sources);
   const [step, setStep] = useState<StepId>(call.sources.lps === 'empty' ? 'source' : 'setup');
   const [saveState, setSaveState] = useState<SaveState>('idle');
-  const [status, setStatus] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(initial.message);
   const [error, setError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<{ title: string; steps: string[]; then: () => void } | null>(
     null,
   );
 
   // Inputs are frozen once a notice has gone out; the database enforces it too.
-  const readOnly = call.lockedAt !== null;
+  const readOnly = readOnlyAtLoad;
 
-  // Skip the save that would otherwise fire from the first render.
-  const dirty = useRef(false);
+  // Skip the save that would otherwise fire from the first render — unless the
+  // fund's terms changed the call as it loaded, which is worth keeping.
+  const dirty = useRef(initial.message !== null);
+
+  /**
+   * The fund's terms in force on the call date, put into the call.
+   *
+   * Fund-level fields — currency, fee, rounding, who signs — are set once in
+   * Settings, so a draft call follows them rather than carrying its own copy
+   * that can drift. Only terms Settings actually has are applied and locked;
+   * the rest stay the call's to type. An issued call is left exactly as sent.
+   *
+   * Applied wherever the call changes — as it loads, on every edit (a new call
+   * date can bring different terms into force), and when a workbook, the
+   * template or the previous call replaces it — so the model is never out of
+   * step with Settings, and no render has to correct another.
+   */
+  const termsDate = serialToISO(model.setup.Call_Date) || today;
+  const termsForCall = termsOn(fundTerms, termsDate);
+  const lockedCells = readOnly ? new Set<string>() : applyFundTerms(model, termsForCall).locked;
+  const lockedFor = (step: 'setup' | 'fee') =>
+    new Set([...lockedCells].filter((k) => k.startsWith(`${step}.`)).map((k) => k.slice(step.length + 1)));
 
   const save = useCallback(
     async (nextModel: CallModel, nextSources: Partial<CallSources>) => {
@@ -97,16 +146,22 @@ export function SetupScreen({
    */
   function edit(next: Partial<CallModel>, touched?: keyof CallSources) {
     dirty.current = true;
-    setModel((m) => ({ ...m, ...next }));
+    const applied = withTerms({ ...model, ...next }, fundTerms, today, readOnly);
+    setModel(applied.model);
+    if (applied.message) setStatus(applied.message);
     if (touched) setSources((s) => ({ ...s, [touched]: 'manual' }));
   }
 
   function replaceModel(next: CallModel, nextSources: CallSources, message: string) {
     dirty.current = true;
-    setModel(next);
+    // A workbook, the template or the previous call carries its own fund-level
+    // figures; where Settings has a term, Settings wins, and the message says
+    // what it replaced so nobody is surprised by a fee they did not upload.
+    const applied = withTerms(next, fundTerms, today, readOnly);
+    setModel(applied.model);
     setSources(nextSources);
-    setStatus(message);
-    void save(next, nextSources);
+    setStatus(applied.message ? `${message} ${applied.message}` : message);
+    void save(applied.model, nextSources);
   }
 
   async function onWorkbook(file: File) {
@@ -316,10 +371,16 @@ export function SetupScreen({
 
             {step === 'setup' && (
               <Card title="Fund setup" subtitle="applies to this call only">
+                <TermsNote readOnly={readOnly} terms={termsForCall} on={termsDate} settingsHref={`/funds/${fundId}/settings`} />
                 <FieldTable
                   fields={SETUP_FIELDS}
                   values={model.setup}
                   readOnly={readOnly}
+                  locked={lockedFor('setup')}
+                  settingsHref={`/funds/${fundId}/settings`}
+                  investors={model.lps
+                    .filter((l) => String(l.LP_ID ?? '').trim())
+                    .map((l) => ({ value: String(l.LP_ID), label: String(l.LP_Name ?? l.LP_ID) }))}
                   onChange={(key, value) =>
                     edit(
                       {
@@ -374,10 +435,13 @@ export function SetupScreen({
             {step === 'fee' && (
               <div style={{ display: 'grid', gap: 16 }}>
                 <Card title="Management fee">
+                  <TermsNote readOnly={readOnly} terms={termsForCall} on={termsDate} settingsHref={`/funds/${fundId}/settings`} />
                   <FieldTable
                     fields={FEE_FIELDS}
                     values={model.fee as unknown as Record<string, unknown>}
                     readOnly={readOnly}
+                    locked={lockedFor('fee')}
+                    settingsHref={`/funds/${fundId}/settings`}
                     onChange={(key, value) => edit({ fee: { ...model.fee, [key]: value } }, 'fee')}
                   />
                 </Card>
@@ -465,3 +529,33 @@ const dismissStyle = {
 } as const;
 
 export { STEPS };
+
+/** One line above a step's fields, saying where the fund-level ones come from. */
+function TermsNote({
+  readOnly,
+  terms,
+  on,
+  settingsHref,
+}: {
+  readOnly: boolean;
+  terms: FundTerms | null;
+  on: string;
+  settingsHref: string;
+}) {
+  if (readOnly) return null;
+  return (
+    <p className="text-muted" style={{ fontSize: 12, margin: '10px 16px 4px', textWrap: 'pretty' }}>
+      {terms ? (
+        <>
+          Fields marked <em>From Settings</em> follow the fund\u2019s terms in force on {fmtDate(on)}.{' '}
+          <Link href={settingsHref}>Change them in Settings</Link>.
+        </>
+      ) : (
+        <>
+          This fund has no terms recorded, so these are typed per call.{' '}
+          <Link href={settingsHref}>Record them in Settings</Link> and every call starts from them.
+        </>
+      )}
+    </p>
+  );
+}

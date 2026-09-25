@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createBrowserSupabase } from '@/adapters/storage/supabase-client';
 import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
-import { emptyCall, type CallDefaults } from '@/engine';
+import { applyFundTerms, emptyCall, type CallDefaults, type FundTerms } from '@/engine';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -26,13 +26,16 @@ export function NewCallButton({
   fundId,
   fundName,
   defaults,
+  terms,
   reuseCallId,
 }: {
   fundId: string;
   /** The fund's name, which becomes the new call's Fund_Name. */
   fundName: string;
-  /** The general partner and signatory a new call starts with. */
+  /** The deployment's configured general partner and signatory. */
   defaults: CallDefaults;
+  /** The fund's terms in force today, applied on top. Null if none recorded. */
+  terms: FundTerms | null;
   /** An existing not-started call to open instead of creating another. */
   reuseCallId?: string;
 }) {
@@ -51,7 +54,8 @@ export function NewCallButton({
     setBusy(true);
     try {
       const repo = createSupabaseRepository(createBrowserSupabase());
-      const created = await repo.createCall(fundId, emptyCall(fundName, defaults), {
+      const { model } = applyFundTerms(emptyCall(fundName, defaults), terms, { prefillPlug: true });
+      const created = await repo.createCall(fundId, model, {
         setup: 'empty',
         lps: 'empty',
         components: 'empty',

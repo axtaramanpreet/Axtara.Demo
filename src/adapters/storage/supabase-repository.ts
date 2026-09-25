@@ -12,6 +12,7 @@
 
 import { num } from '@/engine';
 import type { CallModel } from '@/engine/types';
+import type { FundTerms } from '@/engine/fund-terms';
 import {
   fromCallModel,
   fromComponentRow,
@@ -19,8 +20,10 @@ import {
   fromLPRow,
   fromLPRowIdentity,
   fromOffsetRow,
+  fromFundTerms,
   fromTransferRow,
   toCallModel,
+  toFundTerms,
   toNumber,
   toSources,
   type CallParts,
@@ -33,6 +36,7 @@ import type {
   CallStage,
   CallSummary,
   Fund,
+  FundInvestor,
   FundPosition,
   NoticeState,
   NoticeStatus,
@@ -101,6 +105,36 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
         latestCallNo: data.latest_call_no ?? null,
         nextPaymentDue: data.next_payment_due ?? null,
       };
+    },
+
+    async listFundTerms(fundId: string): Promise<FundTerms[]> {
+      const { data, error } = await db
+        .from('fund_terms')
+        .select('*')
+        .eq('fund_id', fundId)
+        .order('effective_from')
+        .order('created_at');
+      if (error) throw asError(error, "load the fund's terms");
+      return (data ?? []).map(toFundTerms);
+    },
+
+    async addFundTerms(fundId: string, rows: Omit<FundTerms, 'createdAt'>[]): Promise<FundTerms[]> {
+      const { data, error } = await db
+        .from('fund_terms')
+        .insert(rows.map((row) => fromFundTerms(fundId, row)))
+        .select('*');
+      if (error) throw asError(error, "record the fund's terms");
+      return (data ?? []).map(toFundTerms);
+    },
+
+    async listInvestors(fundId: string): Promise<FundInvestor[]> {
+      const { data, error } = await db
+        .from('investors')
+        .select('lp_id, lp_name')
+        .eq('fund_id', fundId)
+        .order('lp_id');
+      if (error) throw asError(error, "load the fund's investors");
+      return (data ?? []).map((i) => ({ lpId: i.lp_id, name: i.lp_name }));
     },
 
     async listCalls(fundId: string): Promise<CallSummary[]> {

@@ -9,6 +9,26 @@
 
 export { compute } from './compute';
 export { emptyCall, type CallDefaults } from './empty-call';
+export {
+  BLANK_TERMS,
+  SUGGESTED_TERMS,
+  afterInvestmentPeriod,
+  applyFundTerms,
+  changedTerms,
+  dayAfter,
+  dayBefore,
+  draftTerms,
+  scheduledAfter,
+  termsOn,
+  unsetTerms,
+  type AppliedTerms,
+  type FundTerms,
+  type FeeTiming,
+  type FeeDayCount,
+  type InterestBasis,
+  type CatchUpFeeTo,
+  type EqualizationInterestTo,
+} from './fund-terms';
 export { allocate, type AllocationPart } from './allocate';
 export { applyTransfers } from './transfers';
 export { buildNotice } from './notice';

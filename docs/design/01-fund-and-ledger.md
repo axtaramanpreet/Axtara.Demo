@@ -1,6 +1,9 @@
 # Design 1 — The fund, its register, and the ledger
 
-**Status:** proposal. Nothing here is built. Branch `feat/fund-ledger`.
+**Status:** §3.1 (`fund_terms`) is **built** on branch `feat/fund-ledger`: the
+table, the engine's `termsOn`, the Settings page (searchable currency, investor
+pickers, suggested defaults, the fee after the investment period as a scheduled
+dated row), and new calls pre-filling from the terms in force. The rest of this note is still a proposal.
 
 **Names:** written after the rename in
 [client_above_fund.sql](../../supabase/migrations/20260925110000_client_above_fund.sql):

@@ -4,13 +4,15 @@ import type { SupabaseClient } from '@/adapters/storage/supabase-client';
 import { getServerSupabase } from '@/lib/supabase/server';
 import { askStatusForClient } from '@/lib/env';
 import { AppShell } from '@/components/shell/app-shell';
-import { ModulePlaceholder } from '@/components/shell/module-placeholder';
+import { FundTermsScreen } from '@/components/settings/fund-terms-screen';
 
 /**
- * Settings — named in the sidebar, not built.
+ * Settings: the fund's terms.
  *
- * A real page rather than a dead nav row, so the sidebar can say what is coming
- * without pretending it is already here.
+ * Read as the signed-in user, so row-level security decides what is shown.
+ * Whether the form is offered is asked of the database too — the same rule
+ * that decides whether the insert would be allowed — rather than guessed from
+ * a role here.
  */
 export default async function SettingsPage({
   params,
@@ -21,9 +23,18 @@ export default async function SettingsPage({
   const supabase = await getServerSupabase();
   const repo = createSupabaseRepository(supabase as unknown as SupabaseClient);
 
-  const [funds, calls] = await Promise.all([repo.listFunds(), repo.listCalls(fundId)]);
-  const fund = funds.find((c) => c.id === fundId);
+  const [funds, calls, history, investors, { data: canWrite }] = await Promise.all([
+    repo.listFunds(),
+    repo.listCalls(fundId),
+    repo.listFundTerms(fundId),
+    repo.listInvestors(fundId),
+    supabase.rpc('auth_can_write_fund', { target_fund: fundId }),
+  ]);
+  const fund = funds.find((f) => f.id === fundId);
   if (!fund) notFound();
+
+  // UTC, so the server and the browser agree on what "today" is.
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <AppShell
@@ -35,11 +46,12 @@ export default async function SettingsPage({
       surface="module"
       askConnected={askStatusForClient().connected}
     >
-      <ModulePlaceholder
-        fundName={fund.name}
-        title="Settings"
-        text="Fund-level settings — the signatory, the reporting currency, the notice wording and who may issue a call — are not editable yet. They come from the workbook and from deployment configuration in the meantime."
-        backHref={`/funds/${fundId}`}
+      <FundTermsScreen
+        fundId={fundId}
+        history={history}
+        investors={investors}
+        today={today}
+        canWrite={Boolean(canWrite)}
       />
     </AppShell>
   );

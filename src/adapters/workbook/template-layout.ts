@@ -26,6 +26,11 @@ export interface FieldDef {
   num?: boolean;
   list?: string;
   type?: 'date';
+  /**
+   * Picked from a list rather than typed: a currency code, or one of this
+   * call's investors. Anything else would be a value nothing can act on.
+   */
+  pick?: 'currency' | 'investor';
 }
 
 export const LP_COLUMNS: ColumnDef[] = [
@@ -79,7 +84,7 @@ export const OFFSET_COLUMNS: ColumnDef[] = [
 export const SETUP_FIELDS: FieldDef[] = [
   { key: 'Fund_Name', note: 'Shown on every notice.' },
   { key: 'GP_Name', note: 'The general partner, named in the notice letter.' },
-  { key: 'Reporting_Currency', note: 'ISO code.' },
+  { key: 'Reporting_Currency', note: 'ISO code.', pick: 'currency' },
   { key: 'Call_Number', note: 'Increment each call.', num: true },
   { key: 'Call_Date', note: 'Effective date of the call (YYYY-MM-DD).', type: 'date' },
   { key: 'Payment_Due_Date', note: 'When LP wires are due.', type: 'date' },
@@ -92,7 +97,7 @@ export const SETUP_FIELDS: FieldDef[] = [
   { key: 'Mgmt_Fee_Period_Fraction', note: '0.25 = one quarter.', num: true },
   { key: 'Org_Expense_Cap', note: 'Cap on organizational expenses.', num: true },
   { key: 'Rounding_Decimals', note: 'Decimal places for every allocation.', num: true },
-  { key: 'Rounding_Plug_LP_ID', note: 'Absorbs the rounding residual.' },
+  { key: 'Rounding_Plug_LP_ID', note: 'Absorbs the rounding residual.', pick: 'investor' },
   { key: 'Signatory_Name', note: 'Who signs the notice. Blank drops the line.' },
   { key: 'Signatory_Title', note: 'Their title, under the name.' },
   { key: 'Prepared_By', note: 'Traceability.' },

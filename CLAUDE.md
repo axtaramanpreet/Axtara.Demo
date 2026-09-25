@@ -67,6 +67,19 @@ supabase/migrations/    schema, immutability triggers, RLS, views, RPCs
 rename forward there (`next.config.ts`). Plain `client` in the code can also mean
 a Supabase or email client, or a client component, so read it in context.
 
+### Fund terms
+
+`fund_terms` holds a fund's settings as a dated, add-only history: a change is a
+new row from the date it applies, never an edit (a trigger refuses updates and
+deletes, except when the whole fund is deleted). `termsOn(history, date)` in
+`src/engine/fund-terms.ts` picks the row in force. `applyFundTerms(model, terms)`
+puts it into a call and returns which cells it locked; the setup screen applies
+it (terms in force on the call date) on load, on every edit, and when inputs are
+replaced, never on an issued call. Only terms that are set are applied or
+locked, so a fund with no terms behaves as before. Env `NOTICE_*` values are
+the base a new call starts from, under the terms. Blank means "not set"; the
+Settings form's suggestions (`SUGGESTED_TERMS`) are never stored unless recorded.
+
 ### The engine is the source of truth
 
 `compute(model: CallModel): ComputeResult` in `src/engine/compute.ts` is pure

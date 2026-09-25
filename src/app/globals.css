@@ -856,7 +856,8 @@ select.fund:focus-visible {
 /* A spreadsheet cell, not a form field: no chrome until you reach for it, so a
    wide table of figures reads as data rather than as hundreds of boxes. */
 
-input.cell {
+input.cell,
+select.cell {
   width: 100%;
   min-height: 30px;
   padding: 4px 8px;
@@ -868,17 +869,180 @@ input.cell {
   border-radius: 4px;
   font-variant-numeric: tabular-nums;
 }
-input.cell:hover {
+input.cell:hover,
+select.cell:hover {
   border-color: var(--border);
   background: var(--card);
 }
-input.cell:focus-visible {
+input.cell:focus-visible,
+select.cell:focus-visible {
   border-color: var(--ring);
   background: var(--card);
   outline: none;
 }
 input.cell:read-only {
   color: var(--muted-foreground);
+}
+
+/* --- Info tips ------------------------------------------------------------ */
+/* An (i) beside a label. Quiet until wanted: muted, and only the tip itself
+   draws attention when it opens. */
+
+.infotip {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.infotip-button {
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: help;
+  border-radius: 999px;
+}
+.infotip-button:hover,
+.infotip-button:focus-visible {
+  color: var(--foreground);
+  outline: none;
+}
+.infotip-button:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+.infotip-body {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  width: max-content;
+  max-width: 300px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--popover-foreground, var(--foreground));
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px -8px rgb(0 0 0 / 0.25);
+  text-wrap: pretty;
+}
+
+/* --- Searchable dropdowns ------------------------------------------------- */
+
+.combo {
+  position: relative;
+}
+.combo .combo-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  padding: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.combo .combo-clear:hover {
+  color: var(--foreground);
+}
+.combo-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 2px);
+  z-index: 40;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px -8px rgb(0 0 0 / 0.25);
+}
+.combo-option {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.combo-option.active {
+  background: var(--muted);
+}
+.combo-value {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 12px;
+}
+.combo-label {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.combo-empty {
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--muted-foreground);
+}
+.combo-multi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-height: 30px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: text;
+}
+.combo-multi:hover,
+.combo-multi:focus-within {
+  border-color: var(--border);
+  background: var(--card);
+}
+.combo-multi:focus-within {
+  border-color: var(--ring);
+}
+.combo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px 1px 7px;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 12px;
+  background: var(--muted);
+  border-radius: 4px;
+}
+.combo-chip button {
+  display: inline-flex;
+  padding: 1px;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  border-radius: 3px;
+}
+.combo-chip button:hover {
+  color: var(--foreground);
+}
+.combo-multi-input {
+  flex: 1;
+  min-width: 80px;
+  padding: 2px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--foreground);
+  background: transparent;
+  border: 0;
+  outline: none;
 }
 
 /* --- Stepper -------------------------------------------------------------- */

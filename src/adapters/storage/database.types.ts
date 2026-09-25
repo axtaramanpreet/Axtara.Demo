@@ -604,6 +604,108 @@ export type Database = {
         }
         Relationships: []
       }
+      fund_terms: {
+        Row: {
+          catch_up_fee_to: string | null
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          equalization_interest_to: string | null
+          fee_basis: string | null
+          fee_day_count: string | null
+          fee_exempt_lp_ids: string[]
+          fee_period_fraction: number | null
+          fee_rate_annual: number | null
+          fee_reduces_unfunded: boolean | null
+          fee_timing: string | null
+          fund_id: string
+          fund_term_end: string | null
+          gp_name: string | null
+          id: string
+          investment_period_end: string | null
+          late_close_interest_basis: string | null
+          late_close_interest_rate: number | null
+          note: string | null
+          org_expense_cap: number | null
+          reporting_currency: string | null
+          rounding_decimals: number | null
+          rounding_plug_lp_id: string | null
+          signatory_name: string | null
+          signatory_title: string | null
+        }
+        Insert: {
+          catch_up_fee_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_from: string
+          equalization_interest_to?: string | null
+          fee_basis?: string | null
+          fee_day_count?: string | null
+          fee_exempt_lp_ids?: string[]
+          fee_period_fraction?: number | null
+          fee_rate_annual?: number | null
+          fee_reduces_unfunded?: boolean | null
+          fee_timing?: string | null
+          fund_id: string
+          fund_term_end?: string | null
+          gp_name?: string | null
+          id?: string
+          investment_period_end?: string | null
+          late_close_interest_basis?: string | null
+          late_close_interest_rate?: number | null
+          note?: string | null
+          org_expense_cap?: number | null
+          reporting_currency?: string | null
+          rounding_decimals?: number | null
+          rounding_plug_lp_id?: string | null
+          signatory_name?: string | null
+          signatory_title?: string | null
+        }
+        Update: {
+          catch_up_fee_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          equalization_interest_to?: string | null
+          fee_basis?: string | null
+          fee_day_count?: string | null
+          fee_exempt_lp_ids?: string[]
+          fee_period_fraction?: number | null
+          fee_rate_annual?: number | null
+          fee_reduces_unfunded?: boolean | null
+          fee_timing?: string | null
+          fund_id?: string
+          fund_term_end?: string | null
+          gp_name?: string | null
+          id?: string
+          investment_period_end?: string | null
+          late_close_interest_basis?: string | null
+          late_close_interest_rate?: number | null
+          note?: string | null
+          org_expense_cap?: number | null
+          reporting_currency?: string | null
+          rounding_decimals?: number | null
+          rounding_plug_lp_id?: string | null
+          signatory_name?: string | null
+          signatory_title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_terms_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "fund_positions"
+            referencedColumns: ["fund_id"]
+          },
+          {
+            foreignKeyName: "fund_terms_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       funds: {
         Row: {
           archived_at: string | null

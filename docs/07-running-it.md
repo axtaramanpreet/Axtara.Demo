@@ -127,9 +127,9 @@ The full list of names, with no values, is in
 ## 7.3 Before any deploy
 
 ```bash
-npm run verify     # types + lint + all 444 tests
+npm run verify     # types + lint + all 493 tests
 npm run build      # the production build, exactly as Vercel will run it
-npm run db:test    # the 62 database tests (needs the local stack running)
+npm run db:test    # the 74 database tests (needs the local stack running)
 ```
 
 Two catches:

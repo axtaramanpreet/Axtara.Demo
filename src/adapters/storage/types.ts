@@ -7,6 +7,7 @@
  */
 
 import type { CallModel } from '@/engine/types';
+import type { FundTerms } from '@/engine/fund-terms';
 
 /** Where a step's inputs came from, shown in the setup stepper. */
 export type InputSource = 'excel' | 'manual' | 'template' | 'carried' | 'empty';
@@ -24,6 +25,12 @@ export interface CallSources {
 export type CallStage = 'not_started' | 'in_progress' | 'partially_sent' | 'issued';
 
 export type NoticeStatus = 'draft' | 'approved' | 'sent';
+
+/** An investor in a fund, as picked from a list. */
+export interface FundInvestor {
+  lpId: string;
+  name: string;
+}
 
 /** A fund, which belongs to one client. */
 export interface Fund {
@@ -114,6 +121,20 @@ export interface CallRepository {
   deleteFund(fundId: string): Promise<void>;
 
   getFundPosition(fundId: string): Promise<FundPosition | null>;
+
+  /** Every row of the fund's terms, oldest first. `termsOn` picks the one in force. */
+  listFundTerms(fundId: string): Promise<FundTerms[]>;
+  /**
+   * Record the fund's terms, one row per date they apply from. Always new
+   * rows: terms are never edited, so a change or a correction is added and
+   * history is kept. Several rows — the terms now and the fee after the
+   * investment period, say — go in as one statement, so either all are
+   * recorded or none is.
+   */
+  addFundTerms(fundId: string, rows: Omit<FundTerms, 'createdAt'>[]): Promise<FundTerms[]>;
+
+  /** The fund's investors, for picking one by LP_ID. */
+  listInvestors(fundId: string): Promise<FundInvestor[]>;
   listCalls(fundId: string): Promise<CallSummary[]>;
 
   getCall(callId: string): Promise<CallDetail | null>;

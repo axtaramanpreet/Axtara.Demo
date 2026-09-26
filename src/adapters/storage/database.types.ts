@@ -438,15 +438,18 @@ export type Database = {
         Row: {
           call_date: string | null
           call_no: number
+          charge_mgmt_fee: boolean
           created_at: string
           created_by: string | null
           default_mgmt_fee_basis: string | null
           default_mgmt_fee_rate_annual: number | null
+          equalization_schedule: Json | null
           fee_basis: string | null
           fee_default_rate_annual: number | null
           fee_exempt_lp_ids: string[]
           fee_period_fraction: number | null
           fee_reduces_unfunded: boolean
+          fee_schedule: Json | null
           fund_id: string
           fund_name: string
           gp_name: string | null
@@ -473,15 +476,18 @@ export type Database = {
         Insert: {
           call_date?: string | null
           call_no: number
+          charge_mgmt_fee?: boolean
           created_at?: string
           created_by?: string | null
           default_mgmt_fee_basis?: string | null
           default_mgmt_fee_rate_annual?: number | null
+          equalization_schedule?: Json | null
           fee_basis?: string | null
           fee_default_rate_annual?: number | null
           fee_exempt_lp_ids?: string[]
           fee_period_fraction?: number | null
           fee_reduces_unfunded?: boolean
+          fee_schedule?: Json | null
           fund_id: string
           fund_name: string
           gp_name?: string | null
@@ -508,15 +514,18 @@ export type Database = {
         Update: {
           call_date?: string | null
           call_no?: number
+          charge_mgmt_fee?: boolean
           created_at?: string
           created_by?: string | null
           default_mgmt_fee_basis?: string | null
           default_mgmt_fee_rate_annual?: number | null
+          equalization_schedule?: Json | null
           fee_basis?: string | null
           fee_default_rate_annual?: number | null
           fee_exempt_lp_ids?: string[]
           fee_period_fraction?: number | null
           fee_reduces_unfunded?: boolean
+          fee_schedule?: Json | null
           fund_id?: string
           fund_name?: string
           gp_name?: string | null
@@ -604,6 +613,225 @@ export type Database = {
         }
         Relationships: []
       }
+      closing_commitments: {
+        Row: {
+          amount: number
+          closing_id: string
+          fee_exempt: boolean
+          fee_rate_override: number | null
+          id: string
+          investor_id: string
+          position: number
+        }
+        Insert: {
+          amount: number
+          closing_id: string
+          fee_exempt?: boolean
+          fee_rate_override?: number | null
+          id?: string
+          investor_id: string
+          position?: number
+        }
+        Update: {
+          amount?: number
+          closing_id?: string
+          fee_exempt?: boolean
+          fee_rate_override?: number | null
+          id?: string
+          investor_id?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "closing_commitments_closing_id_fkey"
+            columns: ["closing_id"]
+            isOneToOne: false
+            referencedRelation: "closings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "closing_commitments_investor_id_fkey"
+            columns: ["investor_id"]
+            isOneToOne: false
+            referencedRelation: "investors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      closing_results: {
+        Row: {
+          closing_id: string
+          created_at: string
+          created_by: string | null
+          engine_version: string
+          id: string
+          result: Json
+        }
+        Insert: {
+          closing_id: string
+          created_at?: string
+          created_by?: string | null
+          engine_version: string
+          id?: string
+          result: Json
+        }
+        Update: {
+          closing_id?: string
+          created_at?: string
+          created_by?: string | null
+          engine_version?: string
+          id?: string
+          result?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "closing_results_closing_id_fkey"
+            columns: ["closing_id"]
+            isOneToOne: true
+            referencedRelation: "closings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      closing_statements: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          closing_id: string
+          created_at: string
+          email_attempted_at: string | null
+          email_delivered_to: string | null
+          email_error: string | null
+          email_message_id: string | null
+          email_status: string | null
+          id: string
+          investor_id: string
+          payload: Json | null
+          result_id: string | null
+          sent_at: string | null
+          sent_by: string | null
+          sent_to_email: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          closing_id: string
+          created_at?: string
+          email_attempted_at?: string | null
+          email_delivered_to?: string | null
+          email_error?: string | null
+          email_message_id?: string | null
+          email_status?: string | null
+          id?: string
+          investor_id: string
+          payload?: Json | null
+          result_id?: string | null
+          sent_at?: string | null
+          sent_by?: string | null
+          sent_to_email?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          closing_id?: string
+          created_at?: string
+          email_attempted_at?: string | null
+          email_delivered_to?: string | null
+          email_error?: string | null
+          email_message_id?: string | null
+          email_status?: string | null
+          id?: string
+          investor_id?: string
+          payload?: Json | null
+          result_id?: string | null
+          sent_at?: string | null
+          sent_by?: string | null
+          sent_to_email?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "closing_statements_closing_id_fkey"
+            columns: ["closing_id"]
+            isOneToOne: false
+            referencedRelation: "closings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "closing_statements_investor_id_fkey"
+            columns: ["investor_id"]
+            isOneToOne: false
+            referencedRelation: "investors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "closing_statements_result_id_fkey"
+            columns: ["result_id"]
+            isOneToOne: false
+            referencedRelation: "closing_results"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      closings: {
+        Row: {
+          closing_date: string
+          closing_no: number
+          created_at: string
+          created_by: string | null
+          finalised_at: string | null
+          finalised_by: string | null
+          fund_id: string
+          id: string
+          note: string | null
+          settlement: string | null
+        }
+        Insert: {
+          closing_date: string
+          closing_no: number
+          created_at?: string
+          created_by?: string | null
+          finalised_at?: string | null
+          finalised_by?: string | null
+          fund_id: string
+          id?: string
+          note?: string | null
+          settlement?: string | null
+        }
+        Update: {
+          closing_date?: string
+          closing_no?: number
+          created_at?: string
+          created_by?: string | null
+          finalised_at?: string | null
+          finalised_by?: string | null
+          fund_id?: string
+          id?: string
+          note?: string | null
+          settlement?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "closings_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "fund_positions"
+            referencedColumns: ["fund_id"]
+          },
+          {
+            foreignKeyName: "closings_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fund_terms: {
         Row: {
           catch_up_fee_to: string | null
@@ -627,6 +855,12 @@ export type Database = {
           late_close_interest_rate: number | null
           note: string | null
           org_expense_cap: number | null
+          payment_account_name: string | null
+          payment_account_no: string | null
+          payment_bank_name: string | null
+          payment_reference: string | null
+          payment_routing: string | null
+          payment_swift: string | null
           reporting_currency: string | null
           rounding_decimals: number | null
           rounding_plug_lp_id: string | null
@@ -655,6 +889,12 @@ export type Database = {
           late_close_interest_rate?: number | null
           note?: string | null
           org_expense_cap?: number | null
+          payment_account_name?: string | null
+          payment_account_no?: string | null
+          payment_bank_name?: string | null
+          payment_reference?: string | null
+          payment_routing?: string | null
+          payment_swift?: string | null
           reporting_currency?: string | null
           rounding_decimals?: number | null
           rounding_plug_lp_id?: string | null
@@ -683,6 +923,12 @@ export type Database = {
           late_close_interest_rate?: number | null
           note?: string | null
           org_expense_cap?: number | null
+          payment_account_name?: string | null
+          payment_account_no?: string | null
+          payment_bank_name?: string | null
+          payment_reference?: string | null
+          payment_routing?: string | null
+          payment_swift?: string | null
           reporting_currency?: string | null
           rounding_decimals?: number | null
           rounding_plug_lp_id?: string | null
@@ -743,10 +989,14 @@ export type Database = {
       }
       investors: {
         Row: {
+          cc_emails: string[]
           contact_email: string | null
+          country: string | null
           created_at: string
           fund_id: string
           id: string
+          is_gp: boolean
+          kyc_status: string
           lp_id: string
           lp_name: string
           lp_type: string
@@ -755,10 +1005,14 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          cc_emails?: string[]
           contact_email?: string | null
+          country?: string | null
           created_at?: string
           fund_id: string
           id?: string
+          is_gp?: boolean
+          kyc_status?: string
           lp_id: string
           lp_name: string
           lp_type?: string
@@ -767,10 +1021,14 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          cc_emails?: string[]
           contact_email?: string | null
+          country?: string | null
           created_at?: string
           fund_id?: string
           id?: string
+          is_gp?: boolean
+          kyc_status?: string
           lp_id?: string
           lp_name?: string
           lp_type?: string
@@ -969,6 +1227,7 @@ export type Database = {
       }
     }
     Functions: {
+      all_emails: { Args: { addresses: string[] }; Returns: boolean }
       auth_call_ids: { Args: never; Returns: string[] }
       auth_can_write_call: { Args: { target_call: string }; Returns: boolean }
       auth_can_write_client: {
@@ -978,6 +1237,16 @@ export type Database = {
       auth_can_write_fund: { Args: { target_fund: string }; Returns: boolean }
       auth_client_ids: { Args: never; Returns: string[] }
       auth_fund_ids: { Args: never; Returns: string[] }
+      finalise_closing: {
+        Args: {
+          p_closing_id: string
+          p_engine_version: string
+          p_result: Json
+          p_settlement: string
+          p_user: string
+        }
+        Returns: undefined
+      }
       save_call_inputs: {
         Args: {
           p_call: Json
@@ -989,6 +1258,10 @@ export type Database = {
           p_sources: Json
           p_transfers: Json
         }
+        Returns: undefined
+      }
+      save_closing_commitments: {
+        Args: { p_closing_id: string; p_rows: Json }
         Returns: undefined
       }
     }

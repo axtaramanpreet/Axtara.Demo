@@ -149,7 +149,7 @@ function readTable(g: Grid | null, headerKey: string): Record<string, unknown>[]
 }
 
 /** Excel serial dates come through as numbers; normalise them to `YYYY-MM-DD`. */
-function normaliseDate(v: unknown): string | number {
+export function normaliseDate(v: unknown): string | number {
   if (typeof v === 'number') {
     return new Date(Math.round((v - 25569) * 86400000)).toISOString().slice(0, 10);
   }

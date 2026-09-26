@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { fmt, pct, type ComputeResult } from '@/engine';
+import { amountDue, equalizationPartsOf, fmt, pct, round, type ComputeResult, scheduleLabel } from '@/engine';
 import type { CallDetail } from '@/adapters/storage/types';
 import { Button } from '@/components/ui/button';
 
@@ -15,6 +15,8 @@ import { Button } from '@/components/ui/button';
 export function AllocationTab({ call, result }: { call: CallDetail; result: ComputeResult }) {
   const [exporting, setExporting] = useState(false);
   const components = call.model.components.filter((c) => c.Component_ID);
+  // A call settling a later closing's equalization: cash on top of what it calls.
+  const eq = result.equalization;
 
   async function onExport() {
     setExporting(true);
@@ -55,11 +57,16 @@ export function AllocationTab({ call, result }: { call: CallDetail; result: Comp
                   {c.Component_Name}
                 </th>
               ))}
-              <th style={{ textAlign: 'right' }}>Fee_Rate</th>
+              <th style={{ textAlign: 'right' }}>{result.fee.schedule ? 'Fee periods' : 'Fee_Rate'}</th>
               <th style={{ textAlign: 'right' }}>Fee_Gross</th>
               <th style={{ textAlign: 'right' }}>Fee_Offset</th>
               <th style={{ textAlign: 'right' }}>Fee_Net</th>
               <th style={{ textAlign: 'right' }}>Total_Call</th>
+              {eq && <th style={{ textAlign: 'right' }}>Eq_Capital</th>}
+              {eq && <th style={{ textAlign: 'right' }}>Eq_Interest</th>}
+              {eq && <th style={{ textAlign: 'right' }}>Eq_Catch_Up_Fee</th>}
+              {eq && <th style={{ textAlign: 'right' }}>Equalization</th>}
+              {eq && <th style={{ textAlign: 'right' }}>Amount_Due</th>}
               <th style={{ textAlign: 'right' }}>Reduces_Unfunded</th>
               <th style={{ textAlign: 'right' }}>Closing_UCC</th>
               <th style={{ textAlign: 'right' }}>Closing_Paid_In</th>
@@ -85,11 +92,14 @@ export function AllocationTab({ call, result }: { call: CallDetail; result: Comp
                     </td>
                   );
                 })}
-                <td className="num">{pct(row.feeRate)}</td>
+                <td className="num">{result.fee.schedule ? scheduleLabel(result.fee.schedule) : pct(row.feeRate)}</td>
                 <td className="num">{fmt(row.feeGross)}</td>
                 <td className="num">{fmt(row.feeOffset)}</td>
                 <td className="num">{fmt(row.feeNet)}</td>
                 <td className="num" style={{ fontWeight: 600 }}>{fmt(row.total)}</td>
+                {eq && <EqParts parts={equalizationPartsOf(call.model.equalizationSchedule, row.LP_ID, result.d)} />}
+                {eq && <td className="num">{row.equalization ? fmt(row.equalization) : '—'}</td>}
+                {eq && <td className="num" style={{ fontWeight: 600 }}>{fmt(amountDue(row, result.d))}</td>}
                 <td className="num">{fmt(row.reduces)}</td>
                 <td className="num">{fmt(row.closingUCC)}</td>
                 <td className="num">{fmt(row.closingPaid)}</td>
@@ -110,6 +120,17 @@ export function AllocationTab({ call, result }: { call: CallDetail; result: Comp
               <td className="num">{fmt(result.totals.feeOffset)}</td>
               <td className="num">{fmt(result.totals.feeNet)}</td>
               <td className="num">{fmt(result.totals.total)}</td>
+              {eq && (
+                <EqParts
+                  parts={{
+                    capital: eq.closings.reduce((t, c) => t + c.capital, 0),
+                    interest: eq.closings.reduce((t, c) => t + c.interest, 0),
+                    catchUpFee: eq.closings.reduce((t, c) => t + c.catchUpFee, 0),
+                  }}
+                />
+              )}
+              {eq && <td className="num">{fmt(eq.total)}</td>}
+              {eq && <td className="num">{fmt(round(result.totals.total + eq.total, result.d))}</td>}
               <td className="num">{fmt(result.totals.reduces)}</td>
               <td className="num">{fmt(result.totals.closingUCC)}</td>
               <td className="num">{fmt(result.totals.closingPaid)}</td>
@@ -118,5 +139,17 @@ export function AllocationTab({ call, result }: { call: CallDetail; result: Comp
         </table>
       </div>
     </div>
+  );
+}
+
+/** An investor's equalization on the call, taken apart: capital, late interest, catch-up fee. */
+function EqParts({ parts }: { parts: { capital: number; interest: number; catchUpFee: number } }) {
+  const cell = (x: number) => <td className="num">{Math.abs(x) >= 0.005 ? fmt(x) : '—'}</td>;
+  return (
+    <>
+      {cell(parts.capital)}
+      {cell(parts.interest)}
+      {cell(parts.catchUpFee)}
+    </>
   );
 }

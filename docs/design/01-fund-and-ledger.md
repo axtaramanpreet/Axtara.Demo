@@ -3,7 +3,19 @@
 **Status:** §3.1 (`fund_terms`) is **built** on branch `feat/fund-ledger`: the
 table, the engine's `termsOn`, the Settings page (searchable currency, investor
 pickers, suggested defaults, the fee after the investment period as a scheduled
-dated row), and new calls pre-filling from the terms in force. The rest of this note is still a proposal.
+dated row), and new calls pre-filling from the terms in force.
+
+§3.2 is **built differently from this note**: commitments live on closings
+(`closings` + `closing_commitments`, dated by the closing that admitted them),
+not in a free-standing `commitments` table, because a commitment only ever
+arrives at a close. Equalization and true-ups are built on top (migration
+`20260926090000_closings_and_fee_runs.sql`; fee runs were later dropped for the
+billed calls, `20260927140000`; engine
+`equalization.ts`, `fee-run.ts`, `fund-history.ts`, `fund-register.ts`).
+
+§4, the `ledger_entries` table, is **not built**. Positions and fees are worked
+out from the record each time instead (`positionsOn`, `feeLedgerFor`). A ledger
+is still the right end state — it belongs to the .NET rebuild.
 
 **Names:** written after the rename in
 [client_above_fund.sql](../../supabase/migrations/20260925110000_client_above_fund.sql):

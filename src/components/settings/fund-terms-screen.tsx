@@ -1,12 +1,14 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
 import { createBrowserSupabase } from '@/adapters/storage/supabase-client';
 import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
-import type { FundInvestor } from '@/adapters/storage/types';
+import type { Closing, FundInvestor } from '@/adapters/storage/types';
+import type { IssuedCall } from '@/engine';
 import {
   BLANK_TERMS,
+  DEPENDS_ON,
   afterInvestmentPeriod,
   changedTerms,
   dayAfter,
@@ -17,16 +19,35 @@ import {
   fmtStamp,
   pct,
   scheduledAfter,
+  termApplies,
+  termsEditImpact,
+  type TermsEditImpact,
   termsOn,
   unsetTerms,
+  withoutOrphans,
   type FundTerms,
 } from '@/engine';
+import {
+  FIELD,
+  FIELDS,
+  GROUPS,
+  dayCountExample,
+  basisInWords,
+  display,
+  fromDraft,
+  toDraft,
+  type Field,
+  type Group,
+} from '@/lib/fund-terms-fields';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Combobox, MultiCombobox, type ComboOption } from '@/components/ui/combobox';
 import { InfoTip } from '@/components/ui/info-tip';
 import { CURRENCIES } from '@/lib/currencies';
 import { Tag } from '@/components/ui/tag';
+import { TemplateButtons } from '@/components/ui/template-buttons';
+import { useLeaveGuard } from '@/lib/hooks/use-leave-guard';
+import { TERMS_SHEET, readTermsTemplate, termsTemplate, type TermsImport, type WorkbookWriter } from '@/adapters/workbook/templates';
 
 /**
  * A fund's terms: what is in force, a form to record a change, and the history.
@@ -34,303 +55,34 @@ import { Tag } from '@/components/ui/tag';
  * Terms are never edited. "Record a change" adds a row from the date it
  * applies, pre-filled with what is in force, so the accountant changes only
  * what changed. A mistake is corrected the same way — same date, later entry.
+ *
+ * A term that only means something once another is set — how the fee is
+ * charged, who receives late-close interest — appears only once it is set, and
+ * is stored as blank otherwise (`withoutOrphans`).
  */
 
-type Kind = 'text' | 'currency' | 'int' | 'rate' | 'money' | 'date' | 'select' | 'yesno' | 'investor' | 'investors';
-
-interface Field {
-  key: Exclude<keyof FundTerms, 'effectiveFrom' | 'createdAt' | 'note'>;
-  label: string;
-  kind: Kind;
-  /** What the field means, behind the (i). Plain words; no jargon it does not explain. */
-  info: string;
-  placeholder?: string;
-  hint?: string;
-  options?: { value: string; label: string }[];
-}
-
-const GROUPS: { title: string; subtitle: string; fields: Field[] }[] = [
-  {
-    title: 'Reporting and rounding',
-    subtitle: 'how figures are stated',
-    fields: [
-      {
-        key: 'reportingCurrency',
-        label: 'Reporting currency',
-        kind: 'currency',
-        placeholder: 'Search, e.g. USD or dollar',
-        info: 'The currency every amount on this fund\u2019s notices and reports is stated in.',
-      },
-      {
-        key: 'roundingDecimals',
-        label: 'Rounding decimals',
-        kind: 'int',
-        placeholder: 'e.g. 2',
-        info: 'How many decimal places each investor\u2019s share is rounded to. 2 means cents. 0 suits a currency without cents, such as JPY.',
-      },
-      {
-        key: 'roundingPlugLpId',
-        label: 'Rounding plug',
-        kind: 'investor',
-        placeholder: 'Pick an investor',
-        info: 'Rounding every investor\u2019s share can leave a cent or two over. This investor takes that remainder, so each call adds up exactly. Usually the largest investor.',
-      },
-    ],
-  },
-  {
-    title: 'Management fee',
-    subtitle: 'during the investment period',
-    fields: [
-      {
-        key: 'feeBasis',
-        label: 'Fee basis',
-        kind: 'select',
-        info: 'What the fee is a percentage of. Commitment: what each investor promised. Invested capital: the cost of the investments the fund still holds.',
-        options: [
-          { value: 'Commitment', label: 'Commitment' },
-          { value: 'Invested_Capital', label: 'Invested capital' },
-          { value: 'NAV', label: 'NAV' },
-        ],
-      },
-      {
-        key: 'feeRateAnnual',
-        label: 'Annual rate',
-        kind: 'rate',
-        placeholder: 'e.g. 0.02',
-        hint: 'A fraction: 0.02 is 2% a year.',
-        info: 'The yearly management fee, as a fraction of the fee basis. 0.02 means 2% a year.',
-      },
-      {
-        key: 'feePeriodFraction',
-        label: 'Period charged per call',
-        kind: 'rate',
-        placeholder: 'e.g. 0.25',
-        hint: '0.25 is a quarter.',
-        info: 'How much of a year\u2019s fee each call charges. 0.25 is a quarter; 0.5 is half a year.',
-      },
-      {
-        key: 'feeReducesUnfunded',
-        label: 'Drawn from commitment',
-        kind: 'yesno',
-        info: 'Yes if the fee counts against what investors promised, so it lowers what they still owe. No if it is charged on top.',
-      },
-      {
-        key: 'feeExemptLpIds',
-        label: 'Exempt investors',
-        kind: 'investors',
-        placeholder: 'Pick investors',
-        info: 'Investors who pay no management fee at all, usually the general partner and its affiliates.',
-      },
-      {
-        key: 'orgExpenseCap',
-        label: 'Organizational expense cap',
-        kind: 'money',
-        placeholder: 'e.g. 1500000',
-        info: 'The most the fund may charge investors for the cost of setting it up. Anything above it is the general partner\u2019s to bear, under the LPA.',
-      },
-    ],
-  },
-  {
-    title: 'Who the notice is from',
-    subtitle: 'printed on every notice',
-    fields: [
-      {
-        key: 'gpName',
-        label: 'General partner',
-        kind: 'text',
-        placeholder: 'e.g. Meridian GP LLC',
-        info: 'The general partner\u2019s legal name. The notice letter is written on its behalf.',
-      },
-      {
-        key: 'signatoryName',
-        label: 'Signatory',
-        kind: 'text',
-        placeholder: 'e.g. Jane Doe',
-        info: 'The person who signs every notice.',
-      },
-      {
-        key: 'signatoryTitle',
-        label: 'Signatory title',
-        kind: 'text',
-        placeholder: 'e.g. Managing Partner',
-        info: 'The signatory\u2019s title, printed under their name.',
-      },
-    ],
-  },
-  {
-    title: 'The fund\u2019s life',
-    subtitle: 'dates the fee and closings depend on',
-    fields: [
-      {
-        key: 'investmentPeriodEnd',
-        label: 'Investment period ends',
-        kind: 'date',
-        info: 'The last day the fund may make new investments. Many LPAs change the management fee after this date.',
-      },
-      {
-        key: 'fundTermEnd',
-        label: 'Fund term ends',
-        kind: 'date',
-        hint: 'Before any extension.',
-        info: 'When the fund is due to wind up, before any extension the LPA allows.',
-      },
-    ],
-  },
-  {
-    title: 'LPA terms',
-    subtitle: 'from this fund\u2019s partnership agreement',
-    fields: [
-      {
-        key: 'feeTiming',
-        label: 'Fee billed',
-        kind: 'select',
-        info: 'Whether each fee is charged at the start of the period it covers (in advance) or at the end (in arrears).',
-        options: [
-          { value: 'advance', label: 'In advance' },
-          { value: 'arrears', label: 'In arrears' },
-        ],
-      },
-      {
-        key: 'feeDayCount',
-        label: 'Fee day count',
-        kind: 'select',
-        info: 'How a part of a period is measured when a fee has to be pro-rated, for example for an investor who joins mid-quarter. Period fraction uses the fraction above.',
-        options: [
-          { value: 'period_fraction', label: 'Period fraction (e.g. 0.25)' },
-          { value: 'actual_365', label: 'Actual / 365' },
-          { value: 'actual_360', label: 'Actual / 360' },
-          { value: '30_360', label: '30 / 360' },
-        ],
-      },
-      {
-        key: 'lateCloseInterestRate',
-        label: 'Late-closer interest',
-        kind: 'rate',
-        placeholder: 'e.g. 0.08, or blank for none',
-        hint: 'A fraction a year. Blank means none.',
-        info: 'Investors who join at a later closing pay their share of earlier calls. Many LPAs add interest on that catch-up, at this rate a year.',
-      },
-      {
-        key: 'lateCloseInterestBasis',
-        label: 'Late-closer interest basis',
-        kind: 'select',
-        info: 'Whether that interest is simple, or compounded.',
-        options: [
-          { value: 'simple', label: 'Simple' },
-          { value: 'compound', label: 'Compound' },
-        ],
-      },
-      {
-        key: 'catchUpFeeTo',
-        label: 'Catch-up fee goes to',
-        kind: 'select',
-        info: 'When a late investor pays the management fees they missed, who receives them.',
-        options: [
-          { value: 'gp', label: 'The general partner' },
-          { value: 'existing_lps', label: 'The existing investors' },
-        ],
-      },
-      {
-        key: 'equalizationInterestTo',
-        label: 'Equalization interest goes to',
-        kind: 'select',
-        info: 'Who receives the interest late investors pay: the investors who paid first, the fund, or the general partner.',
-        options: [
-          { value: 'existing_lps', label: 'The existing investors' },
-          { value: 'fund', label: 'The fund' },
-          { value: 'gp', label: 'The general partner' },
-        ],
-      },
-    ],
-  },
-];
-
-const FIELDS = GROUPS.flatMap((g) => g.fields);
 const LABEL = Object.fromEntries(FIELDS.map((f) => [f.key, f.label])) as Record<string, string>;
 
-/** A term as it reads on the page. */
-function display(field: Field, value: FundTerms[Field['key']], investors: FundInvestor[]): string {
-  if (value === null || value === undefined) return '';
-  const named = (id: string) => {
-    const name = investors.find((i) => i.lpId === id)?.name;
-    return name ? `${id} — ${name}` : id;
-  };
-  switch (field.kind) {
-    case 'rate':
-      return `${pct(value as number)} (${value})`;
-    case 'money':
-      return fmt(value as number);
-    case 'date':
-      return fmtDate(value as string);
-    case 'yesno':
-      return value ? 'Yes' : 'No';
-    case 'investor':
-      return named(value as string);
-    case 'investors':
-      return (value as string[]).map(named).join(', ');
-    case 'currency': {
-      const c = CURRENCIES.find((o) => o.value === value);
-      return c && c.label !== c.value ? `${c.value} — ${c.label}` : String(value);
-    }
-    case 'select':
-      return field.options?.find((o) => o.value === value)?.label ?? String(value);
-    default:
-      return String(value);
-  }
-}
-
-/** A term as it sits in the form: always a string, blank when unset. */
-function toDraft(field: Field, value: FundTerms[Field['key']]): string {
-  if (value === null || value === undefined) return '';
-  if (field.kind === 'yesno') return value ? 'Y' : 'N';
-  if (field.kind === 'investors') return (value as string[]).join(',');
-  return String(value);
-}
-
-/** The form's string back to a term, or the reason it cannot be one. */
-function fromDraft(field: Field, raw: string): { value: unknown } | { error: string } {
-  const text = raw.trim();
-  if (field.kind === 'investors') return { value: text.split(',').map((x) => x.trim()).filter(Boolean) };
-  if (text === '') return { value: null };
-  switch (field.kind) {
-    case 'currency':
-      return CURRENCIES.some((c) => c.value === text) ? { value: text } : { error: 'Pick a currency from the list.' };
-    case 'int': {
-      const n = Number(text);
-      return Number.isInteger(n) && n >= 0 && n <= 4 ? { value: n } : { error: 'A whole number from 0 to 4.' };
-    }
-    case 'rate': {
-      const n = Number(text);
-      // A rate typed as a percentage is the likeliest slip; say so rather than
-      // storing a 200% fee.
-      if (!Number.isFinite(n)) return { error: 'A number, like 0.02.' };
-      return n >= 0 && n < 1 ? { value: n } : { error: 'A fraction below 1: 2% is 0.02.' };
-    }
-    case 'money': {
-      const n = Number(text.replace(/[,\s]/g, ''));
-      return Number.isFinite(n) && n >= 0 ? { value: n } : { error: 'An amount, like 1500000.' };
-    }
-    case 'date':
-      return /^\d{4}-\d{2}-\d{2}$/.test(text) ? { value: text } : { error: 'A date.' };
-    case 'yesno':
-      return { value: text === 'Y' };
-    default:
-      return { value: text };
-  }
-}
-
-const RATE = GROUPS[1].fields.find((f) => f.key === 'feeRateAnnual')!;
-const BASIS = GROUPS[1].fields.find((f) => f.key === 'feeBasis')!;
+/** The parent a hidden field is waiting for, in words. */
+const WAITING: Record<string, string> = {
+  feeRateAnnual: 'Set an annual rate to say how the fee is charged.',
+  lateCloseInterestRate: 'No interest is charged, so there is nothing more to set.',
+};
 
 export function FundTermsScreen({
   fundId,
+  fundName,
   history,
+  record = { closings: [], calls: [], drafts: [] },
   investors,
   today,
   canWrite,
 }: {
   fundId: string;
+  fundName: string;
   history: FundTerms[];
+  /** What the fund has already done under its terms: an edit is shown against it before it is recorded. */
+  record?: { closings: Closing[]; calls: IssuedCall[]; drafts: number[] };
   /** For the rounding plug and the exempt list, which name investors by LP_ID. */
   investors: FundInvestor[];
   /** YYYY-MM-DD, from the server, so the page reads the same on both sides. */
@@ -340,9 +92,14 @@ export function FundTermsScreen({
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const inForce = termsOn(history, today);
-  const unset = new Set(unsetTerms(inForce ?? BLANK_TERMS));
+  const shown = inForce ?? { ...BLANK_TERMS, createdAt: '' };
+  const unset = new Set(unsetTerms(shown));
   const scheduled = scheduledAfter(history, today);
   const investorOptions: ComboOption[] = investors.map((i) => ({ value: i.lpId, label: i.name }));
+  const names = (id: string) => {
+    const name = investors.find((i) => i.lpId === id)?.name;
+    return name ? `${id} — ${name}` : id;
+  };
 
   const [open, setOpen] = useState(false);
   const [effectiveFrom, setEffectiveFrom] = useState(today);
@@ -356,18 +113,33 @@ export function FundTermsScreen({
   const [afterIp, setAfterIp] = useState(false);
   const [afterBasis, setAfterBasis] = useState('Invested_Capital');
   const [afterRate, setAfterRate] = useState('');
+  // An open form is work not yet recorded.
+  useLeaveGuard(open);
+  // A correction to what was recorded, or a change from a date — asked once a
+  // fund has terms, because the two mean different things for what was issued.
+  const [kind, setKind] = useState<'fix' | 'change' | null>(null);
+  const [imported, setImported] = useState<{ name: string; filled: number; errors: string[] } | null>(null);
 
-  function start() {
+  /** Open the form: what is in force, with a filled-in template on top when one was imported. */
+  function start(file?: { name: string; read: TermsImport }) {
     const { terms, suggested: s } = draftTerms(inForce);
-    setDraft(Object.fromEntries(FIELDS.map((f) => [f.key, toDraft(f, terms[f.key])])));
-    setSuggested(new Set(s));
-    setEffectiveFrom(today);
-    setNote('');
+    const fromFile = file?.read.draft ?? {};
+    setDraft({ ...Object.fromEntries(FIELDS.map((f) => [f.key, toDraft(f, terms[f.key])])), ...fromFile });
+    setSuggested(new Set(s.filter((k) => !(k in fromFile))));
+    // A fund's first terms must cover its first close, or every fee before them
+    // comes out as nothing. Today is almost never that date, so ask.
+    setEffectiveFrom(file?.read.effectiveFrom ?? (history.length ? today : ''));
+    setNote(file?.read.note ?? '');
     setErrors({});
     setFailure(null);
-    setAfterIp(false);
-    setAfterBasis('Invested_Capital');
-    setAfterRate('');
+    setAfterIp(Boolean(file?.read.afterIp));
+    setAfterBasis(file?.read.afterIp?.basis ?? 'Invested_Capital');
+    setAfterRate(file?.read.afterIp?.rate ?? '');
+    setImported(file ? { name: file.name, filled: Object.keys(fromFile).length, errors: file.read.errors } : null);
+    // A file says its own date: the start of terms already recorded makes it a
+    // correction of them, any other date a change from then.
+    const fileDate = file?.read.effectiveFrom;
+    setKind(file && history.length ? (fileDate && history.some((t) => t.effectiveFrom === fileDate) ? 'fix' : 'change') : null);
     setOpen(true);
   }
 
@@ -382,17 +154,26 @@ export function FundTermsScreen({
     });
   };
 
+  /** The rates as typed so far, to decide which fields apply while editing. */
+  const rateOf = (key: 'feeRateAnnual' | 'lateCloseInterestRate') => {
+    const r = fromDraft(FIELD[key], draft[key] ?? '');
+    return 'value' in r ? (r.value as number | null) : null;
+  };
+  const draftRates = { feeRateAnnual: rateOf('feeRateAnnual'), lateCloseInterestRate: rateOf('lateCloseInterestRate') };
   const ipEnd = (draft.investmentPeriodEnd ?? '').trim();
 
-  async function save() {
+  /** The rows this form would record, or what is wrong with it. Records nothing. */
+  function collect(): { rows: Omit<FundTerms, 'createdAt'>[]; found: Record<string, string> } {
     const parsed: Record<string, unknown> = {};
     const found: Record<string, string> = {};
     for (const f of FIELDS) {
+      if (!termApplies(draftRates, f.key)) continue;
       const r = fromDraft(f, draft[f.key] ?? '');
       if ('error' in r) found[f.key] = r.error;
       else parsed[f.key] = r.value;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) found.effectiveFrom = 'The date these terms apply from.';
+    if (history.length && !kind) found.kind = 'Say what kind of edit this is.';
 
     let afterRateValue: number | null = null;
     if (afterIp) {
@@ -400,29 +181,35 @@ export function FundTermsScreen({
       else if (effectiveFrom > ipEnd) {
         found.afterIp = 'This change already starts after the investment period. Set the fee above instead.';
       }
-      const r = fromDraft(RATE, afterRate);
+      const r = fromDraft(FIELD.feeRateAnnual, afterRate);
       if ('error' in r) found.afterRate = r.error;
       else afterRateValue = r.value as number | null;
     }
 
-    setErrors(found);
-    if (Object.keys(found).length) return;
-
-    const now: Omit<FundTerms, 'createdAt'> = {
+    const now = withoutOrphans<Omit<FundTerms, 'createdAt'>>({
       ...BLANK_TERMS,
       ...(parsed as Partial<FundTerms>),
       effectiveFrom,
       note: note.trim() || null,
-    };
-    const rows = afterIp
-      ? [now, afterInvestmentPeriod(now, { feeBasis: afterBasis || null, feeRateAnnual: afterRateValue })]
-      : [now];
+    });
+    // The fee after the investment period only once it can be worked out:
+    // this runs on every keystroke, for the impact shown below the form.
+    const rows =
+      afterIp && !found.afterIp && !found.afterRate
+        ? [now, withoutOrphans(afterInvestmentPeriod(now, { feeBasis: afterBasis || null, feeRateAnnual: afterRateValue }))]
+        : [now];
+    return { rows, found };
+  }
+
+  async function save() {
+    const { rows, found } = collect();
+    setErrors(found);
+    if (Object.keys(found).length) return;
 
     setSaving(true);
     setFailure(null);
     try {
-      const repo = createSupabaseRepository(createBrowserSupabase());
-      await repo.addFundTerms(fundId, rows);
+      await createSupabaseRepository(createBrowserSupabase()).addFundTerms(fundId, rows);
       setOpen(false);
       startRefresh(() => router.refresh());
     } catch (e) {
@@ -432,18 +219,29 @@ export function FundTermsScreen({
     }
   }
 
+  /** What this edit would touch, worked out as it is typed. Null until it can be read. */
+  const pending = open && history.length ? collect() : null;
+  const impact =
+    pending && !Object.keys(pending.found).length
+      ? termsEditImpact({ terms: history, closings: record.closings, calls: record.calls }, pending.rows, today)
+      : null;
+
+  /** Choose what the edit is, and start from the terms it edits. */
+  function choose(next: 'fix' | 'change', date = next === 'fix' ? (inForce?.effectiveFrom ?? '') : today) {
+    setKind(next);
+    setEffectiveFrom(date);
+    const base = termsOn(history, date);
+    if (base) setDraft(Object.fromEntries(FIELDS.map((f) => [f.key, toDraft(f, base[f.key])])));
+    setSuggested(new Set());
+    setErrors({});
+  }
+
   function input(f: Field) {
     const value = draft[f.key] ?? '';
     switch (f.kind) {
       case 'currency':
         return (
-          <Combobox
-            label={f.label}
-            options={CURRENCIES}
-            value={value || null}
-            onChange={(v) => set(f.key, v ?? '')}
-            placeholder={f.placeholder}
-          />
+          <Combobox label={f.label} options={CURRENCIES} value={value || null} onChange={(v) => set(f.key, v ?? '')} placeholder={f.placeholder} />
         );
       case 'investor':
         return (
@@ -468,23 +266,26 @@ export function FundTermsScreen({
           />
         );
       case 'select':
-      case 'yesno':
+      case 'yesno': {
+        const options =
+          f.kind === 'yesno'
+            ? [
+                { value: 'Y', label: 'Yes' },
+                { value: 'N', label: 'No' },
+              ]
+            : f.options ?? [];
         return (
           <select className="cell" aria-label={f.label} value={value} onChange={(e) => set(f.key, e.target.value)}>
             <option value="">Not set</option>
-            {(f.kind === 'yesno'
-              ? [
-                  { value: 'Y', label: 'Yes' },
-                  { value: 'N', label: 'No' },
-                ]
-              : f.options ?? []
-            ).map((o) => (
+            {options.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
+            {value && !options.some((o) => o.value === value) && <option value={value}>Other ({value})</option>}
           </select>
         );
+      }
       default:
         return (
           <input
@@ -500,7 +301,7 @@ export function FundTermsScreen({
     }
   }
 
-  function note_(f: Field) {
+  function aside(f: Field): ReactNode {
     if (errors[f.key]) {
       return (
         <span role="alert" style={{ color: 'var(--destructive)' }}>
@@ -515,14 +316,193 @@ export function FundTermsScreen({
         </>
       );
     }
+    if (f.key === 'feeDayCount' && draft.feeDayCount) {
+      const period = fromDraft(FIELD.feePeriodFraction, draft.feePeriodFraction ?? '');
+      const ex = dayCountExample(draft.feeDayCount, draftRates.feeRateAnnual, 'value' in period ? (period.value as number | null) : null);
+      return (
+        <span className="text-muted mono" style={{ display: 'grid', gap: 2, fontSize: 11 }}>
+          <span>{ex.full}</span>
+          <span>{ex.part}</span>
+        </span>
+      );
+    }
     return <span className="text-muted">{f.hint}</span>;
+  }
+
+  /** A group's fields in the form, with the ones that do not apply yet folded into one line. */
+  function formRows(group: Group) {
+    const rows: ReactNode[] = [];
+    const waiting = new Set<string>();
+    for (const f of group.fields) {
+      if (!termApplies(draftRates, f.key)) {
+        waiting.add(DEPENDS_ON[f.key]!);
+        continue;
+      }
+      rows.push(
+        <tr key={f.key}>
+          <td style={{ width: 240 }}>
+            {f.label}
+            <InfoTip label={f.label}>{f.info}</InfoTip>
+          </td>
+          <td style={{ width: 300, padding: '2px 6px' }}>{input(f)}</td>
+          <td style={{ fontSize: 12 }}>{aside(f)}</td>
+        </tr>,
+      );
+    }
+    for (const parent of waiting) {
+      rows.push(
+        <tr key={`waiting-${parent}`}>
+          <td colSpan={3} className="text-muted" style={{ fontSize: 13 }}>
+            {group.id === 'closings' && parent === 'feeRateAnnual'
+              ? 'No management fee, so late investors pay no catch-up fee.'
+              : WAITING[parent]}
+          </td>
+        </tr>,
+      );
+    }
+    return rows;
+  }
+
+  function afterIpRows() {
+    if (!termApplies(draftRates, 'feeBasis')) return null;
+    return (
+      <>
+        <tr>
+          <td colSpan={3} style={{ fontWeight: 600, paddingTop: 16 }}>
+            After the investment period
+          </td>
+        </tr>
+        <tr>
+          <td>
+            The fee changes
+            <InfoTip label="The fee changes after the investment period">
+              Many LPAs move the fee from commitments to invested capital, lower the rate, or both, once the
+              investment period ends. Ticking this records that as its own change, from the day after the period
+              ends{ipEnd ? ` (${fmtDate(dayAfter(ipEnd))})` : ''}.
+            </InfoTip>
+          </td>
+          <td style={{ padding: '2px 6px' }}>
+            <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+              <input type="checkbox" checked={afterIp} onChange={(e) => setAfterIp(e.target.checked)} />
+              {ipEnd ? `From ${fmtDate(dayAfter(ipEnd))}` : 'Set when the investment period ends, above'}
+            </label>
+          </td>
+          <td style={{ fontSize: 12 }}>
+            {errors.afterIp ? (
+              <span role="alert" style={{ color: 'var(--destructive)' }}>
+                {errors.afterIp}
+              </span>
+            ) : (
+              scheduled.length > 0 && <span className="text-muted">A change is already scheduled. Ticking this adds a newer one.</span>
+            )}
+          </td>
+        </tr>
+        {afterIp && (
+          <>
+            <tr>
+              <td>
+                Charged on, after
+                <InfoTip label="Charged on, after the investment period">{FIELD.feeBasis.info}</InfoTip>
+              </td>
+              <td style={{ padding: '2px 6px' }}>
+                <select
+                  className="cell"
+                  aria-label="Fee basis after the investment period"
+                  value={afterBasis}
+                  onChange={(e) => setAfterBasis(e.target.value)}
+                >
+                  {FIELD.feeBasis.options!.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td />
+            </tr>
+            <tr>
+              <td>
+                Annual rate, after
+                <InfoTip label="Annual rate after the investment period">{FIELD.feeRateAnnual.info}</InfoTip>
+              </td>
+              <td style={{ padding: '2px 6px' }}>
+                <input
+                  className="cell"
+                  aria-label="Annual rate after the investment period"
+                  placeholder="e.g. 1.5%"
+                  style={{ textAlign: 'right' }}
+                  value={afterRate}
+                  onChange={(e) => setAfterRate(e.target.value)}
+                />
+              </td>
+              <td style={{ fontSize: 12 }}>
+                {errors.afterRate ? (
+                  <span role="alert" style={{ color: 'var(--destructive)' }}>
+                    {errors.afterRate}
+                  </span>
+                ) : (
+                  <span className="text-muted">Blank means no fee after the period.</span>
+                )}
+              </td>
+            </tr>
+          </>
+        )}
+      </>
+    );
+  }
+
+  /** A group as it reads when not editing. */
+  function viewRows(group: Group) {
+    const out: ReactNode[] = [];
+    for (const f of group.fields) {
+      // No fee, or no interest: the rate reads "None" and nothing under it applies.
+      if (!termApplies(shown, f.key)) continue;
+      const empty = f.key === 'feeRateAnnual' || f.key === 'lateCloseInterestRate' ? 'None' : null;
+      out.push(
+        <dt key={`${f.key}-t`}>
+          {f.label}
+          <InfoTip label={f.label}>{f.info}</InfoTip>
+        </dt>,
+        <dd key={`${f.key}-d`}>
+          {shown[f.key] === null && empty ? (
+            <span className="text-muted">{empty}</span>
+          ) : unset.has(f.key) ? (
+            // Blank is shown as blank. This page never pretends to a value nobody chose.
+            <Tag tone="warn">Not set</Tag>
+          ) : (
+            display(f, shown[f.key], names) || <span className="text-muted">None</span>
+          )}
+        </dd>,
+      );
+    }
+    if (group.id === 'fee' && termApplies(shown, 'feeBasis')) {
+      const end = shown.investmentPeriodEnd;
+      const after = end ? termsOn(history, dayAfter(end)) : null;
+      const changes = after && (after.feeRateAnnual !== shown.feeRateAnnual || after.feeBasis !== shown.feeBasis);
+      out.push(
+        <dt key="after-t">
+          After the investment period
+          <InfoTip label="After the investment period">What the fee becomes once the investment period ends, if the LPA changes it.</InfoTip>
+        </dt>,
+        <dd key="after-d">
+          {changes && after ? (
+            after.feeRateAnnual ? (
+              `From ${fmtDate(after.effectiveFrom)}: ${pct(after.feeRateAnnual)} a year on ${basisInWords(after.feeBasis)}`
+            ) : (
+              `From ${fmtDate(after.effectiveFrom)}: no fee`
+            )
+          ) : (
+            <span className="text-muted">{end ? 'No change recorded' : 'Set when the investment period ends'}</span>
+          )}
+        </dd>,
+      );
+    }
+    return out;
   }
 
   // Newest first, and which row each was superseded by, for the history list.
   const ordered = [...history].sort((a, b) =>
-    a.effectiveFrom === b.effectiveFrom
-      ? b.createdAt.localeCompare(a.createdAt)
-      : b.effectiveFrom.localeCompare(a.effectiveFrom),
+    a.effectiveFrom === b.effectiveFrom ? b.createdAt.localeCompare(a.createdAt) : b.effectiveFrom.localeCompare(a.effectiveFrom),
   );
   const chronological = [...ordered].reverse();
 
@@ -533,15 +513,27 @@ export function FundTermsScreen({
           <h1>Fund terms</h1>
           <p className="text-muted" style={{ maxWidth: 620, textWrap: 'pretty' }}>
             {inForce
-              ? `In force since ${fmtDate(inForce.effectiveFrom)}. A new capital call starts with these. Changing a term records it from a date; nothing earlier is rewritten.`
-              : 'Nothing recorded yet. A new capital call starts blank until the fund’s terms are recorded here.'}
+              ? `In force since ${fmtDate(inForce.effectiveFrom)}. Every call, closing and fee period reads these. Changing a term records it from a date; nothing earlier is rewritten.`
+              : 'Nothing recorded yet. Record the terms from the LPA first: closings, calls and fees all read them.'}
           </p>
         </div>
         {canWrite && !open && (
-          <div style={{ marginLeft: 'auto' }}>
-            <Button variant="primary" onClick={start}>
-              {inForce ? 'Record a change' : 'Record the fund’s terms'}
-            </Button>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <TemplateButtons
+              fileName={`${fundName} — fund terms.xlsx`}
+              build={(XLSX) => termsTemplate(XLSX as unknown as WorkbookWriter, fundName, inForce)}
+              onImport={(XLSX, wb, name) => {
+                const sheet = wb.Sheets[TERMS_SHEET];
+                const grid = sheet ? (XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' }) as unknown[][]) : null;
+                start({ name, read: readTermsTemplate(grid) });
+              }}
+            />
+            {/* A fund with no terms yet has the button in the card below, beside what it is for. */}
+            {history.length > 0 && (
+              <Button variant="primary" onClick={() => start()}>
+                {inForce ? 'Edit terms' : 'Record the fund’s terms'}
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -553,161 +545,144 @@ export function FundTermsScreen({
       )}
 
       {open ? (
-        <Card title={inForce ? 'Record a change' : 'Record the fund’s terms'} style={{ marginTop: 20 }} bodyPadding="16px">
-          <p className="text-muted" style={{ fontSize: 13, marginTop: 0 }}>
-            Pre-filled with what is in force. Where nothing is recorded, a common choice is suggested
-            — check each against the LPA. Change only what changed, and say from when.
-          </p>
-          <table className="table" style={{ marginTop: 8 }}>
-            <tbody>
-              <tr>
-                <td style={{ width: 260, fontWeight: 600 }}>
-                  Applies from
-                  <InfoTip label="Applies from">
-                    The first day these terms apply. Using the same date as an earlier entry corrects it;
-                    a later date records a change from then, and nothing earlier is rewritten.
-                  </InfoTip>
-                </td>
-                <td style={{ width: 300, padding: '2px 6px' }}>
-                  <input
-                    className="cell"
-                    type="date"
-                    aria-label="Applies from"
-                    value={effectiveFrom}
-                    onChange={(e) => setEffectiveFrom(e.target.value)}
-                  />
-                </td>
-                <td style={{ fontSize: 12 }}>
-                  {errors.effectiveFrom ? (
-                    <span role="alert" style={{ color: 'var(--destructive)' }}>
-                      {errors.effectiveFrom}
+        <>
+          <Card title={inForce ? 'Edit terms' : 'Record the fund’s terms'} style={{ marginTop: 20 }} bodyPadding="16px">
+            {imported && (
+              <div style={{ display: 'grid', gap: 4, fontSize: 13, marginBottom: 10 }}>
+                <span>
+                  <Tag tone="accent">Imported</Tag> {imported.filled} term{imported.filled === 1 ? '' : 's'} from{' '}
+                  {imported.name}. Check them below, then Record — nothing is saved until you do.
+                </span>
+                {imported.errors.map((e) => (
+                  <span key={e} style={{ color: 'var(--destructive)' }}>
+                    Not imported — {e}
+                  </span>
+                ))}
+              </div>
+            )}
+            {history.length > 0 && (
+              <fieldset className="edit-kind" style={{ border: 0, padding: 0, margin: '0 0 14px' }}>
+                <legend style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>What kind of edit?</legend>
+                <label className={['edit-option', kind === 'fix' ? 'on' : ''].filter(Boolean).join(' ')}>
+                  <input type="radio" name="edit-kind" checked={kind === 'fix'} onChange={() => choose('fix')} />
+                  <span>
+                    <strong>Fix a mistake</strong>
+                    <span className="text-muted">
+                      What was recorded was wrong — the LPA always said otherwise. Applies from when those terms started.
                     </span>
-                  ) : null}
-                </td>
-              </tr>
-              {GROUPS.map((group) => [
-                <tr key={group.title}>
-                  <td colSpan={3} style={{ fontWeight: 600, paddingTop: 18 }}>
-                    {group.title}
-                  </td>
-                </tr>,
-                ...group.fields.map((f) => (
-                  <tr key={f.key}>
-                    <td>
-                      {f.label}
-                      <InfoTip label={f.label}>{f.info}</InfoTip>
-                    </td>
-                    <td style={{ padding: '2px 6px' }}>{input(f)}</td>
-                    <td style={{ fontSize: 12 }}>{note_(f)}</td>
-                  </tr>
-                )),
-              ])}
-              <tr>
-                <td colSpan={3} style={{ fontWeight: 600, paddingTop: 18 }}>
-                  Management fee after the investment period
-                </td>
-              </tr>
-              <tr>
-                <td>
-                  Fee changes after it
-                  <InfoTip label="Fee changes after the investment period">
-                    Many LPAs move the fee from commitments to invested capital, lower the rate, or both, once
-                    the investment period ends. Ticking this records that as its own change, from the day after
-                    the period ends{ipEnd ? ` (${fmtDate(dayAfter(ipEnd))})` : ''}.
-                  </InfoTip>
-                </td>
-                <td style={{ padding: '2px 6px' }}>
-                  <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
-                    <input type="checkbox" checked={afterIp} onChange={(e) => setAfterIp(e.target.checked)} />
-                    {ipEnd ? `From ${fmtDate(dayAfter(ipEnd))}` : 'Set the investment period end above'}
-                  </label>
-                </td>
-                <td style={{ fontSize: 12 }}>
-                  {errors.afterIp ? (
-                    <span role="alert" style={{ color: 'var(--destructive)' }}>
-                      {errors.afterIp}
+                  </span>
+                </label>
+                <label className={['edit-option', kind === 'change' ? 'on' : ''].filter(Boolean).join(' ')}>
+                  <input type="radio" name="edit-kind" checked={kind === 'change'} onChange={() => choose('change')} />
+                  <span>
+                    <strong>The terms change from a date</strong>
+                    <span className="text-muted">
+                      The LPA was amended, or a change it already sets out takes effect. Before that date, nothing moves.
                     </span>
-                  ) : (
-                    scheduled.length > 0 && (
-                      <span className="text-muted">Already scheduled below. Ticking this adds a newer one.</span>
-                    )
-                  )}
-                </td>
-              </tr>
-              {afterIp && (
-                <>
-                  <tr>
-                    <td>
-                      Fee basis after
-                      <InfoTip label="Fee basis after the investment period">{BASIS.info}</InfoTip>
-                    </td>
-                    <td style={{ padding: '2px 6px' }}>
-                      <select
-                        className="cell"
-                        aria-label="Fee basis after the investment period"
-                        value={afterBasis}
-                        onChange={(e) => setAfterBasis(e.target.value)}
-                      >
-                        {BASIS.options!.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td />
-                  </tr>
-                  <tr>
-                    <td>
-                      Annual rate after
-                      <InfoTip label="Annual rate after the investment period">{RATE.info}</InfoTip>
-                    </td>
-                    <td style={{ padding: '2px 6px' }}>
-                      <input
-                        className="cell"
-                        aria-label="Annual rate after the investment period"
-                        placeholder="e.g. 0.015"
-                        style={{ textAlign: 'right' }}
-                        value={afterRate}
-                        onChange={(e) => setAfterRate(e.target.value)}
-                      />
-                    </td>
-                    <td style={{ fontSize: 12 }}>
-                      {errors.afterRate ? (
-                        <span role="alert" style={{ color: 'var(--destructive)' }}>
-                          {errors.afterRate}
-                        </span>
-                      ) : (
-                        <span className="text-muted">Blank keeps no rate after the period.</span>
-                      )}
-                    </td>
-                  </tr>
-                </>
-              )}
-              <tr>
-                <td style={{ paddingTop: 18 }}>
-                  Note
-                  <InfoTip label="Note">Why the terms changed, and where it says so — a clause of the LPA, a side letter, an amendment.</InfoTip>
-                </td>
-                <td colSpan={2} style={{ padding: '14px 6px 2px' }}>
-                  <input
-                    className="cell"
-                    aria-label="Note"
-                    placeholder="e.g. LPA §8.1, fee step-down after the investment period"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                  />
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  </span>
+                </label>
+                {errors.kind && (
+                  <span role="alert" style={{ color: 'var(--destructive)', fontSize: 12 }}>
+                    {errors.kind}
+                  </span>
+                )}
+              </fieldset>
+            )}
+            {(history.length === 0 || kind) && (
+              <>
+                <p className="text-muted" style={{ fontSize: 13, marginTop: 0 }}>
+                  {kind === 'fix'
+                    ? 'Pre-filled with the terms being corrected. Change what was wrong.'
+                    : kind === 'change'
+                      ? 'Pre-filled with what is in force. Change only what changes, and say from when.'
+                      : 'Fill these in from the LPA. A common choice is suggested where there is one — check each. Anything you leave blank can be added later as a change.'}
+                </p>
+                <table className="table">
+                  <tbody>
+                    <tr>
+                      <td style={{ width: 240, fontWeight: 600 }}>
+                        {kind === 'fix' ? 'Terms being corrected' : 'Applies from'}
+                        <InfoTip label="Applies from">
+                          The first day these terms apply. Nothing already sent, finalised or recorded is rewritten; what
+                          this touches is shown below before you record it.
+                        </InfoTip>
+                      </td>
+                      <td style={{ width: 300, padding: '2px 6px' }}>
+                        {kind === 'fix' ? (
+                          <select className="cell" aria-label="Applies from" value={effectiveFrom} onChange={(e) => choose('fix', e.target.value)}>
+                            {[...new Set(history.map((t) => t.effectiveFrom))].sort().map((d) => (
+                              <option key={d} value={d}>
+                                In force from {fmtDate(d)}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input className="cell" type="date" aria-label="Applies from" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
+                        )}
+                      </td>
+                      <td style={{ fontSize: 12 }}>
+                        {errors.effectiveFrom ? (
+                          <span role="alert" style={{ color: 'var(--destructive)' }}>
+                            {errors.effectiveFrom}
+                          </span>
+                        ) : history.length ? null : (
+                          <span className="text-muted">The date of the LPA, or the first close — no later, or fees before it come to nothing.</span>
+                        )}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </>
+            )}
+          </Card>
 
-          {failure && (
-            <p role="alert" style={{ color: 'var(--destructive)', fontSize: 13 }}>
-              {failure}
-            </p>
+          {(history.length === 0 || kind) && (
+          <>
+          {GROUPS.map((group) => (
+            <Card key={group.id} title={group.title} subtitle={group.subtitle} style={{ marginTop: 16 }} bodyPadding="8px 16px 12px">
+              <table className="table">
+                <tbody>
+                  {formRows(group)}
+                  {group.id === 'fee' && afterIpRows()}
+                </tbody>
+              </table>
+            </Card>
+          ))}
+
+          <Card style={{ marginTop: 16 }} bodyPadding="12px 16px">
+            <label style={{ display: 'grid', gap: 6, fontSize: 13 }}>
+              <span>
+                Note
+                <InfoTip label="Note">Why the terms changed, and where it says so — a clause of the LPA, a side letter, an amendment.</InfoTip>
+              </span>
+              <input
+                className="cell"
+                aria-label="Note"
+                placeholder="e.g. LPA §8.1, fee step-down after the investment period"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                style={{ border: '1px solid var(--border)' }}
+              />
+            </label>
+          </Card>
+
+          {impact && <EditImpact impact={impact} drafts={record.drafts} />}
+          </>
           )}
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+
+          {/* Always in reach: the form is long, and Record is the only way to keep it. */}
+          <div className="action-bar">
+            {failure ? (
+              <span role="alert" style={{ color: 'var(--destructive)' }}>
+                {failure}
+              </span>
+            ) : Object.keys(errors).length > 0 ? (
+              <span role="status" style={{ color: 'var(--destructive)' }}>
+                {Object.keys(errors).length} field{Object.keys(errors).length === 1 ? ' needs' : 's need'} a look — marked above.
+              </span>
+            ) : (
+              <span className="text-muted">Nothing is recorded until you press Record.</span>
+            )}
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={saving}>
               Cancel
             </Button>
@@ -715,30 +690,27 @@ export function FundTermsScreen({
               Record
             </Button>
           </div>
+        </>
+      ) : !inForce && history.length === 0 ? (
+        <Card style={{ marginTop: 20, maxWidth: 680 }} bodyPadding="24px">
+          <h3 style={{ marginTop: 0 }}>Start with the LPA</h3>
+          <p className="text-muted" style={{ textWrap: 'pretty' }}>
+            The management fee, the investment period, interest on late closings, who signs the notices and where
+            investors wire money. Every closing, call and fee period reads them, so they come first. Type them in, or fill
+            in the template and import it.
+          </p>
+          {canWrite && (
+            <Button variant="primary" onClick={() => start()}>
+              Record the fund&rsquo;s terms
+            </Button>
+          )}
         </Card>
       ) : (
         <>
           {GROUPS.map((group) => (
-            <Card key={group.title} title={group.title} subtitle={group.subtitle} style={{ marginTop: 20 }}>
+            <Card key={group.id} title={group.title} subtitle={group.subtitle} style={{ marginTop: 20 }}>
               <dl className="kv" style={{ gridTemplateColumns: '260px 1fr', padding: '14px 16px' }}>
-                {group.fields.map((f) => [
-                  <dt key={`${f.key}-t`}>
-                    {f.label}
-                    <InfoTip label={f.label}>{f.info}</InfoTip>
-                  </dt>,
-                  <dd key={`${f.key}-d`}>
-                    {unset.has(f.key) ? (
-                      // Blank is shown as blank. What a call does with a blank is
-                      // the call's business; this page never pretends to a value
-                      // nobody chose.
-                      <Tag tone="warn">Not set</Tag>
-                    ) : (
-                      display(f, (inForce ?? BLANK_TERMS)[f.key], investors) || (
-                        <span className="text-muted">None</span>
-                      )
-                    )}
-                  </dd>,
-                ])}
+                {viewRows(group)}
               </dl>
             </Card>
           ))}
@@ -755,8 +727,8 @@ export function FundTermsScreen({
                       {changed.length
                         ? changed
                             .map((k) => {
-                              const f = FIELDS.find((x) => x.key === k);
-                              return f ? `${f.label}: ${display(f, row[f.key], investors) || 'cleared'}` : String(k);
+                              const f = FIELD[k as keyof typeof FIELD];
+                              return f ? `${f.label}: ${display(f, row[f.key], names) || 'cleared'}` : String(k);
                             })
                             .join(' · ')
                         : 'No change'}
@@ -769,12 +741,9 @@ export function FundTermsScreen({
         </>
       )}
 
+      {ordered.length > 0 && (
       <Card title="History" subtitle="every change, newest first" style={{ marginTop: 20 }}>
-        {ordered.length === 0 ? (
-          <p className="text-muted" style={{ padding: '14px 16px', margin: 0 }}>
-            No terms recorded.
-          </p>
-        ) : (
+        {(
           <div style={{ overflowX: 'auto' }}>
             <table className="table">
               <thead>
@@ -796,18 +765,11 @@ export function FundTermsScreen({
                   return (
                     <tr key={`${row.effectiveFrom}-${row.createdAt}`}>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        {fmtDate(row.effectiveFrom)}{' '}
-                        {row === inForce && <Tag tone="accent">In force</Tag>}
+                        {fmtDate(row.effectiveFrom)} {row === inForce && <Tag tone="accent">In force</Tag>}
                         {row.effectiveFrom > today && <Tag>Scheduled</Tag>}
                         {superseded && <Tag>Corrected</Tag>}
                       </td>
-                      <td>
-                        {changed.length ? (
-                          changed.map((k) => LABEL[k] ?? k).join(', ')
-                        ) : (
-                          <span className="text-muted">No change</span>
-                        )}
-                      </td>
+                      <td>{changed.length ? changed.map((k) => LABEL[k] ?? k).join(', ') : <span className="text-muted">No change</span>}</td>
                       <td className="text-muted" style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
                         {fmtStamp(row.createdAt)}
                       </td>
@@ -822,6 +784,69 @@ export function FundTermsScreen({
           </div>
         )}
       </Card>
+      )}
     </div>
+  );
+}
+
+/** What an edit touches, shown before it is recorded. Nothing issued is rewritten. */
+function EditImpact({ impact, drafts }: { impact: TermsEditImpact; drafts: number[] }) {
+  const nothing = !impact.issuedCalls.length && !impact.closings.length && !impact.billedPeriods.length && !drafts.length;
+  return (
+    <Card
+      title="What this edit touches"
+      subtitle={`from ${fmtDate(impact.from)}${impact.to ? ` to ${fmtDate(impact.to)}` : ' onwards'}`}
+      style={{ marginTop: 16 }}
+      bodyPadding="12px 16px"
+    >
+      <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 6, fontSize: 13 }}>
+        {nothing && <li>Nothing has been issued or billed under these terms yet.</li>}
+        {impact.issuedCalls.length > 0 && (
+          <li>
+            <strong>Calls already sent stay exactly as sent:</strong>{' '}
+            {impact.issuedCalls.map((c) => `Call No. ${c.callNo} (${fmtDate(c.callDate)})`).join(', ')}. Investors have these
+            notices; a difference is put right on a later call.
+          </li>
+        )}
+        {impact.closings.length > 0 && (
+          <li>
+            <strong>Finalised closings stay as finalised:</strong> {impact.closings.map((c) => `Closing ${c.closingNo}`).join(', ')}.
+          </li>
+        )}
+        {impact.billedPeriods.length > 0 && (
+          <li>
+            <strong>Billed fees that change</strong> — each will show a true-up on Management fees:
+            <table className="table" style={{ marginTop: 6 }}>
+              <thead>
+                <tr>
+                  <th>Period</th>
+                  <th style={{ textAlign: 'right' }}>Billed</th>
+                  <th style={{ textAlign: 'right' }}>Becomes</th>
+                  <th style={{ textAlign: 'right' }}>True-up</th>
+                </tr>
+              </thead>
+              <tbody>
+                {impact.billedPeriods.map((f) => (
+                  <tr key={f.from}>
+                    <td>{f.label}</td>
+                    <td className="num">{fmt(f.billed)}</td>
+                    <td className="num">{fmt(f.becomes)}</td>
+                    <td className="num" style={{ fontWeight: 600 }}>
+                      {f.trueUp > 0 ? `+${fmt(f.trueUp)}` : `−${fmt(-f.trueUp)}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </li>
+        )}
+        {drafts.length > 0 && (
+          <li>
+            <strong>Draft calls follow the new terms</strong> when next opened and saved:{' '}
+            {drafts.map((n) => `Call No. ${n}`).join(', ')}.
+          </li>
+        )}
+      </ul>
+    </Card>
   );
 }

@@ -28,6 +28,9 @@ export function NewCallButton({
   defaults,
   terms,
   reuseCallId,
+  label = 'New capital call',
+  variant = 'primary',
+  align = 'end',
 }: {
   fundId: string;
   /** The fund's name, which becomes the new call's Fund_Name. */
@@ -38,6 +41,9 @@ export function NewCallButton({
   terms: FundTerms | null;
   /** An existing not-started call to open instead of creating another. */
   reuseCallId?: string;
+  label?: string;
+  variant?: 'primary' | 'secondary';
+  align?: 'start' | 'end';
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -71,9 +77,9 @@ export function NewCallButton({
   }
 
   return (
-    <div style={{ display: 'grid', gap: 6, justifyItems: 'end' }}>
-      <Button variant="primary" large onClick={onClick} disabled={busy}>
-        {busy ? 'Starting…' : 'New capital call'}
+    <div style={{ display: 'grid', gap: 6, justifyItems: align }}>
+      <Button variant={variant} large={variant === 'primary'} onClick={onClick} disabled={busy}>
+        {busy ? 'Starting…' : label}
       </Button>
       {error && (
         <span role="alert" style={{ color: 'var(--destructive)', fontSize: 12 }}>

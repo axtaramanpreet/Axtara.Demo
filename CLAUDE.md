@@ -28,6 +28,7 @@ npm run verify            # tsc (tsconfig.check.json) + eslint --max-warnings=0 
 npm run build             # next build
 npm run db:test           # pgTAP tests in supabase/tests/
 npm run db:types          # regenerate src/adapters/storage/database.types.ts after a migration
+npm run demo:reset        # rebuild the Meridian Growth Partners III demo fund (local only)
 
 npx vitest run src/engine/__tests__/golden.test.ts   # one file
 npx vitest run -t "plug is chosen"                    # by test name
@@ -75,10 +76,83 @@ deletes, except when the whole fund is deleted). `termsOn(history, date)` in
 `src/engine/fund-terms.ts` picks the row in force. `applyFundTerms(model, terms)`
 puts it into a call and returns which cells it locked; the setup screen applies
 it (terms in force on the call date) on load, on every edit, and when inputs are
-replaced, never on an issued call. Only terms that are set are applied or
-locked, so a fund with no terms behaves as before. Env `NOTICE_*` values are
-the base a new call starts from, under the terms. Blank means "not set"; the
+replaced, never on an issued call. Once a fund has terms, every fund-level
+cell comes from them and is locked — a blank term is blank on the call, and a
+workbook's values for those cells are ignored and reported. A fund with no terms
+behaves as before. Env `NOTICE_*` values are the base a new call starts from,
+under the terms. Blank means "not set"; the
 Settings form's suggestions (`SUGGESTED_TERMS`) are never stored unless recorded.
+Editing terms asks what the edit is: "Fix a mistake" (a new row on the
+original start date, which wins the tie) or "The terms change from a date".
+Nothing issued is recalculated — sent calls and finalised closings stay as they
+are; periods calls already billed show a true-up. `termsEditImpact` (`fee-billing.ts`)
+lists all of it, with amounts, before the edit is recorded.
+Terms that only apply once another is set (`DEPENDS_ON`: how the fee is
+charged needs a fee rate; interest basis and recipient need a late-close rate)
+are hidden in the form and stored as null (`withoutOrphans`). Field labels,
+help text and parsing ("2%", "Quarterly", "Yes") live in
+`src/lib/fund-terms-fields.ts`, shared by the screen and the terms template.
+
+### Investors
+
+`investors` is the fund's register and the Investors page owns each profile
+(type, country, notices email, `cc_emails` copied on every notice, `is_gp`,
+`kyc_status`). Calls and closings create investors they don't know, and a
+non-blank detail typed on them updates the profile, but a blank never clears
+one (`save_call_inputs`, `save_closing_commitments`, migration
+`20260927090000`); `fromLPRowIdentity` must send blanks as blanks for that to
+hold. `profileGaps` (`src/lib/investor-profile.ts`) is the one rule for
+"profile incomplete". `capitalAccount` (`src/engine/capital-account.ts`) ends on
+the same figures as `positionsOn`; the billed fee is inside each call. No tax IDs or investor bank details are stored until the
+rebuild encrypts them. Under `EMAIL_OVERRIDE_TO`, copies are dropped too.
+
+### Setup order and templates
+
+`src/lib/fund-gates.ts` decides what a fund may do next: closings need terms,
+new calls and fees need a finalised first close. Funds that already have calls
+or closings are exempt. Every page passes `fundGates(progress)` to `AppShell`;
+the sidebar shows locked items, Closings and Fees show `StepGate`, and the home
+checklist (terms → investors → first close → first call) disables later steps; investors are not a gate, since a closing can add them. It is a UI rule — the database does not enforce
+it — except that `finaliseClosing` refuses when no terms are in force on the
+closing date. `src/adapters/workbook/templates.ts` builds and reads the terms,
+commitments and call templates; an import only fills a form, never saves.
+
+### Closings, equalization and the fee ledger
+
+The fund's record is `closings` + `closing_commitments` (who each close
+admitted), issued calls (their frozen `call_results`), `closing_results` (a
+finalised later close's equalization, frozen). There are no fee runs: the fee
+is read from the calls that bill it. `src/engine/fund-history.ts` reads it the same way for everything:
+`equalizationInputFor`, `positionsOn`, `feeInvestorsFrom`, `feeLedgerFor`.
+Only finalised closings count; a draft is previewed, never counted.
+
+- `equalize()` (`equalization.ts`): capital moved = called × N/(T+N) per earlier
+  call, split among late investors by commitment and refunded by what each
+  paid into that call; interest per call from its due date to the closing;
+  catch-up fee from `feeForRange`.
+- `feeForRange()` (`fee-run.ts`) slices a period wherever terms, commitment or
+  invested capital change; `trueUp()` keeps charged, should-have and the
+  difference. `feeLedgerFor` (`fee-billing.ts`) compares every period with what
+  calls billed — not billed, billed, or "true-up due" once the record moves
+  after billing — with nothing entered by hand (`fee_runs` was dropped in
+  `20260927140000`).
+- `fundRegister()` (`fund-register.ts`) builds a new call's register from the
+  record once the fund has closings (carry-forward would miss a later close).
+  It refuses, naming the call, when a call's commitments disagree with the
+  closings — usually a transfer made inside a call.
+- `registerDifferences()` compares any call's register (typed, imported,
+  carried) with the record before it: unknown or missing LP_IDs, and
+  commitment, opening paid-in or unfunded that differ. Setup lists them with
+  "Use the fund's register"; `approveNotices` and `sendNotices` refuse while any
+  remain, or while a fund with terms has none in force on the call date. On
+  import, known investors' identity comes from their profile
+  (`identityFromProfiles`), not the workbook.
+- Finalising and recording go through `fund-actions.ts` (server recomputes,
+  refuses on a failing check, writes with the service role, audits). Browsers
+  can edit only draft closings, through RLS and column grants.
+- Home's Fund position card reads `positionFromRecord` for a fund with
+  finalised closings whose calls agree with them; any other fund keeps the
+  `fund_positions` view (the latest call's register, opening balances).
 
 ### The engine is the source of truth
 
@@ -102,6 +176,52 @@ suite.
   owns structure only (types, keys, uniqueness, immutability). A `fail` check
   blocks approval; a `warn` does not.
 - Do not have the UI or the LLM derive figures the engine can compute.
+- A component's category is one of three (`src/engine/categories.ts`): Deal
+  (invested capital), Partnership Expense, Organizational Expense (cap check).
+  `categoryOf` accepts spacing, case, plurals and common synonyms; anything else
+  is a `fail` check until picked. The management fee is never a component — it
+  is computed in its own step — and a call with no components is a fee-only call.
+- **Fee billing, funds with closings** (`src/engine/fee-billing.ts`, same test
+  as `positionFromRecord`): a call bills named fee periods. `calls.fee_schedule`
+  (`model.feeSchedule`) stores, per period, each investor's fee as the record
+  worked it out; `compute()` sums it instead of rate × share of a year. A call
+  bills what a period still owes — its fee now (`feeRunFor`) less what sent calls
+  billed (`feeOwed`) — so nothing is billed twice, several past periods can go
+  on one call (credit line), and a late closer's share of a billed period is
+  still owed. Negative remainders are credits, reported not billed. Approve and
+  send refuse a missing or stale schedule (`feeScheduleDifferences`). The fee
+  ledger compares against what was billed once a period is billed.
+- **Settling a later closing's equalization** (`src/engine/equalization-billing.ts`).
+  `closings.settlement` is `on_closing` (statements now), `next_call`, or null
+  (not chosen — every closing finalised before this existed). Balances move on
+  the closing date either way (`positionsOn` is unchanged); the choice only
+  decides which document asks for the cash, and stays open until a sent call
+  carried it or a statement was sent (the trigger enforces both). A call after
+  an unchosen closing is refused approval (`unsettledClosings`).
+  - Next call: `calls.equalization_schedule` (`model.equalizationSchedule`) is
+    derived in setup (`withEqualization`, on load and every edit), never typed:
+    everything still owed (`equalizationOwed`), settled in full on that call,
+    kept per investor both as a net (`byLp`) and in its three parts (`parts`:
+    capital, late interest, catch-up fee — `compute` fails if they don't add
+    up). Setup shows capital and interest on Call components and the catch-up
+    fee on Management fee; the notice shows one block per closing with the
+    parts and their total.
+    A credit larger than an investor's call is paid to them: `amountDue` goes
+    negative and the notice says "Amount payable to you", asking for nothing
+    (`payableToYou`). `compute`
+    adds `row.equalization`; `row.total` stays what the call draws and the
+    roll-forward ignores it. The amount to wire is `amountDue(row)` — use it
+    wherever a figure means "pay this" (notice, email, allocation, export).
+    Fields appear only when a call carries some, so the equivalence suite holds.
+  - Now: `closing_statements` (server-only writes, read RLS, frozen once sent);
+    `approveStatements` / `sendStatements` / `retryStatementDelivery` in
+    `fund-actions.ts`.
+- **Catch-up fees** (`catchUpFeesFor`): what late investors paid for the time
+  before they joined, per closing, shown on Management fees. It is not in any
+  period's figure; it is manager fee income only when `catchUpFeeTo` is the GP.
+- **Funds without closings** keep rate × share of a year: `calls.charge_mgmt_fee`
+  (`Charge_Mgmt_Fee` = 'N') leaves the fee and its offsets out, and approve/send
+  refuse a second charge in one period (`callFeePeriod`, `feeAlreadyCharged`).
 
 ### Three Supabase clients, three authorities
 
@@ -110,7 +230,13 @@ suite.
 - **browser** (`createBrowserSupabase`) and **server** (`getServerSupabase` in
   `src/lib/supabase/server.ts`) act as the signed-in user; RLS applies.
 - **service** (`createServiceSupabase`) bypasses RLS. It is used only in
-  `src/server/call-actions.ts`.
+  `src/server/call-actions.ts` and `src/server/fund-actions.ts`.
+
+Those two modules take an optional signed-in client (`options.client`,
+`src/server/session.ts`); without one they use the request's cookies. It exists
+so `scripts/demo/reset.demo.ts` can drive the real approve / send / finalise /
+fee-run code as a user. `sendNotices(…, { deliver: false })` issues without
+emailing.
 
 `notices`, `call_results` and `audit_log` have read policies only, so approving
 and sending can only happen server-side via `/api/calls/[callId]/notices`.
@@ -159,6 +285,14 @@ that address.
 - Styling is plain CSS in `src/app/globals.css` with tokens on `:root`. Grid
   and flex children that hold long content need `min-width: 0`.
 - Icon-only `<Button iconOnly>` requires an `aria-label` at the type level.
+- Nothing saves by itself: every financial input is saved by an explicit
+  Save or Record, and `useLeaveGuard` (`src/lib/hooks/use-leave-guard.ts`)
+  asks before unsaved work is left. Do not add autosave.
+- Irreversible steps (finalise a closing, delete a call or draft) confirm with
+  `ConfirmDialog`, which states what is being fixed; never `window.confirm`.
+- While a fund is being set up, `nextStep()` (`src/lib/fund-gates.ts`) puts a
+  "Next: …" banner on the page whose step is done; imports preview what they
+  will change before saving.
 
 ## Working in this repo
 

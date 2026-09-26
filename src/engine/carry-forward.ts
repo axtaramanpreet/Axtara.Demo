@@ -9,6 +9,7 @@
 
 import { compute } from './compute';
 import { round } from './format';
+import { isDeal } from './categories';
 import type { CallModel, LPRow } from './types';
 
 /**
@@ -34,7 +35,7 @@ export function carryForwardRegister(previous: CallModel): LPRow[] {
 
   return result.rows.map((row): LPRow => {
     const investedInDeals = row.comps
-      .filter((c) => /deal/i.test(String(c.category ?? '')))
+      .filter((c) => isDeal(c.category))
       .reduce((sum, c) => sum + c.amt, 0);
 
     return {

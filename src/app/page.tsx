@@ -35,8 +35,9 @@ export default async function RootPage() {
         {client ? (
           <>
             <p className="text-muted">
-              You are signed in to <strong>{client.name}</strong>, which has no funds. Create one to
-              start a capital call — you can upload the register now or fill it in later.
+              You are signed in to <strong>{client.name}</strong>, which has no funds. Create one,
+              and it opens on the four steps to its first call: its terms, its investors, its first
+              close, then the call itself.
             </p>
             <CreateFirstFund />
           </>

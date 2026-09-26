@@ -56,6 +56,11 @@ export interface FundSetup {
   /** The LP that absorbs the rounding residual so allocations tie exactly. */
   Rounding_Plug_LP_ID: string;
   Prepared_By: string;
+  /**
+   * 'N' when this call leaves the management fee out — a second call in a
+   * period whose fee an earlier call charged. Blank or 'Y' charges it.
+   */
+  Charge_Mgmt_Fee?: YesNo;
   [key: string]: Cell;
 }
 
@@ -161,6 +166,51 @@ export interface CallModel {
   golden?: GoldenRow[] | null;
   /** Human-readable provenance of `golden`, shown in the Checks tab. */
   goldenSource?: string;
+  /**
+   * The management fee this call bills, period by period and investor by
+   * investor, worked out from the fund's record when the periods were chosen.
+   * `null` or absent: the fee is the fund's rate × this call's share of a year
+   * (a fund with no closings). An empty list: this call bills no fee.
+   */
+  feeSchedule?: FeeScheduleEntry[] | null;
+  /**
+   * Later closings' equalization this call settles, investor by investor: a
+   * late investor pays (+), an earlier one is credited (−). Cash only — the
+   * balances moved on the closing date, so it is not part of what the call
+   * draws down. `null` or absent: it settles none.
+   */
+  equalizationSchedule?: EqualizationDueEntry[] | null;
+}
+
+/** One closing's equalization a call settles: each investor's amount, + pays, − credited. */
+export interface EqualizationDueEntry {
+  closingId: string;
+  closingNo: number;
+  closingDate: string;
+  /** Each investor's net: the three parts added up. */
+  byLp: Record<string, number>;
+  /** The same, taken apart — so each part is shown with what it belongs to. */
+  parts: Record<string, EqualizationParts>;
+}
+
+/**
+ * An investor's equalization, in its three parts, each + to pay or − credited:
+ * their share of earlier calls, interest for paying it late, and the
+ * management fee for the time before they joined.
+ */
+export interface EqualizationParts {
+  capital: number;
+  interest: number;
+  catchUpFee: number;
+}
+
+/** One fee period a call bills: what each investor is charged for it. */
+export interface FeeScheduleEntry {
+  from: string;
+  to: string;
+  label: string;
+  /** Fee per investor for the period, by LP_ID. */
+  byLp: Record<string, number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,8 +253,12 @@ export type ComputedRow = LPRow & {
   feeGross: number;
   feeOffset: number;
   feeNet: number;
-  /** Components + net fee. The number the LP is asked to wire. */
+  /** The fee for each scheduled period, in the schedule's order. Only on a call with a schedule. */
+  feeByPeriod?: number[];
+  /** Components + net fee: what this call draws. The amount to wire is `amountDue(row)`. */
   total: number;
+  /** What this call settles of later closings' equalization (+ pays, − credited). Only on a call that settles some. */
+  equalization?: number;
   /** The part of `total` that draws down unfunded commitment. */
   reduces: number;
   /** The part of `total` called outside commitment. `total - reduces`. */
@@ -279,6 +333,13 @@ export interface FeeSummary {
   /** True when the fee draws down unfunded commitment. */
   reduces: boolean;
   offsets: OffsetRow[];
+  /**
+   * The periods billed, when the fee comes from a schedule rather than rate ×
+   * share of a year. Absent otherwise, so a call without one reads as before.
+   */
+  schedule?: { from: string; to: string; label: string; total: number }[];
+  /** With a schedule: investors it bills who are not on this call's register, and so are billed nothing here. */
+  notOnRegister?: string[];
 }
 
 /** The complete result of one capital call calculation. */
@@ -290,6 +351,22 @@ export interface ComputeResult {
   roster: LPRow[];
   transfers: TransferResult;
   fee: FeeSummary;
+  /** The equalization this call settles, closing by closing. Only on a call that settles some. */
+  equalization?: {
+    closings: {
+      closingId: string;
+      closingNo: number;
+      closingDate: string;
+      paid: number;
+      credited: number;
+      /** Each part, added up across investors: net, + collected. */
+      capital: number;
+      interest: number;
+      catchUpFee: number;
+    }[];
+    /** Paid less credited: what the fund collects net. */
+    total: number;
+  };
   /** Rounding decimals actually used. */
   d: number;
   /** Call date normalised to ISO. */

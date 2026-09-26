@@ -5,6 +5,7 @@ import { getServerSupabase } from '@/lib/supabase/server';
 import { askStatusForClient } from '@/lib/env';
 import { AppShell } from '@/components/shell/app-shell';
 import { FundTermsScreen } from '@/components/settings/fund-terms-screen';
+import { fundGates, nextStep } from '@/lib/fund-gates';
 
 /**
  * Settings: the fund's terms.
@@ -23,12 +24,15 @@ export default async function SettingsPage({
   const supabase = await getServerSupabase();
   const repo = createSupabaseRepository(supabase as unknown as SupabaseClient);
 
-  const [funds, calls, history, investors, { data: canWrite }] = await Promise.all([
+  const [funds, calls, history, investors, { data: canWrite }, progress, closings, issued] = await Promise.all([
     repo.listFunds(),
     repo.listCalls(fundId),
     repo.listFundTerms(fundId),
     repo.listInvestors(fundId),
     supabase.rpc('auth_can_write_fund', { target_fund: fundId }),
+    repo.getFundProgress(fundId),
+    repo.listClosings(fundId),
+    repo.listIssuedCalls(fundId),
   ]);
   const fund = funds.find((f) => f.id === fundId);
   if (!fund) notFound();
@@ -42,13 +46,21 @@ export default async function SettingsPage({
       fundId={fundId}
       module="settings"
       callCount={calls.length}
-      crumb={{ leaf: 'Settings' }}
+      crumb={{ leaf: 'Fund terms' }}
       surface="module"
       askConnected={askStatusForClient().connected}
+      gates={fundGates(progress)}
+      next={nextStep(progress, 'settings')}
     >
       <FundTermsScreen
+        fundName={fund.name}
         fundId={fundId}
         history={history}
+        record={{
+          closings,
+          calls: issued,
+          drafts: calls.filter((c) => !c.lockedAt).map((c) => c.callNo),
+        }}
         investors={investors}
         today={today}
         canWrite={Boolean(canWrite)}

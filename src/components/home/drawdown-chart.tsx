@@ -1,21 +1,27 @@
-import { fmt } from '@/engine';
+import Link from 'next/link';
+import { fmt, fmtDate } from '@/engine';
 import { Card } from '@/components/ui/card';
 
 /** One column of the drawdown chart: what a single call drew. */
 export interface DrawdownColumn {
   callNo: number;
-  /** Total called. Null for a call that has not been computed yet. */
+  callDate: string | null;
+  /** Where the call opens. */
+  href: string;
+  /** Its total. Null for a call with nothing entered yet. */
   total: number | null;
   againstCommitment: number;
   outsideCommitment: number;
   feeNet: number;
-  /** Cumulative share of commitments drawn after this call. */
-  cumulativePct: number;
-  /** A call with nothing allocated yet, drawn as a dashed outline. */
-  planned: boolean;
+  /** Everything called up to and including this call — a draft adds nothing. */
+  cumulative: number;
+  /** Not sent yet, so nothing is called: drawn as a dashed outline, at its size once it has one. */
+  draft: boolean;
 }
 
 const CHART_HEIGHT = 150;
+/** The least a part that is not nothing is drawn at, so a small amount is still seen. */
+const MIN_SEGMENT = 3;
 
 /**
  * Amount called per notice, as stacked columns.
@@ -39,13 +45,18 @@ export function DrawdownChart({
   currency: string;
 }) {
   const tallest = Math.max(...columns.map((c) => c.total ?? 0), 1);
-  const issued = columns.filter((c) => !c.planned);
-  const drawnPct = issued.length ? issued[issued.length - 1].cumulativePct : 0;
+  const issued = columns.filter((c) => !c.draft);
+  const drafts = columns.some((c) => c.draft);
+  // Every call measured against today's commitments, as the legend is: a later
+  // close adds commitments, and measuring each call against the total at the
+  // time made a cumulative share appear to fall.
+  const pctOf = (called: number) => (totalCommitments > 0 ? (called / totalCommitments) * 100 : 0);
+  const calledPct = issued.length ? pctOf(issued[issued.length - 1].cumulative) : 0;
 
   return (
     <Card
       title="Drawdown history"
-      subtitle="amount called per notice · cumulative % of commitments drawn"
+      subtitle="amount called per notice · cumulative % of commitments called"
       style={{ maxWidth: 1200, marginTop: 16 }}
     >
       <div
@@ -57,23 +68,27 @@ export function DrawdownChart({
           alignItems: 'end',
         }}
       >
-        <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end', height: 190 }}>
+        <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end' }}>
           {columns.map((c) => {
-            const scale = (v: number) => Math.round((v / tallest) * CHART_HEIGHT);
-            const height = c.total ? scale(c.total) : 0;
+            const scale = (v: number) => (v > 0 ? Math.max(MIN_SEGMENT, Math.round((v / tallest) * CHART_HEIGHT)) : 0);
             return (
-              <div
+              <Link
                 key={c.callNo}
+                href={c.href}
+                className="dd-col"
+                aria-label={describe(c, pctOf(c.cumulative), currency)}
                 style={{
+                  position: 'relative',
+                  color: 'inherit',
+                  textDecoration: 'none',
                   flex: 1,
                   minWidth: 0,
                   maxWidth: 120,
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'stretch',
-                  height: '100%',
-                  // A planned call is shown faintly: it is a placeholder, not a fact.
-                  opacity: c.planned ? 0.55 : 1,
+                  // A draft is shown faintly: nothing has been called yet.
+                  opacity: c.draft ? 0.7 : 1,
                 }}
               >
                 <div
@@ -85,18 +100,20 @@ export function DrawdownChart({
                     marginBottom: 6,
                   }}
                 >
-                  {c.total === null ? 'planned' : fmt(c.total, 0)}
+                  {c.total === null ? 'not started' : fmt(c.total, 0)}
                 </div>
 
                 <div
-                  style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
+                  // A fixed height for every column's bars, so all of them stand on
+                  // one baseline whatever the label above or the caption below.
+                  style={{ height: CHART_HEIGHT, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
                   aria-hidden="true"
                 >
-                  {c.planned ? (
+                  {c.draft ? (
                     <div
                       style={{
-                        height: CHART_HEIGHT * 0.6,
-                        border: '1.5px dashed var(--border)',
+                        height: c.total ? Math.max(scale(c.total), 4) : CHART_HEIGHT * 0.6,
+                        border: '1.5px dashed var(--muted-foreground)',
                         borderRadius: 3,
                       }}
                     />
@@ -105,12 +122,10 @@ export function DrawdownChart({
                       <div
                         className="bar-seg"
                         style={{ height: scale(c.feeNet), background: 'var(--chart-5)' }}
-                        title="Management fee, net"
                       />
                       <div
                         className="bar-seg"
                         style={{ height: scale(c.outsideCommitment), background: 'var(--chart-1)' }}
-                        title="Outside commitment"
                       />
                       <div
                         className="bar-seg"
@@ -119,9 +134,7 @@ export function DrawdownChart({
                           background: 'var(--chart-2)',
                           borderRadius: '0 0 3px 3px',
                         }}
-                        title="Against commitment"
                       />
-                      <div style={{ height: Math.max(0, CHART_HEIGHT - height) }} />
                     </>
                   )}
                 </div>
@@ -137,10 +150,11 @@ export function DrawdownChart({
                 >
                   Call {String(c.callNo).padStart(2, '0')}
                   <div className="text-muted" style={{ fontSize: 11 }}>
-                    {c.planned ? 'planned' : `${c.cumulativePct.toFixed(1)}% drawn`}
+                    {c.draft ? 'draft, not sent' : `${pctOf(c.cumulative).toFixed(1)}% called`}
                   </div>
                 </div>
-              </div>
+                <Breakdown column={c} pct={pctOf(c.cumulative)} currency={currency} />
+              </Link>
             );
           })}
         </div>
@@ -149,24 +163,72 @@ export function DrawdownChart({
           <LegendSwatch color="var(--chart-2)">Against commitment</LegendSwatch>
           <LegendSwatch color="var(--chart-1)">Outside commitment</LegendSwatch>
           <LegendSwatch color="var(--chart-5)">Management fee, net</LegendSwatch>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span
-              style={{
-                width: 10,
-                height: 10,
-                border: '1.5px dashed var(--border)',
-                boxSizing: 'border-box',
-              }}
-            />
-            Planned, not yet allocated
-          </div>
+          {drafts && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  border: '1.5px dashed var(--muted-foreground)',
+                  boxSizing: 'border-box',
+                }}
+              />
+              Draft, not sent yet
+            </div>
+          )}
           <div className="text-muted" style={{ marginTop: 6 }}>
-            {drawnPct.toFixed(1)}% of {currency} {fmt(totalCommitments, 0)} drawn across{' '}
+            {calledPct.toFixed(1)}% of {currency} {fmt(totalCommitments, 0)} called across{' '}
             {issued.length} {issued.length === 1 ? 'call' : 'calls'}.
           </div>
         </div>
       </div>
     </Card>
+  );
+}
+
+/** The column in words, for a screen reader and as the link's name. */
+function describe(c: DrawdownColumn, pct: number, currency: string): string {
+  if (c.total === null) return `Call ${c.callNo}: nothing entered yet. Open to set it up.`;
+  const amounts = `${currency} ${fmt(c.total)}: ${fmt(c.againstCommitment)} against commitment, ${fmt(c.outsideCommitment)} outside commitment, ${fmt(c.feeNet)} management fee`;
+  return c.draft
+    ? `Call ${c.callNo}, draft, not sent: ${amounts}. Nothing called yet.`
+    : `Call ${c.callNo}${c.callDate ? `, ${fmtDate(c.callDate)}` : ''}: ${amounts}. ${pct.toFixed(1)}% of commitments called to date.`;
+}
+
+/** What a column is made of, shown on hover or focus. */
+function Breakdown({ column: c, pct, currency }: { column: DrawdownColumn; pct: number; currency: string }) {
+  const row = (label: string, value: number, color?: string) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {color && <span style={{ width: 8, height: 8, background: color, flex: 'none' }} />}
+        {label}
+      </span>
+      <span className="num">{value ? fmt(value) : '—'}</span>
+    </div>
+  );
+  return (
+    <div className="dd-tip" aria-hidden="true">
+      <strong style={{ display: 'block', marginBottom: 6 }}>
+        Call {String(c.callNo).padStart(2, '0')}
+        {c.callDate ? ` · ${fmtDate(c.callDate)}` : ''}
+        {c.draft ? ' · draft, not sent' : ''}
+      </strong>
+      {c.total === null ? (
+        <div className="text-muted">Nothing entered yet.</div>
+      ) : (
+        <>
+          {row('Against commitment', c.againstCommitment, 'var(--chart-2)')}
+          {row('Outside commitment', c.outsideCommitment, 'var(--chart-1)')}
+          {row('Management fee, net', c.feeNet, 'var(--chart-5)')}
+          <div style={{ borderTop: '1px solid var(--border)', margin: '6px 0 4px' }} />
+          {row(`Total, ${currency}`, c.total)}
+          <div className="text-muted" style={{ marginTop: 4 }}>
+            {c.draft ? 'Nothing called until it is sent.' : `${fmt(c.cumulative)} called to date · ${pct.toFixed(1)}% of commitments`}
+          </div>
+        </>
+      )}
+      <div className="text-muted" style={{ marginTop: 6 }}>Click to open the call.</div>
+    </div>
   );
 }
 

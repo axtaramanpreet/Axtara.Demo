@@ -1,4 +1,5 @@
-import type { NoticeData } from '@/engine';
+import { Fragment } from 'react';
+import { fmtDate, type NoticeData } from '@/engine';
 
 /**
  * One investor's Capital Call Notice, as it prints.
@@ -70,7 +71,7 @@ export function NoticeSheet({
               className="text-muted"
               style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase' }}
             >
-              Issued {issuedOn ? new Date(issuedOn).toLocaleDateString('en-GB', { timeZone: 'UTC' }) : ''}
+              Issued {issuedOn ? fmtDate(issuedOn.slice(0, 10)) : ''}
             </div>
           )
         )}
@@ -119,7 +120,7 @@ export function NoticeSheet({
         }}
       >
         <span style={{ fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-          Total amount due
+          {notice.payableToYou ? 'Amount payable to you' : 'Total amount due'}
         </span>
         <span className="mono" style={{ fontSize: 22 }}>
           {notice.cur} {notice.total}
@@ -160,9 +161,41 @@ export function NoticeSheet({
           <tr style={{ fontWeight: 600, borderTop: '1px solid var(--foreground)' }}>
             <td style={{ paddingLeft: 0 }}>Total Amount Called</td>
             <td className="num" style={{ paddingRight: 0 }}>
-              {notice.total}
+              {notice.called ?? notice.total}
             </td>
           </tr>
+          {notice.equalization?.map((eq, i) => (
+            <Fragment key={`eq-${i}`}>
+              <tr>
+                <td style={{ paddingLeft: 0, fontWeight: 600 }} colSpan={2}>
+                  {eq.label}
+                  <sup>{eq.mark}</sup>
+                </td>
+              </tr>
+              {eq.parts.map((p) => (
+                <tr key={p.label}>
+                  <td style={{ paddingLeft: 16 }}>{p.label}</td>
+                  <td className="num" style={{ paddingRight: 0 }}>
+                    {p.amt}
+                  </td>
+                </tr>
+              ))}
+              <tr>
+                <td style={{ paddingLeft: 16 }}>Equalization total</td>
+                <td className="num" style={{ paddingRight: 0 }}>
+                  {eq.total}
+                </td>
+              </tr>
+            </Fragment>
+          ))}
+          {notice.equalization && (
+            <tr style={{ fontWeight: 600, borderTop: '1px solid var(--foreground)' }}>
+              <td style={{ paddingLeft: 0 }}>{notice.payableToYou ? 'Amount Payable to You' : 'Total Amount Due'}</td>
+              <td className="num" style={{ paddingRight: 0 }}>
+                {notice.total}
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
 
@@ -187,6 +220,24 @@ export function NoticeSheet({
           </li>
         ))}
       </ol>
+
+      {notice.payment?.length ? (
+        <>
+          <h4 style={{ marginTop: 28 }}>Payment instructions</h4>
+          <table className="table" style={{ marginTop: 10 }}>
+            <tbody>
+              {notice.payment.map((l) => (
+                <tr key={l.label}>
+                  <td style={{ paddingLeft: 0 }}>{l.label}</td>
+                  <td className="mono" style={{ paddingRight: 0, textAlign: 'right', fontWeight: 600 }}>
+                    {l.value}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      ) : null}
 
       {notice.closing.map((paragraph, i) => (
         <p key={`closing-${i}`} style={i === 0 ? { marginTop: 26 } : undefined}>

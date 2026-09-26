@@ -3,6 +3,8 @@
 import { Suspense } from 'react';
 import type { Fund } from '@/adapters/storage/types';
 import { AskAxtara, AskTrigger, type Surface } from '@/components/ask/ask-axtara';
+import Link from 'next/link';
+import type { FundGates, NextStep } from '@/lib/fund-gates';
 import { Sidebar, type Module } from './sidebar';
 import { initialsOf, TopBar, type Crumb } from './topbar';
 
@@ -25,6 +27,8 @@ export function AppShell({
   callNo,
   preparedBy,
   askConnected,
+  gates,
+  next,
   children,
 }: {
   funds: Fund[];
@@ -39,13 +43,17 @@ export function AppShell({
   preparedBy?: string | null;
   /** Whether a model endpoint is configured. Decided on the server. */
   askConnected: boolean;
+  /** Which of the fund's steps are not open yet. From `fundGates`, on the server. */
+  gates: FundGates;
+  /** While the fund is being set up, where to go once this page's step is done. */
+  next?: NextStep | null;
   children: React.ReactNode;
 }) {
   const fundName = funds.find((c) => c.id === fundId)?.name ?? 'Fund';
 
   return (
     <div className="app">
-      <Sidebar funds={funds} fundId={fundId} module={module} callCount={callCount} />
+      <Sidebar funds={funds} fundId={fundId} module={module} callCount={callCount} gates={gates} />
 
       <div className="content">
         <TopBar
@@ -54,7 +62,17 @@ export function AppShell({
           userInitials={initialsOf(preparedBy)}
           askTrigger={<AskTrigger />}
         />
-        <main style={{ padding: '28px 32px 60px', flex: 1 }}>{children}</main>
+        <main style={{ padding: '28px 32px 60px', flex: 1 }}>
+          {next && (
+            <div className="next-step" role="status">
+              <span>{next.done}</span>
+              <Link className="btn btn-primary btn-sm" href={`/funds/${fundId}${next.path ? `/${next.path}` : ''}`}>
+                {next.label} →
+              </Link>
+            </div>
+          )}
+          {children}
+        </main>
       </div>
 
       {/* Reads the tab from the URL to know what a question is about, which is

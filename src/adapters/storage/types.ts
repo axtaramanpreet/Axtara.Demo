@@ -6,8 +6,11 @@
  * implementation of `CallRepository`, not touching the app.
  */
 
+import type { FundProgress } from '@/lib/fund-gates';
 import type { CallModel } from '@/engine/types';
 import type { FundTerms } from '@/engine/fund-terms';
+import type { ClosingRecord } from '@/engine/fund-history';
+import type { IssuedCall } from '@/engine/positions';
 
 /** Where a step's inputs came from, shown in the setup stepper. */
 export type InputSource = 'excel' | 'manual' | 'template' | 'carried' | 'empty';
@@ -26,11 +29,60 @@ export type CallStage = 'not_started' | 'in_progress' | 'partially_sent' | 'issu
 
 export type NoticeStatus = 'draft' | 'approved' | 'sent';
 
-/** An investor in a fund, as picked from a list. */
-export interface FundInvestor {
+/** A closing as the screens need it: the engine's record, plus what the database knows. */
+export interface Closing extends ClosingRecord {
+  note: string | null;
+  finalisedAt: string | null;
+  /** investor id, for linking a commitment to its investor row. */
+  commitments: (ClosingRecord['commitments'][number] & { investorId: string; contactEmail: string | null })[];
+}
+
+/** One commitment as the draft-closing form saves it. */
+export interface ClosingCommitmentInput {
   lpId: string;
   name: string;
+  amount: number;
+  contactEmail?: string | null;
+  feeRateOverride?: number | null;
+  feeExempt?: boolean;
 }
+
+/** An equalization statement for one investor at one closing, as far as it has got. */
+export interface ClosingStatement {
+  closingId: string;
+  lpId: string;
+  status: 'draft' | 'approved' | 'sent';
+  approvedAt: string | null;
+  sentAt: string | null;
+  sentToEmail: string | null;
+  emailStatus: 'pending' | 'delivered' | 'failed' | null;
+  emailError: string | null;
+  emailDeliveredTo: string | null;
+}
+
+/** An investor in a fund, as picked from a list. */
+export type KycStatus = 'not_started' | 'in_progress' | 'approved' | 'expired';
+
+/** An investor in a fund: the profile the Investors page keeps. */
+export interface FundInvestor {
+  id: string;
+  lpId: string;
+  name: string;
+  /** Pension, endowment, family office… Legacy registers wrote 'LP' or 'GP'. */
+  type: string;
+  /** Where notices go. */
+  email: string | null;
+  /** Copied on every notice. */
+  ccEmails: string[];
+  country: string | null;
+  isGp: boolean;
+  kycStatus: KycStatus;
+  sideLetterRef: string | null;
+  notes: string | null;
+}
+
+/** What the Investors page can change about an investor. The LP_ID is fixed once issued. */
+export type InvestorPatch = Partial<Omit<FundInvestor, 'id' | 'lpId'>>;
 
 /** A fund, which belongs to one client. */
 export interface Fund {
@@ -122,6 +174,9 @@ export interface CallRepository {
 
   getFundPosition(fundId: string): Promise<FundPosition | null>;
 
+  /** How far the fund has got: terms recorded, closings, calls. Counts only. */
+  getFundProgress(fundId: string): Promise<FundProgress>;
+
   /** Every row of the fund's terms, oldest first. `termsOn` picks the one in force. */
   listFundTerms(fundId: string): Promise<FundTerms[]>;
   /**
@@ -135,6 +190,25 @@ export interface CallRepository {
 
   /** The fund's investors, for picking one by LP_ID. */
   listInvestors(fundId: string): Promise<FundInvestor[]>;
+  /** Add an investor the fund does not have yet. Refused if the LP_ID is taken. */
+  createInvestor(fundId: string, lpId: string, profile: InvestorPatch): Promise<FundInvestor>;
+  updateInvestor(investorId: string, patch: InvestorPatch): Promise<void>;
+
+  /** Every closing, oldest first, with what it admitted and its frozen equalization. */
+  listClosings(fundId: string): Promise<Closing[]>;
+  /** Every equalization statement approved or sent for the fund's closings. */
+  listClosingStatements(fundId: string): Promise<ClosingStatement[]>;
+  /** Draft the fund's next closing. */
+  createClosing(fundId: string, closingDate: string, note?: string | null): Promise<Closing>;
+  /** Change a draft closing's date or note. Refused once it is finalised. */
+  updateClosing(closingId: string, patch: { closingDate?: string; note?: string | null }): Promise<void>;
+  /** Remove a draft closing. Refused once it is finalised. */
+  deleteClosing(closingId: string): Promise<void>;
+  /** Replace a draft closing's investors and commitments, in one go. */
+  saveClosingCommitments(closingId: string, rows: ClosingCommitmentInput[]): Promise<void>;
+
+  /** The fund's issued calls, as their snapshots froze them: the record closings and fees read. */
+  listIssuedCalls(fundId: string): Promise<IssuedCall[]>;
   listCalls(fundId: string): Promise<CallSummary[]>;
 
   getCall(callId: string): Promise<CallDetail | null>;

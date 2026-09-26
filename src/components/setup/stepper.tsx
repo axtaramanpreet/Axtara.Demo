@@ -19,7 +19,7 @@ const SOURCE_LABEL: Record<InputSource, string> = {
   manual: 'Manual',
   template: 'Template',
   carried: 'Carried forward',
-  empty: 'Empty',
+  empty: 'To do',
 };
 
 /**

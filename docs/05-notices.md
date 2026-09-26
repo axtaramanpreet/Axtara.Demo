@@ -385,6 +385,61 @@ npx vitest run src/server src/components/call
 
 ---
 
+## 5.8b Payment instructions, and equalization statements
+
+**Where to wire.** Settings → Payment instructions holds the bank, account,
+SWIFT, routing and a reference template (`{LP_ID}`, `{CALL_NO}`).
+`paymentInstructions(terms, { lpId, callNo })` fills it in; nothing prints until
+there is a bank *and* an account number, because half a block on a request for
+money is worse than none. The terms in force on the call date apply, and a sent
+notice keeps the block frozen in its payload like everything else.
+
+**Equalization statements.** Each investor in a later close gets one:
+`GET /api/funds/[fundId]/closings/[closingId]/statement?lpId=LP07`
+([statement-pdf.tsx](../src/server/statement-pdf.tsx)). It shows every earlier
+call and the investor's share, the interest working per call, the catch-up fee
+period by period, the total, and — for someone who pays — where to wire it,
+with `EQ` and the closing number as `{CALL_NO}` in the reference (`LP07/MGP3/EQ2`). A draft closing prints DRAFT with figures
+worked out now; a finalised one prints FINAL from what was frozen. Earlier
+investors get a statement of what comes back to them, and an investor who
+increased their commitment is told so rather than "you were admitted".
+
+**Settling it: now, or on the next call.** Finalising a later closing asks
+how its equalization is settled (`closings.settlement`), and a closing
+finalised before that asked shows "Not chosen" on Closings — calls dated after
+it are refused approval until someone picks (`unsettledClosings`). Either way
+the balances move on the closing date; the choice only decides which document
+asks for the cash. It can change until money has been asked for — a sent call
+that carried it, or a sent statement — and then the database refuses too.
+
+- **Settle now.** Each investor whose equalization moves money gets a statement
+  that goes the way notices do: approved, then sent, then kept as sent
+  (`closing_statements`, written only by the server; `approveStatements`,
+  `sendStatements`, `retryStatementDelivery` in `fund-actions.ts`). Sending
+  confirms first, saying how much is asked for and returned. The email
+  ([statement-email.ts](../src/server/statement-email.ts)) carries the PDF,
+  copies the investor's CC contacts, and follows `EMAIL_OVERRIDE_TO` like a
+  notice: everything goes to the one address and copies are dropped. Switching
+  away from "settle now" clears statements approved but not sent.
+- **On the next call.** The next call carries it as its equalization schedule
+  (`calls.equalization_schedule`, like the fee schedule), worked out from the
+  record, never typed, and settled in full on that call (`equalizationOwed`,
+  `buildEqualizationSchedule`): a late investor's amount is added, an earlier
+  investor's credit taken off. It is kept in its three parts — share of
+  earlier calls, late interest, catch-up fee — so the setup screen shows the
+  first two with the call's components and the catch-up fee with the
+  management fee. The notice shows one block under Total Amount Called:
+  "Equalization — Closing N", with a footnote, each part that is not nothing,
+  the equalization total, and then Total Amount Due
+  (`amountDue`). A credit larger than the call is paid to the investor: the
+  notice reads "Amount payable to you", prints no wiring details, and says the
+  fund pays them; at exactly nothing it says nothing is payable. It is cash on top of the call, not part of the roll-forward,
+  so paid-in and unfunded are not moved twice. Approve and send refuse a call
+  whose schedule is not what is still owed. The downloadable statement for such
+  a closing carries no payment instructions: it says the next call collects it.
+
+Downloading a statement needs read access only.
+
 ## 5.9 Honest gaps
 
 I found these while writing this chapter. Gap 1 is fixed; the rest aren't.

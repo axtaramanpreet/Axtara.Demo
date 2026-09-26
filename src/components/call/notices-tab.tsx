@@ -1,8 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition, type ReactNode } from 'react';
-import { buildNotice, fmtStamp, type ComputeResult } from '@/engine';
+import { buildNotice, fmtStamp, paymentFor, serialToISO, type ComputeResult, type FundTerms } from '@/engine';
 import type { CallDetail } from '@/adapters/storage/types';
 import { Check, CheckCheck, FileArchive, FileDown, Printer, Rows3, Send, Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -34,11 +35,14 @@ export function NoticesTab({
   email,
   selectedLp,
   onSelect,
+  fundTerms = [],
 }: {
   call: CallDetail;
   result: ComputeResult;
   /** Whether notices can be emailed, and whether they are being redirected. */
   email: { configured: boolean; overrideTo: string | null };
+  /** The fund's terms, for the payment instructions a notice carries. */
+  fundTerms?: FundTerms[];
   selectedLp?: string;
   onSelect: (lpId: string) => void;
 }) {
@@ -131,6 +135,11 @@ export function NoticesTab({
   const sent = statuses.filter((s) => s === 'sent').length;
   const approved = statuses.filter((s) => s === 'approved').length;
   const draft = statuses.filter((s) => s === 'draft').length;
+  // Still to go out, and nowhere to send it. Under the test redirect every
+  // notice goes to one address, so nobody is unreachable.
+  const unreachable = email.overrideTo
+    ? []
+    : active.filter((r, i) => statuses[i] !== 'sent' && !String(r.Contact_Email ?? '').trim()).map((r) => r.LP_ID);
 
   /**
    * What the call needs next.
@@ -347,6 +356,19 @@ export function NoticesTab({
         </p>
       )}
 
+      {/* Before anything goes out, not after: an investor with no notices email
+          is issued a notice nobody delivers. */}
+      {unreachable.length > 0 && (
+        <p style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, margin: '0 0 12px' }}>
+          <Tag tone="warn">No notices email</Tag>
+          <span style={{ textWrap: 'pretty' }}>
+            {unreachable.join(', ')} {unreachable.length === 1 ? 'has' : 'have'} no address to send to, so {unreachable.length === 1 ? 'its notice' : 'their notices'} would be
+            issued but not emailed. Add the address on{' '}
+            <Link href={`/funds/${call.fundId}/investors`}>Investors</Link> first.
+          </span>
+        </p>
+      )}
+
       {error && (
         <p data-noprint="1" role="alert" style={{ color: 'var(--destructive)', fontSize: 13 }}>
           {error}
@@ -546,7 +568,9 @@ export function NoticesTab({
                 )}
 
                 <NoticeSheet
-                  notice={buildNotice(call.model, result, row)}
+                  notice={buildNotice(call.model, result, row, {
+                    payment: paymentFor(fundTerms, serialToISO(call.model.setup.Call_Date), row.LP_ID, call.callNo),
+                  })}
                   status={status}
                   issuedOn={record?.sentAt}
                 />

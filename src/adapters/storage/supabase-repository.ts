@@ -10,9 +10,17 @@
  * route handlers holding the service role.
  */
 
-import { num } from '@/engine';
+import { issuedCallFrom, num } from '@/engine';
+import type { InvestorPatch, KycStatus } from './types';
+import type { EqualizationDueEntry, FeeScheduleEntry } from '@/engine/types';
+import type { Settlement } from '@/engine/fund-history';
+import type { Database } from './database.types';
+import type { FundProgress } from '@/lib/fund-gates';
 import type { CallModel } from '@/engine/types';
 import type { FundTerms } from '@/engine/fund-terms';
+import type { EqualizationResult } from '@/engine/equalization';
+import type { IssuedCall } from '@/engine/positions';
+import type { ComputedRow } from '@/engine/types';
 import {
   fromCallModel,
   fromComponentRow,
@@ -36,6 +44,9 @@ import type {
   CallStage,
   CallSummary,
   Fund,
+  Closing,
+  ClosingCommitmentInput,
+  ClosingStatement,
   FundInvestor,
   FundPosition,
   NoticeState,
@@ -48,6 +59,54 @@ const REGISTER_SELECT = `
   opening_invested_capital, mgmt_fee_rate_override, fee_exempt, status, position,
   investors!inner ( id, lp_id, lp_name, lp_type, contact_email, side_letter_ref, notes )
 `;
+
+const INVESTOR_SELECT = 'id, lp_id, lp_name, lp_type, contact_email, cc_emails, country, is_gp, kyc_status, side_letter_ref, notes';
+
+type InvestorRow = {
+  id: string;
+  lp_id: string;
+  lp_name: string;
+  lp_type: string;
+  contact_email: string | null;
+  cc_emails: string[];
+  country: string | null;
+  is_gp: boolean;
+  kyc_status: string;
+  side_letter_ref: string | null;
+  notes: string | null;
+};
+
+function toInvestor(r: InvestorRow): FundInvestor {
+  return {
+    id: r.id,
+    lpId: r.lp_id,
+    name: r.lp_name,
+    type: r.lp_type,
+    email: r.contact_email,
+    ccEmails: r.cc_emails ?? [],
+    country: r.country,
+    isGp: r.is_gp,
+    kycStatus: r.kyc_status as KycStatus,
+    sideLetterRef: r.side_letter_ref,
+    notes: r.notes,
+  };
+}
+
+/** The columns an investor patch writes. A blank text field is stored as null; an absent one is left alone. */
+function fromInvestorPatch(p: InvestorPatch): Database['public']['Tables']['investors']['Update'] {
+  const blank = (v: string | null) => v?.trim() || null;
+  return {
+    ...(p.name !== undefined && { lp_name: p.name.trim() }),
+    ...(p.type !== undefined && { lp_type: p.type.trim() || 'LP' }),
+    ...(p.email !== undefined && { contact_email: blank(p.email) }),
+    ...(p.ccEmails !== undefined && { cc_emails: p.ccEmails.map((e) => e.trim()).filter(Boolean) }),
+    ...(p.country !== undefined && { country: blank(p.country) }),
+    ...(p.isGp !== undefined && { is_gp: p.isGp }),
+    ...(p.kycStatus !== undefined && { kyc_status: p.kycStatus }),
+    ...(p.sideLetterRef !== undefined && { side_letter_ref: blank(p.sideLetterRef) }),
+    ...(p.notes !== undefined && { notes: blank(p.notes) }),
+  };
+}
 
 export function createSupabaseRepository(db: SupabaseClient): CallRepository {
   return {
@@ -107,6 +166,26 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
       };
     },
 
+    async getFundProgress(fundId: string): Promise<FundProgress> {
+      const count = { count: 'exact' as const, head: true };
+      const [terms, investors, closings, finalised, calls] = await Promise.all([
+        db.from('fund_terms').select('fund_id', count).eq('fund_id', fundId),
+        db.from('investors').select('id', count).eq('fund_id', fundId),
+        db.from('closings').select('id', count).eq('fund_id', fundId),
+        db.from('closings').select('id', count).eq('fund_id', fundId).not('finalised_at', 'is', null),
+        db.from('calls').select('id', count).eq('fund_id', fundId),
+      ]);
+      const failed = [terms, investors, closings, finalised, calls].find((r) => r.error);
+      if (failed?.error) throw asError(failed.error, "work out how far the fund has got");
+      return {
+        hasTerms: (terms.count ?? 0) > 0,
+        investors: investors.count ?? 0,
+        closings: closings.count ?? 0,
+        finalisedClosings: finalised.count ?? 0,
+        calls: calls.count ?? 0,
+      };
+    },
+
     async listFundTerms(fundId: string): Promise<FundTerms[]> {
       const { data, error } = await db
         .from('fund_terms')
@@ -130,11 +209,178 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
     async listInvestors(fundId: string): Promise<FundInvestor[]> {
       const { data, error } = await db
         .from('investors')
-        .select('lp_id, lp_name')
+        .select(INVESTOR_SELECT)
         .eq('fund_id', fundId)
         .order('lp_id');
       if (error) throw asError(error, "load the fund's investors");
-      return (data ?? []).map((i) => ({ lpId: i.lp_id, name: i.lp_name }));
+      return (data ?? []).map(toInvestor);
+    },
+
+    async createInvestor(fundId: string, lpId: string, profile: InvestorPatch): Promise<FundInvestor> {
+      const { data, error } = await db
+        .from('investors')
+        .insert({ ...fromInvestorPatch(profile), fund_id: fundId, lp_id: lpId.trim(), lp_name: profile.name?.trim() || lpId.trim() })
+        .select(INVESTOR_SELECT)
+        .single();
+      if (error?.code === '23505') throw new Error(`${lpId} is already an investor in this fund.`);
+      if (error) throw asError(error, `add ${lpId}`);
+      return toInvestor(data);
+    },
+
+    async updateInvestor(investorId: string, patch: InvestorPatch): Promise<void> {
+      const { error } = await db.from('investors').update(fromInvestorPatch(patch)).eq('id', investorId);
+      if (error) throw asError(error, 'save the investor');
+    },
+
+    async listClosings(fundId: string): Promise<Closing[]> {
+      const { data, error } = await db
+        .from('closings')
+        // One string literal: supabase-js types the row from the select.
+        .select('id, closing_no, closing_date, note, finalised_at, settlement, closing_commitments ( investor_id, amount, fee_rate_override, fee_exempt, position, investors!inner ( lp_id, lp_name, contact_email ) ), closing_results ( result )')
+        .eq('fund_id', fundId)
+        .order('closing_date')
+        .order('closing_no');
+      if (error) throw asError(error, "load the fund's closings");
+      return (data ?? []).map((c) => {
+        const results = c.closing_results as unknown as { result: unknown } | { result: unknown }[] | null;
+        const result = (Array.isArray(results) ? results[0]?.result : results?.result) ?? null;
+        const rows = [...((c.closing_commitments as unknown as {
+          investor_id: string;
+          amount: string | number;
+          fee_rate_override: string | number | null;
+          fee_exempt: boolean;
+          position: number;
+          investors: { lp_id: string; lp_name: string; contact_email: string | null };
+        }[]) ?? [])].sort((a, b) => a.position - b.position);
+        return {
+          id: c.id,
+          closingNo: c.closing_no,
+          closingDate: c.closing_date,
+          note: c.note,
+          finalisedAt: c.finalised_at,
+          finalised: c.finalised_at !== null,
+          result: result as EqualizationResult | null,
+          settlement: c.settlement as Settlement | null,
+          commitments: rows.map((r) => ({
+            investorId: r.investor_id,
+            lpId: r.investors.lp_id,
+            name: r.investors.lp_name,
+            contactEmail: r.investors.contact_email,
+            amount: toNumber(r.amount),
+            feeRateOverride: r.fee_rate_override === null ? null : toNumber(r.fee_rate_override),
+            feeExempt: r.fee_exempt,
+          })),
+        };
+      });
+    },
+
+    async createClosing(fundId: string, closingDate: string, note?: string | null): Promise<Closing> {
+      const { data: last, error: lastError } = await db
+        .from('closings')
+        .select('closing_no')
+        .eq('fund_id', fundId)
+        .order('closing_no', { ascending: false })
+        .limit(1);
+      if (lastError) throw asError(lastError, 'work out the next closing number');
+      const closingNo = (last?.[0]?.closing_no ?? 0) + 1;
+      const { data, error } = await db
+        .from('closings')
+        .insert({ fund_id: fundId, closing_no: closingNo, closing_date: closingDate, note: note ?? null })
+        .select('id')
+        .single();
+      if (error) throw asError(error, `draft closing ${closingNo}`);
+      const all = await this.listClosings(fundId);
+      return all.find((c) => c.id === data.id)!;
+    },
+
+    async updateClosing(closingId: string, patch: { closingDate?: string; note?: string | null }): Promise<void> {
+      const { error } = await db
+        .from('closings')
+        .update({
+          ...(patch.closingDate !== undefined ? { closing_date: patch.closingDate } : {}),
+          ...(patch.note !== undefined ? { note: patch.note } : {}),
+        })
+        .eq('id', closingId);
+      if (error) throw asError(error, 'save the closing');
+    },
+
+    async deleteClosing(closingId: string): Promise<void> {
+      const { error } = await db.from('closings').delete().eq('id', closingId);
+      if (error) throw asError(error, 'delete the closing');
+    },
+
+    async saveClosingCommitments(closingId: string, rows: ClosingCommitmentInput[]): Promise<void> {
+      const { error } = await db.rpc('save_closing_commitments', {
+        p_closing_id: closingId,
+        p_rows: rows
+          .filter((r) => r.lpId.trim())
+          .map((r, i) => ({
+            lp_id: r.lpId.trim(),
+            lp_name: r.name.trim(),
+            contact_email: r.contactEmail?.trim() || null,
+            amount: r.amount,
+            fee_rate_override: r.feeRateOverride ?? null,
+            fee_exempt: r.feeExempt ?? false,
+            position: i,
+          })),
+      });
+      if (error) throw asError(error, "save the closing's investors");
+    },
+
+    async listClosingStatements(fundId: string): Promise<ClosingStatement[]> {
+      const { data, error } = await db
+        .from('closing_statements')
+        .select('closing_id, status, approved_at, sent_at, sent_to_email, email_status, email_error, email_delivered_to, investors!inner ( lp_id ), closings!inner ( fund_id )')
+        .eq('closings.fund_id', fundId);
+      if (error) throw asError(error, "load the closings' statements");
+      return (data ?? []).map((r) => ({
+        closingId: r.closing_id,
+        lpId: (r.investors as unknown as { lp_id: string }).lp_id,
+        status: r.status as ClosingStatement['status'],
+        approvedAt: r.approved_at,
+        sentAt: r.sent_at,
+        sentToEmail: r.sent_to_email,
+        emailStatus: r.email_status as ClosingStatement['emailStatus'],
+        emailError: r.email_error,
+        emailDeliveredTo: r.email_delivered_to,
+      }));
+    },
+
+    async listIssuedCalls(fundId: string): Promise<IssuedCall[]> {
+      const { data: calls, error } = await db
+        .from('calls')
+        .select('id, call_no, call_date, payment_due_date, fee_schedule, equalization_schedule')
+        .eq('fund_id', fundId)
+        .not('locked_at', 'is', null);
+      if (error) throw asError(error, "load the fund's issued calls");
+      if (!calls?.length) return [];
+      const { data: results, error: resultError } = await db
+        .from('call_results')
+        .select('call_id, rows, computed_at')
+        .in('call_id', calls.map((c) => c.id))
+        .order('computed_at', { ascending: false });
+      if (resultError) throw asError(resultError, 'load the frozen call figures');
+      // The latest snapshot of each call is what it was sent as.
+      const latest = new Map<string, unknown>();
+      for (const r of results ?? []) if (!latest.has(r.call_id)) latest.set(r.call_id, r.rows);
+      return calls
+        .filter((c) => latest.has(c.id))
+        .map((c) =>
+          issuedCallFrom(
+            c.call_no,
+            c.call_date ?? '',
+            c.payment_due_date ?? c.call_date ?? '',
+            latest.get(c.id) as ComputedRow[],
+            // What it billed and settled, frozen with it when it was sent.
+            {
+              fee: Array.isArray(c.fee_schedule) ? (c.fee_schedule as unknown as FeeScheduleEntry[]) : null,
+              equalization: Array.isArray(c.equalization_schedule)
+                ? (c.equalization_schedule as unknown as EqualizationDueEntry[])
+                : null,
+            },
+          ),
+        )
+        .sort((a, b) => a.callDate.localeCompare(b.callDate) || a.callNo - b.callNo);
     },
 
     async listCalls(fundId: string): Promise<CallSummary[]> {

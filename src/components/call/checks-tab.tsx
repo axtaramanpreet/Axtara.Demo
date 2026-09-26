@@ -1,12 +1,6 @@
-import type { CheckLevel, ComputeResult } from '@/engine';
+import type { ComputeResult } from '@/engine';
+import { CheckList } from '@/components/ui/check-list';
 import { Card } from '@/components/ui/card';
-
-const LEVEL: Record<CheckLevel, { label: string; colour: string }> = {
-  ok: { label: 'OK', colour: 'var(--chart-2)' },
-  warn: { label: 'WARN', colour: 'var(--chart-1)' },
-  fail: { label: 'FAIL', colour: 'var(--destructive)' },
-  info: { label: 'INFO', colour: 'var(--muted-foreground)' },
-};
 
 /**
  * Every tie-out the engine ran, in the order it ran them.
@@ -24,30 +18,7 @@ export function ChecksTab({ result, goldenSource }: { result: ComputeResult; gol
         title="Tie-out checks"
         subtitle={failing ? `${failing} failing` : 'all clear'}
       >
-        <div>
-          {result.checks.map((check, i) => (
-            <div
-              key={i}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '80px 1fr',
-                gap: 12,
-                padding: '9px 16px',
-                borderBottom: i === result.checks.length - 1 ? 0 : '1px solid var(--border)',
-                fontSize: 13,
-                alignItems: 'baseline',
-              }}
-            >
-              <span
-                className="mono"
-                style={{ color: LEVEL[check.level].colour, fontWeight: 500 }}
-              >
-                {LEVEL[check.level].label}
-              </span>
-              <span>{check.text}</span>
-            </div>
-          ))}
-        </div>
+        <CheckList checks={result.checks} />
       </Card>
 
       {result.goldenDiffs.length > 0 && (

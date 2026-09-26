@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { fmt, splitCall, type ComputeResult } from '@/engine';
+import { Fragment } from 'react';
+import { fmt, round, splitCall, type ComputeResult } from '@/engine';
 import type { CallDetail } from '@/adapters/storage/types';
 import { Card, CardGrid } from '@/components/ui/card';
 import { Tag } from '@/components/ui/tag';
@@ -50,6 +51,21 @@ export function SummaryTab({
 
             <dt className="total">Total amount called</dt>
             <dd className="num total">{fmt(split.total)}</dd>
+
+            {result.equalization?.closings.map((c) => (
+              <Fragment key={c.closingId}>
+                <dt>
+                  Equalization, Closing {c.closingNo}: {fmt(c.paid)} collected, {fmt(c.credited)} credited
+                </dt>
+                <dd className="num">{fmt(round(c.paid - c.credited, result.d))}</dd>
+              </Fragment>
+            ))}
+            {result.equalization && (
+              <>
+                <dt className="total">Total amount due</dt>
+                <dd className="num total">{fmt(round(split.total + result.equalization.total, result.d))}</dd>
+              </>
+            )}
           </dl>
 
           <div style={{ borderTop: '1px solid var(--border)', padding: '12px 16px', fontSize: 13 }}>

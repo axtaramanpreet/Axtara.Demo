@@ -1,17 +1,20 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { compute, fmt, fmtDate, termsOn } from '@/engine';
+import { compute, fmt, fmtDate, positionFromRecord, termsOn } from '@/engine';
 import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
 import type { SupabaseClient } from '@/adapters/storage/supabase-client';
-import type { CallDefaults, FundTerms } from '@/engine';
 import type { CallSummary } from '@/adapters/storage/types';
 import { getServerSupabase } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/app-shell';
+import { InfoTip } from '@/components/ui/info-tip';
 import { Card, CardGrid } from '@/components/ui/card';
 import { StageTag } from '@/components/ui/tag';
 import { DrawdownChart, type DrawdownColumn } from '@/components/home/drawdown-chart';
+import { FundSetup, setupSteps } from '@/components/home/fund-setup';
+import { profileGaps } from '@/lib/investor-profile';
 import { NewCallButton } from './new-call-button';
 import { askStatusForClient, noticeDefaults } from '@/lib/env';
+import { fundGates } from '@/lib/fund-gates';
 
 /**
  * Home: every capital call for one fund, its position, and how much has been
@@ -29,23 +32,37 @@ export default async function FundHomePage({
   const supabase = await getServerSupabase();
   const repo = createSupabaseRepository(supabase as unknown as SupabaseClient);
 
-  const [funds, position, calls, terms] = await Promise.all([
+  const [funds, stored, calls, terms, closings, issued, investors, progress] = await Promise.all([
     repo.listFunds(),
     repo.getFundPosition(fundId),
     repo.listCalls(fundId),
     repo.listFundTerms(fundId),
+    repo.listClosings(fundId),
+    repo.listIssuedCalls(fundId),
+    repo.listInvestors(fundId),
+    repo.getFundProgress(fundId),
   ]);
+
+  // A fund with closings is read from its record — every issued call and
+  // closing — the same way Closings and a new call's register read it. Any
+  // other fund keeps the stored view: its latest call's register.
+  const today = new Date().toISOString().slice(0, 10);
+  const fromRecord = positionFromRecord({ terms, closings, calls: issued }, today);
+  const position = stored && { ...stored, ...fromRecord };
 
   // A new call starts from the deployment's configured signatory and GP, with
   // the fund's terms in force today applied on top.
   const defaults = noticeDefaults();
-  const termsToday = termsOn(terms, new Date().toISOString().slice(0, 10));
+  const termsToday = termsOn(terms, today);
   const fund = funds.find((c) => c.id === fundId);
   if (!fund) notFound();
 
   const currency = 'USD';
-  const { columns: drawdown, totals: liveTotals } = await buildDrawdown(repo, calls);
+  const { columns: drawdown, totals: liveTotals } = await buildDrawdown(repo, calls, fundId);
   const openCall = calls.find((c) => c.stage === 'in_progress' || c.stage === 'partially_sent');
+  const gates = fundGates(progress);
+  // A fund opens on its setup checklist until its first call is issued.
+  const settingUp = !calls.some((c) => c.lockedAt);
   const notStarted = calls.find((c) => c.stage === 'not_started');
 
   return (
@@ -56,27 +73,43 @@ export default async function FundHomePage({
       crumb={{ leaf: 'Capital calls' }}
       surface="home"
       askConnected={askStatusForClient().connected}
+      gates={gates}
     >
       <>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20, flexWrap: 'wrap', maxWidth: 1200 }}>
           <div>
             <h1>{fund.name}</h1>
-            <p className="text-muted">{homeHint(calls, openCall)}</p>
+            <p className="text-muted">
+              {settingUp ? 'Four steps to the first call: the terms, the investors, the first close, then the call itself.' : homeHint(calls, openCall)}
+            </p>
           </div>
-          <div style={{ marginLeft: 'auto' }}>
-            <NewCallButton
-              fundId={fundId}
-              fundName={fund.name}
-              defaults={defaults}
-              terms={termsToday}
-              reuseCallId={notStarted?.id}
-            />
-          </div>
+          {/* While the fund is being set up, the checklist carries this action
+              as its third step, so the header does not pull it out of order. */}
+          {!settingUp && (
+            <div style={{ marginLeft: 'auto' }}>
+              <NewCallButton
+                fundId={fundId}
+                fundName={fund.name}
+                defaults={defaults}
+                terms={termsToday}
+                reuseCallId={notStarted?.id}
+              />
+            </div>
+          )}
         </div>
 
-        {calls.length === 0 ? (
-          <EmptyState fundId={fundId} fundName={fund.name} defaults={defaults} terms={termsToday} />
-        ) : (
+        {settingUp && (
+          <FundSetup
+            fundId={fundId}
+            fundName={fund.name}
+            steps={setupSteps(terms, { count: investors.length, incomplete: investors.filter((i) => profileGaps(i).length).length }, closings, calls)}
+            defaults={defaults}
+            termsToday={termsToday}
+            gates={gates}
+          />
+        )}
+
+        {calls.length > 0 && (
           <>
             <CardGrid style={{ marginTop: 24 }}>
               <Card
@@ -113,7 +146,7 @@ export default async function FundHomePage({
 
               <Card
                 title="Fund position"
-                subtitle={openCall ? `before Call No. ${openCall.callNo}` : 'as at the latest call'}
+                subtitle={openCall ? `before Call No. ${openCall.callNo}` : fromRecord ? 'after every issued call and closing' : 'as at the latest call'}
               >
                 <dl className="kv" style={{ gridTemplateColumns: '1fr max-content', padding: '14px 16px' }}>
                   <dt>Total commitments</dt>
@@ -122,8 +155,25 @@ export default async function FundHomePage({
                   <dt>Called to date ({position?.callsIssued ?? 0} calls)</dt>
                   <dd className="num">{fmt(position?.calledToDate ?? 0)}</dd>
 
-                  <dt>Paid-in capital</dt>
+                  <dt>
+                    Paid-in capital{' '}
+                    <InfoTip label="Paid-in capital">
+                      Everything investors have paid in: each call, plus what late investors paid at a later closing
+                      (their catch-up fee — the capital that moved between investors nets to nothing), plus any
+                      balances brought in from before the fund was on Axtara.
+                    </InfoTip>
+                  </dt>
                   <dd className="num">{fmt(position?.paidInCapital ?? 0)}</dd>
+                  {position && Math.abs(position.paidInCapital - position.calledToDate) >= 0.005 && (
+                    <>
+                      <dt className="text-muted" style={{ fontSize: 12, paddingLeft: 12 }}>
+                        of which beyond the calls: later closings and balances brought in
+                      </dt>
+                      <dd className="num text-muted" style={{ fontSize: 12 }}>
+                        {fmt(position.paidInCapital - position.calledToDate)}
+                      </dd>
+                    </>
+                  )}
 
                   <dt className="total">Unfunded commitment</dt>
                   <dd className="num total">{fmt(position?.unfundedCommitment ?? 0)}</dd>
@@ -211,34 +261,8 @@ function CallRow({
   );
 }
 
-function EmptyState({
-  fundId,
-  fundName,
-  defaults,
-  terms,
-}: {
-  fundId: string;
-  fundName: string;
-  defaults: CallDefaults;
-  terms: FundTerms | null;
-}) {
-  return (
-    <Card style={{ maxWidth: 560, marginTop: 24 }} bodyPadding="28px">
-      <h3>No capital calls yet</h3>
-      <p className="text-muted" style={{ maxWidth: 420 }}>
-        Start a call by uploading the accountant&rsquo;s input workbook, entering the register by
-        hand, or loading the illustrative template to see how it works.
-      </p>
-      <div style={{ marginTop: 18 }}>
-        <NewCallButton fundId={fundId} fundName={fundName} defaults={defaults} terms={terms} />
-      </div>
-    </Card>
-  );
-}
-
 /** The one-line hint under the fund name. */
 function homeHint(calls: CallSummary[], openCall?: CallSummary): string {
-  if (!calls.length) return 'No calls yet.';
   if (openCall) {
     return `Call No. ${openCall.callNo} is in progress — open it to continue, or start a new call.`;
   }
@@ -251,20 +275,19 @@ function homeHint(calls: CallSummary[], openCall?: CallSummary): string {
 /**
  * Column data for the drawdown chart.
  *
- * Issued calls carry a frozen snapshot, so their figures are read back exactly
- * as they were sent. A call still in progress has no snapshot by design, so it
- * is recomputed here — and one that has no inputs yet is drawn as a planned
- * outline rather than a zero-height bar.
+ * Every call is worked out from its inputs, which a sent call can no longer
+ * change. Only calls that have gone out count as called: a draft is drawn as a
+ * dashed outline at its size, and one with nothing entered yet as an empty one.
  */
 async function buildDrawdown(
   repo: ReturnType<typeof createSupabaseRepository>,
   calls: CallSummary[],
+  fundId: string,
 ): Promise<{ columns: DrawdownColumn[]; totals: Map<string, number> }> {
   const ordered = [...calls].sort((a, b) => a.callNo - b.callNo);
   const columns: DrawdownColumn[] = [];
   const totals = new Map<string, number>();
   let cumulative = 0;
-  let commitments = 0;
 
   // Every call is loaded at once rather than one after another. Each getCall is
   // two round trips to the database, and awaited inside the loop they queued up:
@@ -281,12 +304,14 @@ async function buildDrawdown(
     if (call.stage === 'not_started') {
       columns.push({
         callNo: call.callNo,
+        callDate: call.callDate,
+        href: `/funds/${fundId}/calls/${call.id}/setup`,
         total: null,
         againstCommitment: 0,
         outsideCommitment: 0,
         feeNet: 0,
-        cumulativePct: 0,
-        planned: true,
+        cumulative,
+        draft: true,
       });
       continue;
     }
@@ -302,18 +327,22 @@ async function buildDrawdown(
     const againstCommitment = result.totals.reduces - (feeInside ? feeNet : 0);
     const outsideCommitment = result.totals.total - result.totals.reduces - (feeInside ? 0 : feeNet);
 
-    cumulative += result.totals.total;
-    commitments = result.totals.Commitment || commitments;
+    // Only what has gone out is called. A draft is shown at its size, but
+    // nothing is called until its first notice is sent, which also locks it.
+    const draft = call.stage === 'in_progress';
+    if (!draft) cumulative += result.totals.total;
     totals.set(call.id, result.totals.total);
 
     columns.push({
       callNo: call.callNo,
+      callDate: call.callDate,
+      href: `/funds/${fundId}/calls/${call.id}${draft ? '/setup' : ''}`,
       total: result.totals.total,
       againstCommitment,
       outsideCommitment,
       feeNet,
-      cumulativePct: commitments > 0 ? (cumulative / commitments) * 100 : 0,
-      planned: false,
+      cumulative,
+      draft,
     });
   }
 

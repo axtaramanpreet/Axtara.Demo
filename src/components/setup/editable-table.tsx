@@ -70,15 +70,33 @@ export function EditableTable<T extends EditableRow>({
                 {leading && <td style={{ whiteSpace: 'nowrap' }}>{leading(row, i)}</td>}
                 {columns.map((c) => (
                   <td key={c.key} style={{ padding: '2px 6px' }}>
-                    <input
-                      className="cell"
-                      style={{ textAlign: c.num ? 'right' : 'left' }}
-                      value={cellText(row[c.key])}
-                      list={c.list}
-                      readOnly={readOnly}
-                      aria-label={`${c.key}, row ${i + 1}`}
-                      onChange={(e) => setCell(i, c.key, e.target.value)}
-                    />
+                    {c.options && !readOnly ? (
+                      <select
+                        className="cell"
+                        value={cellText(row[c.key])}
+                        aria-label={`${c.key}, row ${i + 1}`}
+                        onChange={(e) => setCell(i, c.key, e.target.value)}
+                      >
+                        <option value="">Pick one</option>
+                        {c.options.map((o) => (
+                          <option key={o}>{o}</option>
+                        ))}
+                        {/* Shown as it is, not swapped for a guess: someone has to pick. */}
+                        {cellText(row[c.key]) && !c.options.includes(cellText(row[c.key])) && (
+                          <option value={cellText(row[c.key])}>{cellText(row[c.key])} — pick one</option>
+                        )}
+                      </select>
+                    ) : (
+                      <input
+                        className="cell"
+                        style={{ textAlign: c.num ? 'right' : 'left' }}
+                        value={cellText(row[c.key])}
+                        list={c.list}
+                        readOnly={readOnly}
+                        aria-label={`${c.key}, row ${i + 1}`}
+                        onChange={(e) => setCell(i, c.key, e.target.value)}
+                      />
+                    )}
                   </td>
                 ))}
                 {!readOnly && (

@@ -62,17 +62,25 @@ named `[fundId]` in square brackets is a blank to fill in, so
 |---|---|---|
 | `/login` | [login/page.tsx](../src/app/login/page.tsx) | sign in |
 | `/` | [page.tsx](../src/app/page.tsx) | nothing, it forwards you to your first fund (or "No funds yet") |
-| `/funds/[fundId]` | [page.tsx](../src/app/funds/[fundId]/page.tsx) | Home: the calls table, Fund position, drawdown chart |
+| `/funds/[fundId]` | [page.tsx](../src/app/funds/[fundId]/page.tsx) | Home: a setup checklist (terms → first close → first call) until the first call is issued; then the calls table, Fund position, drawdown chart |
 | `…/calls/[callId]/setup` | [setup/page.tsx](../src/app/funds/[fundId]/calls/[callId]/setup/page.tsx) | Set up call |
 | `…/calls/[callId]` | [page.tsx](../src/app/funds/[fundId]/calls/[callId]/page.tsx) | the call: Summary, Allocation, Checks, Notices |
-| `…/investors`, `…/settings` | | placeholders, "named in the sidebar, not built" |
+| `…/closings` | [closings/page.tsx](../src/app/funds/[fundId]/closings/page.tsx) | each close, who it admitted, a later close's equalization with its working, how it is settled, and its statements |
+| `…/fees` | [fees/page.tsx](../src/app/funds/[fundId]/fees/page.tsx) | Management fees, nothing to press: every period's fee, what calls billed, still owed or over-billed, true-ups due, and the catch-up fee each later closing charged (counted as the manager's income only when the terms give it to the manager) |
+| `…/settings` | [settings/page.tsx](../src/app/funds/[fundId]/settings/page.tsx) | the fund's terms, dated |
+| `…/investors` | [investors/page.tsx](../src/app/funds/[fundId]/investors/page.tsx) | the register: every investor, where each stands, profiles to finish |
+| `…/investors/[lpId]` | [investors/[lpId]/page.tsx](../src/app/funds/[fundId]/investors/[lpId]/page.tsx) | one investor: profile, capital account, documents, side letters |
 
-Plus three **API routes**. A route is a URL that returns data, not a page:
+Plus these **API routes**. A route is a URL that returns data, not a page:
 
 | Route | Does | Chapter |
 |---|---|---|
 | `POST /api/calls/[callId]/notices` | approve, undo, send | 2 and 5 |
 | `GET /api/calls/[callId]/notices/pdf` | download notice PDFs | 5 |
+| `POST /api/funds/[fundId]/closings/[closingId]/finalise` | finalise a closing, freeze its equalization, say how it is settled | 2 |
+| `POST /api/funds/[fundId]/closings/[closingId]/settlement` | choose how a finalised closing's equalization is settled | 5 |
+| `POST /api/funds/[fundId]/closings/[closingId]/statements` | approve, send, or email again its statements | 5 |
+| `GET /api/funds/[fundId]/closings/[closingId]/statement` | one investor's equalization statement PDF | 5 |
 | `POST /api/ask` | Ask Axtara | 6 |
 
 ---
@@ -213,11 +221,16 @@ allowed to write** (chapter 2, §2.4).
 Typing in Set up call:
 
 ```
-keystroke → setModel(next)          the screen updates instantly
-          → wait 800 ms quiet       (SAVE_DEBOUNCE_MS)
-          → repo.saveCall()         browser Supabase client, RLS on
+keystroke → setModel(next)          the screen updates, "Unsaved changes"
+Save      → repo.saveCall()         browser Supabase client, RLS on
           → save_call_inputs RPC    all or nothing
 ```
+
+**Nothing saves by itself.** These are the figures investors are asked to wire
+against, so a change is kept only when someone presses Save. Review allocation
+stays disabled until the work is saved, and `useLeaveGuard` asks before a link,
+a reload or closing the tab leaves unsaved work behind. The same holds on Fund
+terms, Investors and draft closings.
 
 "New call" works the same way: `repo.createCall()` from the browser, then a
 jump to its setup page.

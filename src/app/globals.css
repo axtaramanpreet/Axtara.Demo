@@ -28,7 +28,8 @@
   --chart-2: oklch(0.55 0.22 264.53);
   --chart-3: oklch(0.72 0 0);
   --chart-4: oklch(0.92 0 0);
-  --chart-5: oklch(0.56 0 0);
+  /* The management fee in charts: a hue of its own, so it never reads as empty or as a rule. */
+  --chart-5: oklch(0.58 0.2 305);
   --popover: oklch(0.99 0 0);
   --primary: oklch(0 0 0);
   --secondary: oklch(0.94 0 0);
@@ -56,7 +57,7 @@
   --chart-2: oklch(0.58 0.21 260.84);
   --chart-3: oklch(0.56 0 0);
   --chart-4: oklch(0.44 0 0);
-  --chart-5: oklch(0.92 0 0);
+  --chart-5: oklch(0.72 0.17 305);
   --popover: oklch(0.18 0 0);
   --primary: oklch(1 0 0);
   --secondary: oklch(0.25 0 0);
@@ -317,26 +318,7 @@ body {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.nav-item .soon {
-  margin-left: auto;
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--muted-foreground);
-  font-weight: 400;
-  font-style: normal;
-}
-.nav-item .chev {
-  margin-left: auto;
-  width: 14px;
-  height: 14px;
-  opacity: 0.55;
-}
-.nav-item .soon + .chev {
-  margin-left: 6px;
-}
-/* Not built yet: it opens a page that says so, and nothing else. */
+/* A step not open yet: its page says what comes first. */
 .nav-item.dim {
   color: var(--muted-foreground);
   opacity: 0.7;
@@ -367,10 +349,9 @@ body {
 .rail .ws-btn b,
 .rail .ws-btn small,
 .rail .ws-btn > svg,
-.rail .nav-item .chev,
+.rail .nav-item svg.lock,
 .rail .nav-group,
 .rail .nav-item span,
-.rail .nav-item .soon,
 .rail .side-foot span:not(.wordmark):not(.brand-mark) {
   display: none;
 }
@@ -415,7 +396,7 @@ body {
 .rail .nav-item.on::before {
   display: none;
 }
-.rail .nav-item svg:not(.chev) {
+.rail .nav-item svg:not(.lock) {
   width: 18px;
   height: 18px;
 }
@@ -497,18 +478,6 @@ body {
   font-weight: 500;
   color: var(--muted-foreground);
   flex: none;
-}
-.placeholder {
-  max-width: 560px;
-  margin: 60px auto;
-  text-align: center;
-}
-.placeholder .ws-tile {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  margin: 0 auto 18px;
-  font-size: 15px;
 }
 
 
@@ -1045,6 +1014,68 @@ input.cell:read-only {
   outline: none;
 }
 
+/* --- Headline figures ----------------------------------------------------- */
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+.stat {
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 0;
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  display: flex;
+  align-items: center;
+}
+.stat-value {
+  margin-top: 4px;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 18px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* A quiet action inside a table or a card: text, not a button's weight. */
+.link-button {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--foreground);
+  text-decoration: underline;
+  text-decoration-color: var(--chart-3);
+  cursor: pointer;
+  padding: 0;
+}
+.link-button:hover {
+  text-decoration-color: var(--foreground);
+}
+
+/* A row that opens to show its working. */
+tr.clickable {
+  cursor: pointer;
+}
+tr.clickable:hover td {
+  background: var(--muted);
+}
+/* The working under a row: quieter than the table it explains. */
+table.working {
+  background: var(--card);
+  border-radius: 6px;
+}
+table.working th,
+table.working td {
+  font-size: 12px;
+}
+
 /* --- Stepper -------------------------------------------------------------- */
 
 .step {
@@ -1150,6 +1181,36 @@ input.cell:read-only {
   to {
     transform: scaleY(1);
   }
+}
+/* Drawdown chart: each column opens its call, and shows what it is made of on hover or focus. */
+.dd-col {
+  border-radius: 4px;
+  outline-offset: 4px;
+}
+.dd-col:hover .bar-seg,
+.dd-col:focus-visible .bar-seg {
+  filter: brightness(1.08);
+}
+.dd-tip {
+  display: none;
+  position: absolute;
+  top: 22px;
+  left: 0;
+  z-index: 5;
+  width: 290px;
+  padding: 10px 12px;
+  font-size: 12px;
+  text-align: left;
+  background: var(--popover);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px hsl(0 0% 0% / 0.14);
+  pointer-events: none;
+}
+.dd-col:hover .dd-tip,
+.dd-col:focus-visible .dd-tip {
+  display: block;
 }
 .bar-seg {
   transform-origin: bottom;
@@ -1864,4 +1925,160 @@ input.cell:read-only {
   opacity: 0.45;
   transition: opacity 120ms ease-out;
   pointer-events: none;
+}
+
+/* A new fund's setup checklist: numbered steps, the current one marked. */
+.setup-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.setup-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+}
+.setup-step:first-child {
+  border-top: 0;
+}
+.setup-step.current {
+  background: var(--muted);
+}
+.setup-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+  background: var(--card);
+}
+.setup-step.current .setup-num {
+  border-color: var(--foreground);
+  color: var(--foreground);
+}
+.setup-step.done .setup-num {
+  background: var(--foreground);
+  border-color: var(--foreground);
+  color: var(--background);
+}
+.setup-action a.btn {
+  text-decoration: none;
+}
+@media (max-width: 640px) {
+  .setup-step {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+  .setup-action {
+    grid-column: 2;
+  }
+}
+
+/* A modal form over the page. */
+.dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: oklch(0 0 0 / 0.35);
+}
+.dialog {
+  width: min(460px, 100%);
+  padding: 22px;
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  box-shadow: 0 12px 40px hsl(0 0% 0% / 0.18);
+}
+
+/* A step that is not open yet. */
+.nav-item svg.lock {
+  margin-left: auto;
+  width: 13px;
+  height: 13px;
+}
+.setup-step.locked:not(.done) strong {
+  color: var(--muted-foreground);
+}
+
+/* A form input standing on its own, outside a table. */
+.cell.bordered {
+  border: 1px solid var(--border);
+  height: 36px;
+}
+
+/* While a fund is being set up: what was just done, and the way on. */
+.next-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  max-width: 1200px;
+  margin-bottom: 18px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--muted);
+  font-size: 13px;
+}
+.next-step .btn {
+  margin-left: auto;
+  text-decoration: none;
+}
+
+/* A long form's actions, kept in reach while scrolling. */
+.action-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 -4px 16px hsl(0 0% 0% / 0.06);
+  font-size: 13px;
+}
+.action-bar > span {
+  margin-right: auto;
+}
+
+/* The confirming button of a step that deletes something. */
+.btn-primary.btn-danger {
+  background: var(--destructive);
+  border-color: var(--destructive);
+  color: var(--destructive-foreground);
+}
+
+/* Choosing what an edit to the fund's terms is. */
+.edit-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 13px;
+}
+.edit-option > span {
+  display: grid;
+  gap: 2px;
+}
+.edit-option.on {
+  border-color: var(--foreground);
+  background: var(--muted);
 }

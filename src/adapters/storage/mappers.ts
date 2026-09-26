@@ -17,6 +17,8 @@
  */
 
 import { num, serialToISO } from '@/engine';
+import type { Json } from './database.types';
+import type { EqualizationDueEntry, FeeScheduleEntry } from '@/engine/types';
 import type {
   CallModel,
   ComponentRow,
@@ -131,6 +133,7 @@ export function toFundSetup(call: CallRow): FundSetup {
     Rounding_Decimals: call.rounding_decimals ?? '',
     Rounding_Plug_LP_ID: call.rounding_plug_lp_id ?? '',
     Prepared_By: '',
+    Charge_Mgmt_Fee: call.charge_mgmt_fee === false ? 'N' : 'Y',
   };
 }
 
@@ -222,6 +225,11 @@ export function toCallModel(parts: CallParts): CallModel {
     transfers: parts.transfers.map(toTransferRow),
     golden: golden.length ? golden : null,
     goldenSource: golden.length ? 'uploaded workbook · Expected_Output' : '',
+    // Only when the call has one: a call without charges rate × share of a year.
+    ...(Array.isArray(parts.call.fee_schedule) && { feeSchedule: parts.call.fee_schedule as unknown as FeeScheduleEntry[] }),
+    ...(Array.isArray(parts.call.equalization_schedule) && {
+      equalizationSchedule: parts.call.equalization_schedule as unknown as EqualizationDueEntry[],
+    }),
   };
 }
 
@@ -256,6 +264,10 @@ export function fromCallModel(model: CallModel) {
     org_expense_cap: numericOrNull(s.Org_Expense_Cap),
     rounding_decimals: decimalsOrNull(s.Rounding_Decimals),
     rounding_plug_lp_id: emptyToNull(s.Rounding_Plug_LP_ID),
+    // Blank charges the fee, as every call did before a call could leave it out.
+    charge_mgmt_fee: String(s.Charge_Mgmt_Fee ?? '').trim().toUpperCase() !== 'N',
+    fee_schedule: (model.feeSchedule ?? null) as unknown as Json,
+    equalization_schedule: (model.equalizationSchedule ?? null) as unknown as Json,
 
     fee_basis: emptyToNull(model.fee.Fee_Basis),
     fee_default_rate_annual: numericOrNull(model.fee.Default_Fee_Rate_Annual),
@@ -329,13 +341,20 @@ export function fromLPRow(l: LPRow, callId: string, investorId: string, position
   };
 }
 
-/** The identity columns of an `investors` row. */
+/**
+ * The identity columns of an `investors` row, as a call's register holds them.
+ *
+ * Blanks go as blanks. `save_call_inputs` fills the defaults for an investor
+ * the fund does not know yet, and for one it does, a blank leaves the profile
+ * as the Investors page set it. Defaulting here would turn every blank into a
+ * value — a type of 'LP' — and overwrite the profile with it.
+ */
 export function fromLPRowIdentity(l: LPRow, fundId: string) {
   return {
     fund_id: fundId,
     lp_id: l.LP_ID,
-    lp_name: l.LP_Name || l.LP_ID,
-    lp_type: l.LP_Type || 'LP',
+    lp_name: String(l.LP_Name ?? ''),
+    lp_type: String(l.LP_Type ?? ''),
     contact_email: emptyToNull(l.Contact_Email) as string | null,
     side_letter_ref: emptyToNull(l.Side_Letter_Ref),
     notes: emptyToNull(l.Notes),
@@ -421,6 +440,12 @@ export function toFundTerms(r: FundTermsRow): FundTerms {
     lateCloseInterestBasis: r.late_close_interest_basis as FundTerms['lateCloseInterestBasis'],
     catchUpFeeTo: r.catch_up_fee_to as FundTerms['catchUpFeeTo'],
     equalizationInterestTo: r.equalization_interest_to as FundTerms['equalizationInterestTo'],
+    paymentBankName: r.payment_bank_name,
+    paymentAccountName: r.payment_account_name,
+    paymentAccountNo: r.payment_account_no,
+    paymentSwift: r.payment_swift,
+    paymentRouting: r.payment_routing,
+    paymentReference: r.payment_reference,
     note: r.note,
   };
 }
@@ -454,6 +479,12 @@ export function fromFundTerms(fundId: string, t: Omit<FundTerms, 'createdAt'>) {
     late_close_interest_basis: t.lateCloseInterestBasis,
     catch_up_fee_to: t.catchUpFeeTo,
     equalization_interest_to: t.equalizationInterestTo,
+    payment_bank_name: text(t.paymentBankName),
+    payment_account_name: text(t.paymentAccountName),
+    payment_account_no: text(t.paymentAccountNo),
+    payment_swift: text(t.paymentSwift),
+    payment_routing: text(t.paymentRouting),
+    payment_reference: text(t.paymentReference),
     note: text(t.note),
   };
 }

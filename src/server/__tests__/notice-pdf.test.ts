@@ -8,102 +8,16 @@
  * figure the engine produced.
  */
 
-import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { buildNotice, compute } from '@/engine';
+import { BLANK_TERMS, buildNotice, compute, paymentInstructions } from '@/engine';
 import { ILLUSTRATIVE_FUND } from '@/engine/fixtures/illustrative-fund';
 import { SCENARIOS } from '@/engine/fixtures/scenarios';
 import { noticeFileName, renderNoticePdf } from '../notice-pdf';
+import { textOf } from './pdf-text';
 
 const result = compute(ILLUSTRATIVE_FUND);
 const row = result.rows.find((r) => r.LP_ID === 'LP01')!;
 const notice = buildNotice(ILLUSTRATIVE_FUND, result, row);
-
-/**
- * The text of a PDF.
- *
- * Two things had to be got right, and getting either wrong returns an empty
- * string that would quietly pass a weaker assertion:
- *
- *  - Content streams are Flate-compressed, so the raw bytes carry no readable
- *    operators at all. Each stream is inflated first.
- *  - @react-pdf writes text as hex strings inside a TJ array — `[<496c6c…>]`,
- *    not `(Illustrative)` — so a search for literal strings finds nothing.
- *
- * Runs are joined with no separator, because a line is broken wherever styling
- * or kerning changes and "1,393,719.91" arrives in several pieces.
- */
-/**
- * The WinAnsi bytes that are not Latin-1.
- *
- * 0x80-0x9f is a control range in Latin-1 but holds punctuation in WinAnsi,
- * which is what these fonts use. Without this an em dash decodes to U+0097 and
- * "Investment — Deal X" never matches the label it came from.
- */
-const WIN_ANSI: Record<number, string> = {
-  0x82: '\u201a', 0x83: '\u0192', 0x84: '\u201e', 0x85: '\u2026',
-  0x86: '\u2020', 0x87: '\u2021', 0x88: '\u02c6', 0x89: '\u2030',
-  0x8a: '\u0160', 0x8b: '\u2039', 0x8c: '\u0152', 0x8e: '\u017d',
-  0x91: '\u2018', 0x92: '\u2019', 0x93: '\u201c', 0x94: '\u201d',
-  0x95: '\u2022', 0x96: '\u2013', 0x97: '\u2014', 0x98: '\u02dc',
-  0x99: '\u2122', 0x9a: '\u0161', 0x9b: '\u203a', 0x9c: '\u0153',
-  0x9e: '\u017e', 0x9f: '\u0178',
-};
-
-function decodeWinAnsi(bytes: Buffer): string {
-  let out = '';
-  for (const byte of bytes) {
-    out += WIN_ANSI[byte] ?? String.fromCharCode(byte);
-  }
-  return out;
-}
-
-function textOf(pdf: Buffer): string {
-  const out: string[] = [];
-
-  const open = Buffer.from('stream');
-  const close = Buffer.from('endstream');
-
-  let at = 0;
-  for (;;) {
-    const start = pdf.indexOf(open, at);
-    if (start < 0) break;
-    const stop = pdf.indexOf(close, start);
-    if (stop < 0) break;
-
-    // Skip `stream` and the end-of-line that must follow it.
-    let from = start + open.length;
-    if (pdf[from] === 0x0d) from += 1;
-    if (pdf[from] === 0x0a) from += 1;
-
-    const body = pdf.subarray(from, stop);
-    at = stop + close.length;
-
-    let content: string;
-    try {
-      content = inflateSync(body).toString('latin1');
-    } catch {
-      // Not a compressed stream — an embedded font programme, say.
-      continue;
-    }
-
-    // Every text-showing operator: `[…] TJ`, `(…) Tj` and `<…> Tj`.
-    for (const op of content.matchAll(/(\[[^\]]*\]|\([^)]*\)|<[0-9A-Fa-f\s]*>)\s*T[Jj]/g)) {
-      const operand = op[1];
-
-      for (const hex of operand.matchAll(/<([0-9A-Fa-f\s]+)>/g)) {
-        const digits = hex[1].replace(/\s+/g, '');
-        out.push(decodeWinAnsi(Buffer.from(digits, 'hex')));
-      }
-
-      for (const literal of operand.matchAll(/\(((?:\\.|[^\\)])*)\)/g)) {
-        out.push(literal[1].replace(/\\([()\\])/g, '$1'));
-      }
-    }
-  }
-
-  return out.join('');
-}
 
 /**
  * The first part of `parts` not found at or after the previous one, or null.
@@ -170,6 +84,31 @@ describe('a notice as a PDF', () => {
       );
     }
     expect(text).not.toContain('(outside commitment) t');
+  });
+
+  it('prints where to wire the money, with this investor\u2019s reference, once the fund has set it', async () => {
+    const payment = paymentInstructions(
+      {
+        ...BLANK_TERMS,
+        paymentBankName: 'JPMorgan Chase Bank, N.A.',
+        paymentAccountName: 'Illustrative Fund II, L.P.',
+        paymentAccountNo: '000123456789',
+        paymentSwift: 'CHASUS33',
+        paymentReference: '{LP_ID} Call {CALL_NO}',
+      },
+      { lpId: 'LP01', callNo: 2 },
+    );
+    const withIt = buildNotice(ILLUSTRATIVE_FUND, result, row, { payment });
+    const text = textOf(await renderNoticePdf(withIt, 'draft'));
+    expect(firstOutOfOrder(text, ['Payment instructions', 'Bank', 'JPMorgan Chase Bank, N.A.', 'Account number', '000123456789', 'Reference', 'LP01 Call 2'])).toBeNull();
+    // The letter points at the instructions only when they are there.
+    expect(withIt.closing[0]).toContain('using the payment instructions above');
+    expect(notice.closing[0]).not.toContain('payment instructions');
+    expect(textOf(await renderNoticePdf(notice, 'draft'))).not.toContain('Payment instructions');
+  });
+
+  it('prints nothing for a fund with a bank but no account number', () => {
+    expect(paymentInstructions({ ...BLANK_TERMS, paymentBankName: 'Some Bank' }, { lpId: 'LP01' })).toBeNull();
   });
 
   it('carries the letter the engine composed, not a copy of its own', async () => {
@@ -241,5 +180,66 @@ describe('what the file is called', () => {
 
   it('falls back rather than producing a nameless file', () => {
     expect(noticeFileName(1, '   ')).toBe('Capital Call #1_Investor.pdf');
+  });
+});
+
+describe('a notice billing the fee for several periods', () => {
+  it('names the periods, and this investor’s fee for each, rather than one rate', async () => {
+    const model = structuredClone(ILLUSTRATIVE_FUND);
+    model.golden = null;
+    model.fee.offsets = [];
+    model.feeSchedule = [
+      { from: '2026-04-01', to: '2026-06-30', label: 'Q2 2026', byLp: { LP01: 50_000 } },
+      { from: '2026-07-01', to: '2026-09-30', label: 'Q3 2026', byLp: { LP01: 45_000 } },
+    ];
+    const computed = compute(model);
+    const lp01 = computed.rows.find((r) => r.LP_ID === 'LP01')!;
+    const text = textOf(await renderNoticePdf(buildNotice(model, computed, lp01), 'draft'));
+    expect(text).toContain('Management Fee — Q2–Q3 2026');
+    expect(text).toContain('95,000.00');
+    expect(text).toContain('Q2 2026 (1 April 2026 – 30 June 2026) USD 50,000.00; Q3 2026 (1 July 2026 – 30 September 2026) USD 45,000.00');
+    expect(text).not.toMatch(/p\.a\., current period/);
+  });
+});
+
+describe('a notice that settles a later closing’s equalization, as a PDF', () => {
+  it('shows what the call draws, the equalization, then the amount due, in that order', async () => {
+    const model = {
+      ...structuredClone(ILLUSTRATIVE_FUND),
+      equalizationSchedule: [
+        { closingId: 'c2', closingNo: 2, closingDate: '2026-08-01', byLp: { LP01: 1_000 }, parts: { LP01: { capital: 0, interest: 0, catchUpFee: 1_000 } } },
+      ],
+    };
+    const r = compute(model);
+    const n = buildNotice(model, r, r.rows.find((x) => x.LP_ID === 'LP01')!);
+    const text = textOf(await renderNoticePdf(n, 'draft'));
+    expect(
+      firstOutOfOrder(text, ['Total Amount Called', n.called!, 'Equalization — Closing 2 (1 August 2026)', 'Catch-up management fee', '1,000.00', 'Equalization total', '1,000.00', 'Total Amount Due', n.total]),
+    ).toBeNull();
+  });
+});
+
+describe('a notice whose equalization credit is larger than the call, as a PDF and an email', () => {
+  it('says the amount is payable to them, and asks for nothing', async () => {
+    const plainRow = compute(ILLUSTRATIVE_FUND).rows.find((x) => x.LP_ID === 'LP01')!;
+    const model = {
+      ...structuredClone(ILLUSTRATIVE_FUND),
+      equalizationSchedule: [
+        {
+          closingId: 'c2', closingNo: 2, closingDate: '2026-08-01',
+          byLp: { LP01: -(plainRow.total + 500) },
+          parts: { LP01: { capital: -(plainRow.total + 500), interest: 0, catchUpFee: 0 } },
+        },
+      ],
+    };
+    const r = compute(model);
+    const n = buildNotice(model, r, r.rows.find((x) => x.LP_ID === 'LP01')!, { payment: [{ label: 'Bank', value: 'First Harbour' }] });
+    const text = textOf(await renderNoticePdf(n, 'draft'));
+    expect(firstOutOfOrder(text, ['AMOUNT PAYABLE TO YOU', '500.00', 'Total Amount Called', 'Amount Payable to You', '500.00'])).toBeNull();
+    expect(text).not.toContain('First Harbour');
+    const { noticeEmail } = await import('../notice-email');
+    const mail = noticeEmail(n, Buffer.from(''), 'a@example.com');
+    expect(mail.text).toContain(`Payable to you ${n.cur} 500.00`);
+    expect(mail.text).not.toContain('Amount due');
   });
 });

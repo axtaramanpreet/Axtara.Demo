@@ -10,14 +10,15 @@ import {
   afterInvestmentPeriod,
   applyFundTerms,
   changedTerms,
-  dayAfter,
-  dayBefore,
   draftTerms,
   scheduledAfter,
   termsOn,
   unsetTerms,
+  termApplies,
+  withoutOrphans,
   type FundTerms,
 } from '../fund-terms';
+import { dayAfter, dayBefore } from '../dates';
 
 const terms = (patch: Partial<FundTerms>): FundTerms => ({ ...BLANK_TERMS, ...patch });
 
@@ -100,27 +101,32 @@ describe('a fund\u2019s terms, put into a call', () => {
     expect(model.fee.Fee_Exempt_LP_IDs).toBe('GP01');
   });
 
-  it('locks exactly the cells it filled', () => {
+  it('locks every fund-level cell, and only those', () => {
     const { locked } = applyFundTerms(emptyCall('F'), inForce);
     expect(locked.has('setup.GP_Name')).toBe(true);
     expect(locked.has('fee.Default_Fee_Rate_Annual')).toBe(true);
+    // Blank in these terms, but still the fund's to decide, not the call's.
+    expect(locked.has('setup.Signatory_Title')).toBe(true);
     // Not a fund term, or deliberately the call's own.
     expect(locked.has('setup.Call_Date')).toBe(false);
     expect(locked.has('setup.Rounding_Plug_LP_ID')).toBe(false);
-    // Blank in these terms, so the call keeps it.
-    expect(locked.has('setup.Signatory_Title')).toBe(false);
   });
 
-  it('leaves a call\u2019s own value alone where the fund has recorded nothing', () => {
+  it('clears what a call or a workbook put in a cell the fund left blank, and says so', () => {
     const call = emptyCall('F');
     call.setup.Signatory_Title = 'Partner';
     call.fee.Fee_Exempt_LP_IDs = 'LP09';
     const onlyCurrency = terms({ effectiveFrom: '2024-01-01', reportingCurrency: 'EUR' });
-    const { model, locked } = applyFundTerms(call, onlyCurrency);
-    expect(model.setup.Signatory_Title).toBe('Partner');
-    // An empty exempt list in Settings is "not recorded", not "nobody exempt".
-    expect(model.fee.Fee_Exempt_LP_IDs).toBe('LP09');
-    expect([...locked]).toEqual(['setup.Reporting_Currency']);
+    const { model, locked, changed } = applyFundTerms(call, onlyCurrency);
+    expect(model.setup.Signatory_Title).toBe('');
+    expect(model.fee.Fee_Exempt_LP_IDs).toBe('');
+    expect(locked.has('setup.Signatory_Title')).toBe(true);
+    expect(changed.map((c) => [c.key, c.was, c.now])).toEqual(
+      expect.arrayContaining([
+        ['Signatory_Title', 'Partner', ''],
+        ['Fee_Exempt_LP_IDs', 'LP09', ''],
+      ]),
+    );
   });
 
   it('changes nothing for a fund with no terms', () => {
@@ -242,5 +248,24 @@ describe('dates', () => {
     expect(dayAfter('2027-02-28')).toBe('2027-03-01');
     expect(dayBefore('2029-01-01')).toBe('2028-12-31');
     expect(dayBefore('2028-03-01')).toBe('2028-02-29');
+  });
+});
+
+describe('terms that only apply once another is set', () => {
+  it('clears who gets late-close interest, and how it is worked, when there is no interest', () => {
+    const t = withoutOrphans({ ...BLANK_TERMS, lateCloseInterestBasis: 'simple', equalizationInterestTo: 'gp' });
+    expect([t.lateCloseInterestBasis, t.equalizationInterestTo]).toEqual([null, null]);
+    const kept = withoutOrphans({ ...BLANK_TERMS, lateCloseInterestRate: 0.08, equalizationInterestTo: 'gp' });
+    expect(kept.equalizationInterestTo).toBe('gp');
+  });
+
+  it('treats a rate of zero as none', () => {
+    expect(termApplies({ feeRateAnnual: 0, lateCloseInterestRate: null }, 'feeBasis')).toBe(false);
+    expect(termApplies({ feeRateAnnual: 0.02, lateCloseInterestRate: null }, 'feeBasis')).toBe(true);
+  });
+
+  it('does not call a term that does not apply "not set"', () => {
+    expect(unsetTerms({ ...BLANK_TERMS, effectiveFrom: '2026-01-01', createdAt: '' })).not.toContain('equalizationInterestTo');
+    expect(unsetTerms({ ...BLANK_TERMS, effectiveFrom: '2026-01-01', createdAt: '', lateCloseInterestRate: 0.08 })).toContain('equalizationInterestTo');
   });
 });

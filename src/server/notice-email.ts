@@ -23,6 +23,7 @@ export function noticeEmail(
   notice: NoticeData,
   pdf: Buffer,
   to: string,
+  cc: string[] = [],
 ): Email {
   const fileName = noticeFileName(notice.callNo, notice.name);
 
@@ -30,8 +31,9 @@ export function noticeEmail(
     notice.salutation,
     '',
     ...notice.intro.flatMap((p) => [p, '']),
-    `    Amount due     ${notice.cur} ${notice.total}`,
-    `    Payable by     ${notice.dueDate}`,
+    ...(notice.payableToYou
+      ? [`    Payable to you ${notice.cur} ${notice.total}`]
+      : [`    Amount due     ${notice.cur} ${notice.total}`, `    Payable by     ${notice.dueDate}`]),
     `    Notice date    ${notice.callDate}`,
     `    Investor ID    ${notice.id}`,
     '',
@@ -44,6 +46,7 @@ export function noticeEmail(
 
   return {
     to,
+    cc,
     // The same subject the notice itself carries, so the mail and the document
     // an investor files against it agree.
     subject: notice.subject,

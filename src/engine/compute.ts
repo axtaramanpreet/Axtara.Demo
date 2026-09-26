@@ -13,6 +13,7 @@
  *   5. Tie out              — checks, including against Expected_Output
  */
 
+import { CATEGORIES, categoryOf } from './categories';
 import { allocate, type AllocationPart } from './allocate';
 import { fmt, ids, num, round, serialToISO, yes } from './format';
 import { applyTransfers } from './transfers';
@@ -74,6 +75,8 @@ function roundingDecimals(configured: FundSetup['Rounding_Decimals']): number {
 
 export function compute(model: CallModel): ComputeResult {
   const { setup, lps, components, fee, transfers, golden } = model;
+  const schedule = model.feeSchedule ?? null;
+  const eqSchedule = model.equalizationSchedule ?? null;
 
   const d = roundingDecimals(setup.Rounding_Decimals);
   const callDate = serialToISO(setup.Call_Date);
@@ -215,10 +218,15 @@ export function compute(model: CallModel): ComputeResult {
     fee.Default_Fee_Rate_Annual !== '' && fee.Default_Fee_Rate_Annual != null
       ? num(fee.Default_Fee_Rate_Annual)
       : num(setup.Default_Mgmt_Fee_Rate_Annual);
-  const period =
+  const periodOfFee =
     fee.Fee_Period_Fraction !== '' && fee.Fee_Period_Fraction != null
       ? num(fee.Fee_Period_Fraction)
       : num(setup.Mgmt_Fee_Period_Fraction);
+  // A call can leave the fee out, when another call already charged its period.
+  // A call with a schedule says for itself which periods it bills, and how much.
+  const chargesFee = schedule ? schedule.length > 0 : !String(setup.Charge_Mgmt_Fee ?? '').trim() || yes(setup.Charge_Mgmt_Fee);
+  const period = chargesFee ? periodOfFee : 0;
+  if (!chargesFee) add('info', schedule ? 'No management fee is billed on this call.' : 'The management fee is not charged on this call.');
 
   const exemptIds = ids(fee.Fee_Exempt_LP_IDs);
   const feeRate: Record<string, number> = {};
@@ -237,12 +245,39 @@ export function compute(model: CallModel): ComputeResult {
     feeGross[l.LP_ID] = round(basisOf(l, feeBasis) * rate * period, d);
   });
 
+  // With a schedule, the fee for each period was worked out from the fund's
+  // record — each investor's commitment, side letter and joining date through
+  // that period — and is taken as it is, not recomputed from a single rate.
+  const feeByPeriod: Record<string, number[]> = {};
+  let notOnRegister: string[] = [];
+  if (schedule) {
+    active.forEach((l) => {
+      feeByPeriod[l.LP_ID] = schedule.map((e) => round(num(e.byLp[l.LP_ID] ?? 0), d));
+      feeGross[l.LP_ID] = round(feeByPeriod[l.LP_ID].reduce((t, x) => t + x, 0), d);
+    });
+    notOnRegister = Object.keys(Object.assign({}, ...schedule.map((e) => e.byLp))).filter(
+      (id) => !active.some((l) => l.LP_ID === id) && schedule.some((e) => num(e.byLp[id]) > 0),
+    );
+    if (notOnRegister.length) {
+      add('fail', `The fee schedule charges ${notOnRegister.join(', ')}, who ${notOnRegister.length === 1 ? 'is' : 'are'} not on this call's register.`);
+    }
+  }
+
   const grossTotal = Object.values(feeGross).reduce((s, x) => s + x, 0);
 
   const feeOffset: Record<string, number> = {};
   active.forEach((l) => (feeOffset[l.LP_ID] = 0));
 
-  const offsets = (fee.offsets || []).filter((o) => num(o.Amount) !== 0);
+  // Offsets reduce the fee, so a call that leaves the fee out leaves them out
+  // too: they belong to the call that charges it.
+  const listedOffsets = (fee.offsets || []).filter((o) => num(o.Amount) !== 0);
+  // Nobody paying a fee on this call — it is left out, or nothing is owed — means
+  // there is nothing for an offset to reduce.
+  const anyFee = active.some((l) => feeGross[l.LP_ID] > 0);
+  const offsets = chargesFee && anyFee ? listedOffsets : [];
+  if (!(chargesFee && anyFee) && listedOffsets.length) {
+    add('info', `Its ${listedOffsets.length} fee offset${listedOffsets.length === 1 ? ' is' : 's are'} left out with it.`);
+  }
   offsets.forEach((o) => {
     const method = String(o.Allocation_Method || 'Pro-rata to gross fee');
     // Only fee payers share an offset — it would be meaningless to allocate a
@@ -320,9 +355,13 @@ export function compute(model: CallModel): ComputeResult {
       comps,
       feeRate: isActive ? feeRate[id] : 0,
       feeGross: gross,
+      ...(schedule && { feeByPeriod: isActive ? (feeByPeriod[id] ?? schedule.map(() => 0)) : schedule.map(() => 0) }),
       feeOffset: off,
       feeNet: net,
       total,
+      ...(eqSchedule && {
+        equalization: isActive ? round(eqSchedule.reduce((t, e) => t + num(e.byLp[id] ?? 0), 0), d) : 0,
+      }),
       reduces,
       outside,
       openUCC,
@@ -374,8 +413,19 @@ export function compute(model: CallModel): ComputeResult {
     `Paid-in roll-forward ties: ${fmt(totals.openPaid)} + ${fmt(totals.total)} = ${fmt(totals.closingPaid)}.`,
   );
 
+  // What each component is decides what is done with it, so a category that is
+  // none of the three is not guessed at: it has to be picked before approval.
+  for (const c of components) {
+    if (!categoryOf(c.Category)) {
+      add(
+        'fail',
+        `${c.Component_ID || c.Component_Name || 'A component'} has category "${String(c.Category ?? '')}". Pick one of: ${CATEGORIES.join(', ')}.`,
+      );
+    }
+  }
+
   const orgTotal = components
-    .filter((c) => /organi[sz]ational/i.test(c.Category || ''))
+    .filter((c) => categoryOf(c.Category) === 'Organizational Expense')
     .reduce((s, c) => s + num(c.Total_Amount), 0);
   const cap = num(setup.Org_Expense_Cap);
   if (cap > 0) {
@@ -383,6 +433,59 @@ export function compute(model: CallModel): ComputeResult {
       orgTotal <= cap + TIE_TOLERANCE ? 'ok' : 'warn',
       `Organizational expense ${fmt(orgTotal)} vs cap ${fmt(cap)}${orgTotal > cap ? ' — excess treated per LPA' : ''}.`,
     );
+  }
+
+  // -------------------------------------------------------------------------
+  // 5b. Equalization this call settles — cash only, outside the roll-forward
+  // -------------------------------------------------------------------------
+  let equalization: ComputeResult['equalization'];
+  if (eqSchedule) {
+    const onRegister = new Set(rows.filter((r) => r.isActive).map((r) => r.LP_ID));
+    const missing = [...new Set(eqSchedule.flatMap((e) => Object.keys(e.byLp).filter((id) => num(e.byLp[id]) !== 0)))].filter(
+      (id) => !onRegister.has(id),
+    );
+    if (missing.length) {
+      add('fail', `The equalization on this call names ${missing.join(', ')}, who ${missing.length === 1 ? 'is' : 'are'} not on this call's register.`);
+    }
+    // Each investor's net is its three parts; a schedule where they differ was
+    // not worked out from the closing.
+    for (const e of eqSchedule) {
+      for (const [id, x] of Object.entries(e.byLp)) {
+        const p = e.parts[id];
+        if (!p || Math.abs(num(x) - (num(p.capital) + num(p.interest) + num(p.catchUpFee))) > TIE_TOLERANCE) {
+          add('fail', `Closing ${e.closingNo}: ${id}'s equalization does not add up to its capital, interest and catch-up fee.`);
+        }
+      }
+    }
+
+    // A credit bigger than an investor's call is paid to them: say so, by name.
+    const paidOut = rows.filter((r) => r.isActive && round(r.total + (r.equalization ?? 0), d) < 0);
+    if (paidOut.length) {
+      add(
+        'info',
+        `Paid out on this call, the equalization credit beyond what they are called: ${paidOut
+          .map((r) => `${r.LP_ID} ${fmt(-round(r.total + (r.equalization ?? 0), d))}`)
+          .join(', ')}.`,
+      );
+    }
+    const closings = eqSchedule.map((e) => {
+      const xs = Object.values(e.byLp).map((x) => num(x));
+      const part = (k: 'capital' | 'interest' | 'catchUpFee') => round(Object.values(e.parts).reduce((t, p) => t + num(p[k]), 0), d);
+      return {
+        closingId: e.closingId,
+        closingNo: e.closingNo,
+        closingDate: e.closingDate,
+        paid: round(xs.filter((x) => x > 0).reduce((t, x) => t + x, 0), d),
+        credited: round(-xs.filter((x) => x < 0).reduce((t, x) => t + x, 0), d),
+        capital: part('capital'),
+        interest: part('interest'),
+        catchUpFee: part('catchUpFee'),
+      };
+    });
+    for (const c of closings) {
+      add('info', `Equalization from Closing ${c.closingNo}: ${fmt(c.paid)} collected from late investors, ${fmt(c.credited)} credited to earlier investors.`);
+    }
+    equalization = { closings, total: round(closings.reduce((t, c) => t + c.paid - c.credited, 0), d) };
   }
 
   // -------------------------------------------------------------------------
@@ -405,7 +508,25 @@ export function compute(model: CallModel): ComputeResult {
     goldenDiffs,
     roster,
     transfers: tr,
-    fee: { basis: feeBasis, defRate, period, grossTotal, offsetTotal, reduces: feeReduces, offsets },
+    fee: {
+      basis: feeBasis,
+      defRate,
+      period,
+      grossTotal,
+      offsetTotal,
+      reduces: feeReduces,
+      offsets,
+      ...(schedule && {
+        schedule: schedule.map((e, i) => ({
+          from: e.from,
+          to: e.to,
+          label: e.label,
+          total: round(active.reduce((t, l) => t + (feeByPeriod[l.LP_ID]?.[i] ?? 0), 0), d),
+        })),
+        notOnRegister,
+      }),
+    },
+    ...(equalization && { equalization }),
     d,
     callDate,
   };

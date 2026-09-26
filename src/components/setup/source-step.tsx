@@ -9,13 +9,19 @@ import { Button } from '@/components/ui/button';
  * Where a call's inputs come from.
  *
  * Four routes, in the order an accountant is likely to want them: their own
- * workbook, typing it in, carrying the register forward from the last call, or
- * the illustrative template for a look around.
+ * workbook, typing it in, the register from the fund — or, for a fund with no
+ * closings, carried forward from the last call — or the illustrative template
+ * for a look around.
+ *
+ * Once a fund has closings only the fund's register is offered: carrying
+ * forward from the last call would miss anyone a later close admitted.
  */
 export function SourceStep({
   onWorkbook,
   onManual,
   onCarryForward,
+  onFundRegister,
+  onDownloadTemplate,
   onTemplate,
   carryForwardFrom,
   readOnly,
@@ -23,6 +29,10 @@ export function SourceStep({
   onWorkbook: (file: File) => void;
   onManual: () => void;
   onCarryForward: () => void;
+  /** Read the register from the fund's closings and calls. Given only once the fund has closings. */
+  onFundRegister?: () => void;
+  /** Download the input workbook, pre-filled with what the call already knows. */
+  onDownloadTemplate: () => void;
   onTemplate: (model: CallModel) => void;
   /** Call number to carry the register forward from, if there is one. */
   carryForwardFrom?: number;
@@ -67,6 +77,13 @@ export function SourceStep({
         </div>
       </div>
 
+      <p style={{ marginTop: 10, fontSize: 13 }}>
+        <button type="button" onClick={onDownloadTemplate} style={linkStyle}>
+          Download the input template
+        </button>{' '}
+        <span className="text-muted">— with the fund&rsquo;s investors and terms already filled in.</span>
+      </p>
+
       <input
         ref={fileInput}
         type="file"
@@ -84,7 +101,11 @@ export function SourceStep({
           Enter inputs manually
         </Button>
 
-        {carryForwardFrom !== undefined && (
+        {onFundRegister ? (
+          <Button variant="primary" onClick={onFundRegister} disabled={readOnly} title="Every investor with a commitment, and what each has paid in, after every closing and issued call">
+            Start from the fund&rsquo;s investors
+          </Button>
+        ) : carryForwardFrom !== undefined && (
           <button
             type="button"
             onClick={onCarryForward}

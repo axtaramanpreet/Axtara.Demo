@@ -12,7 +12,7 @@
  * Everything here is read. Nothing in this file can change a call.
  */
 
-import { compute, num, serialToISO } from '@/engine';
+import { amountDue, compute, equalizationPartsOf, num, serialToISO } from '@/engine';
 import type { CallDetail, Fund, NoticeState, NoticeStatus } from '@/adapters/storage/types';
 
 /** Roughly the point past which a snapshot stops fitting in a request. */
@@ -79,11 +79,19 @@ function describeCall(call: CallDetail) {
       components: Object.fromEntries(
         r.comps.map((c) => [c.name, c.excused ? 'excused' : c.amt]),
       ),
-      Fee_Rate: r.feeRate,
+      // A call billing the fee period by period has no single rate: it names the periods.
+      ...(result.fee.schedule ? { Fee_Periods: result.fee.schedule.map((e) => e.label) } : { Fee_Rate: r.feeRate }),
       Fee_Gross: r.feeGross,
       Fee_Offset: r.feeOffset,
       Fee_Net: r.feeNet,
       Total_Call: r.total,
+      // Cash on top of the call from a later closing's equalization, and what is wired.
+      ...(result.equalization
+        ? (() => {
+            const p = equalizationPartsOf(call.model.equalizationSchedule, r.LP_ID, result.d);
+            return { Eq_Capital: p.capital, Eq_Interest: p.interest, Eq_Catch_Up_Fee: p.catchUpFee, Equalization: r.equalization ?? 0, Amount_Due: amountDue(r, result.d) };
+          })()
+        : {}),
       Reduces_Unfunded: r.reduces,
       Closing_UCC: r.closingUCC,
       Closing_Paid_In: r.closingPaid,
@@ -91,6 +99,7 @@ function describeCall(call: CallDetail) {
       notice_sent_at: notices.get(r.LP_ID)?.sentAt ?? null,
     })),
     totals: result.totals,
+    ...(result.equalization ? { equalization: result.equalization } : {}),
     checks: result.checks,
     expected_output_differences: result.goldenDiffs,
     // Counted here rather than left for the model to work out by scanning the

@@ -6,6 +6,7 @@ import { getServerSupabase } from '@/lib/supabase/server';
 import { AppShell } from '@/components/shell/app-shell';
 import { CallScreen } from '@/components/call/call-screen';
 import { askStatusForClient, emailStatusForClient } from '@/lib/env';
+import { fundGates } from '@/lib/fund-gates';
 
 /**
  * One capital call: Summary, Allocation, Checks and Notices.
@@ -22,10 +23,12 @@ export default async function CallPage({
   const supabase = await getServerSupabase();
   const repo = createSupabaseRepository(supabase as unknown as SupabaseClient);
 
-  const [funds, call, calls] = await Promise.all([
+  const [funds, call, calls, fundTerms, progress] = await Promise.all([
     repo.listFunds(),
     repo.getCall(callId),
     repo.listCalls(fundId),
+    repo.listFundTerms(fundId),
+    repo.getFundProgress(fundId),
   ]);
   if (!call) notFound();
 
@@ -42,9 +45,10 @@ export default async function CallPage({
       callNo={call.callNo}
       preparedBy={call.model.setup.Prepared_By as string | undefined}
       askConnected={askStatusForClient().connected}
+      gates={fundGates(progress)}
     >
       <Suspense fallback={<p className="text-muted">Loading…</p>}>
-        <CallScreen call={call} fundId={fundId} email={emailStatusForClient()} />
+        <CallScreen call={call} fundId={fundId} email={emailStatusForClient()} fundTerms={fundTerms} />
       </Suspense>
     </AppShell>
   );

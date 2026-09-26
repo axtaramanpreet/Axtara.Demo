@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useTransition } from 'react';
 import { compute } from '@/engine';
 import type { CallDetail } from '@/adapters/storage/types';
+import type { FundTerms } from '@/engine';
 import { fmtDate, serialToISO } from '@/engine';
 import { Button } from '@/components/ui/button';
 import { StageTag } from '@/components/ui/tag';
@@ -31,11 +32,14 @@ export function CallScreen({
   call,
   fundId,
   email,
+  fundTerms = [],
 }: {
   call: CallDetail;
   fundId: string;
   /** Whether notices can be emailed, and whether they are being redirected. */
   email: { configured: boolean; overrideTo: string | null };
+  /** The fund's terms, for the payment instructions on each notice. */
+  fundTerms?: FundTerms[];
 }) {
   const router = useRouter();
   const [isNavigating, startNavigation] = useTransition();
@@ -128,6 +132,7 @@ export function CallScreen({
           email={email}
           selectedLp={selectedLp}
           onSelect={(lpId) => go('notices', lpId)}
+          fundTerms={fundTerms}
         />
       )}
       </div>

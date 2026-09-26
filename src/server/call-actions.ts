@@ -17,12 +17,32 @@
  *    always be recovered, whatever the inputs look like later.
  */
 
-import { buildNotice, compute, round } from '@/engine';
+import {
+  buildEqualizationSchedule,
+  buildFeeSchedule,
+  buildNotice,
+  callFeePeriod,
+  compute,
+  equalizationOwed,
+  equalizationScheduleDifferences,
+  feeAlreadyCharged,
+  feeFraction,
+  feeOwed,
+  feeScheduleDifferences,
+  fmt,
+  paymentFor,
+  positionFromRecord,
+  registerDifferences,
+  round,
+  serialToISO,
+  termsOn,
+  unsettledClosings,
+} from '@/engine';
 import { approvableLpIds, canApprove, sendableLpIds } from './notice-policy';
 import { createServiceSupabase } from '@/adapters/storage/supabase-client';
 import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
 import type { SupabaseClient } from '@/adapters/storage/supabase-client';
-import { getServerSupabase } from '@/lib/supabase/server';
+import { userSupabase, type UserSupabase } from './session';
 import type { Json } from '@/adapters/storage/database.types';
 import type { ComputeResult } from '@/engine';
 import { deliver } from './email';
@@ -30,9 +50,7 @@ import { emailEnv } from '@/lib/env';
 import { noticeEmail } from './notice-email';
 import { renderNoticePdf } from './notice-pdf';
 
-/** Identifies the engine that produced a snapshot, for later reconciliation. */
-const ENGINE_VERSION =
-  process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.ENGINE_VERSION ?? 'dev';
+import { ENGINE_VERSION } from './engine-version';
 
 /**
  * Prepare a value for a JSONB column.
@@ -61,8 +79,8 @@ export class ActionError extends Error {
  * see; a call they cannot read is reported as missing rather than forbidden,
  * which avoids confirming that someone else's call exists.
  */
-async function loadAuthorised(callId: string) {
-  const userClient = await getServerSupabase();
+async function loadAuthorised(callId: string, client?: UserSupabase) {
+  const userClient = await userSupabase(client);
 
   const {
     data: { user },
@@ -84,19 +102,89 @@ async function loadAuthorised(callId: string) {
 }
 
 /**
+ * What stops this call being issued that the call's own checks cannot see: it
+ * belongs to a fund, and the fund's record — closings, earlier calls, terms —
+ * has to agree with it. Empty when it does.
+ */
+async function recordProblems(
+  userClient: UserSupabase,
+  call: Awaited<ReturnType<typeof loadAuthorised>>['call'],
+): Promise<string[]> {
+  const repo = createSupabaseRepository(userClient as unknown as SupabaseClient);
+  const [terms, closings, issued] = await Promise.all([
+    repo.listFundTerms(call.fundId),
+    repo.listClosings(call.fundId),
+    repo.listIssuedCalls(call.fundId),
+  ]);
+  const callDate = serialToISO(call.model.setup.Call_Date);
+  const problems: string[] = [];
+  if (terms.length && !termsOn(terms, callDate || '0001-01-01')) {
+    problems.push(`No fund terms are in force on the call date (${callDate || 'not set'}).`);
+  }
+  const before = { terms, closings, calls: issued.filter((c) => c.callNo !== call.callNo) };
+  problems.push(...registerDifferences(before, call.model.lps, callDate).map((d) => d.text));
+
+  if (positionFromRecord(before, callDate || '9999-12-31')) {
+    // A fund with closings bills its fee period by period, from the record:
+    // the call names its periods, and what it bills must still be what they owe.
+    const schedule = call.model.feeSchedule;
+    if (!schedule) {
+      problems.push('Choose the fee periods this call bills, on its Management fee step.');
+    } else if (schedule.length) {
+      const through = [callDate, ...schedule.map((e) => e.to)].sort().at(-1)!;
+      const fresh = buildFeeSchedule(feeOwed(before, through, call.callNo), schedule);
+      problems.push(...feeScheduleDifferences(schedule, fresh));
+    }
+  } else {
+    // A fund without closings charges rate × share of a year, once a period:
+    // a second call in it leaves the fee out.
+    const charges = String(call.model.setup.Charge_Mgmt_Fee ?? '').trim().toUpperCase() !== 'N';
+    const period = callFeePeriod(callDate, feeFraction(call.model));
+    if (charges && period) {
+      for (const c of feeAlreadyCharged(before.calls, period, call.callNo)) {
+        problems.push(
+          `${period.label}'s management fee was already charged on Call No. ${c.callNo} (${fmt(c.fee)}). Leave the fee out of this call, or it is billed twice.`,
+        );
+      }
+    }
+  }
+
+  // A later closing's equalization is owed on the call date. Settled on a call,
+  // this one must carry exactly what is still owed; not yet chosen, nothing
+  // would ask for it, so the choice comes first.
+  const on = callDate || '9999-12-31';
+  for (const c of unsettledClosings(before, on)) {
+    problems.push(
+      `Choose how Closing ${c.closingNo}'s equalization is settled, on Closings: it is owed, and nothing asks for it yet.`,
+    );
+  }
+  const owed = equalizationOwed(before, on, call.callNo);
+  const carried = call.model.equalizationSchedule ?? [];
+  if (owed.length || carried.length) {
+    problems.push(...equalizationScheduleDifferences(carried, buildEqualizationSchedule(owed)));
+  }
+  return problems;
+}
+
+/**
  * Move drafts to approved.
  *
  * Refused outright while any check is failing — approval is the point at which
  * a human takes responsibility for the figures, and it should not be possible
  * to take that step over a failing tie-out.
  */
-export async function approveNotices(callId: string, lpIds?: string[]) {
-  const { call, user } = await loadAuthorised(callId);
+export async function approveNotices(callId: string, lpIds?: string[], options: { client?: UserSupabase } = {}) {
+  const { call, user, userClient } = await loadAuthorised(callId, options.client);
 
   const result = compute(call.model);
 
   const decision = canApprove(result.checks);
   if (!decision.ok) throw new ActionError(decision.reason, 409);
+
+  const problems = await recordProblems(userClient, call);
+  if (problems.length) {
+    throw new ActionError(`This call disagrees with the fund's record: ${problems.join(' ')}`, 409);
+  }
 
   // Drafts only, so approving can never reach a notice that has already gone
   // out and put it back in line to be sent again.
@@ -124,8 +212,8 @@ export async function approveNotices(callId: string, lpIds?: string[]) {
 }
 
 /** Send a notice back to draft. Only possible while it has not gone out. */
-export async function revertNotices(callId: string, lpIds: string[]) {
-  const { call, user } = await loadAuthorised(callId);
+export async function revertNotices(callId: string, lpIds: string[], options: { client?: UserSupabase } = {}) {
+  const { call, user } = await loadAuthorised(callId, options.client);
   const service = createServiceSupabase();
   const investors = await investorIdsByLp(service, call.fundId, lpIds);
 
@@ -148,12 +236,32 @@ export async function revertNotices(callId: string, lpIds: string[]) {
  * investor's notice exactly as it stood at that moment. Sending the first
  * notice locks the call, which the database enforces by trigger.
  */
-export async function sendNotices(callId: string, lpIds?: string[]) {
-  const { call, user } = await loadAuthorised(callId);
+export async function sendNotices(
+  callId: string,
+  lpIds?: string[],
+  options: {
+    client?: UserSupabase;
+    /**
+     * False to issue without emailing: the notices are sent as far as the
+     * record goes, and delivery is left unattempted rather than failed.
+     */
+    deliver?: boolean;
+  } = {},
+) {
+  const { call, user, userClient } = await loadAuthorised(callId, options.client);
 
   const result = compute(call.model);
+  // Payment instructions are the fund's, in force on the call date, and are
+  // frozen into each notice with the rest of it.
+  const terms = await createSupabaseRepository(userClient as unknown as SupabaseClient).listFundTerms(call.fundId);
+  const callDate = serialToISO(call.model.setup.Call_Date);
+  const payment = (lpId: string) => paymentFor(terms, callDate, lpId, call.callNo);
   if (result.checks.some((c) => c.level === 'fail')) {
     throw new ActionError('This call has failing checks and cannot be issued.', 409);
+  }
+  const problems = await recordProblems(userClient, call);
+  if (problems.length) {
+    throw new ActionError(`This call disagrees with the fund's record: ${problems.join(' ')}`, 409);
   }
 
   // Only what is already approved may go out, so sending can never skip review.
@@ -193,7 +301,7 @@ export async function sendNotices(callId: string, lpIds?: string[]) {
       sent_by: user.id,
       sent_to_email: (row.Contact_Email as string) || null,
       // Stored as rendered, not as a promise to re-render it the same way.
-      payload: asJson(buildNotice(call.model, result, row)),
+      payload: asJson(buildNotice(call.model, result, row, { payment: payment(lpId) })),
       result_id: snapshot.id,
     };
   });
@@ -207,7 +315,10 @@ export async function sendNotices(callId: string, lpIds?: string[]) {
   // record of what the fund called must not depend on whether a mail provider
   // was reachable, and a failed delivery has to be retryable without issuing
   // the call again — which is impossible, by design.
-  const delivery = await deliverNotices(service, call, result, targets, investors);
+  const delivery =
+    options.deliver === false
+      ? { delivered: 0, failed: 0, errors: [] as string[] }
+      : await deliverNotices(service, call, result, targets, investors, payment);
 
   await audit(service, call, user.id, 'notices.sent', {
     lpIds: targets,
@@ -216,6 +327,7 @@ export async function sendNotices(callId: string, lpIds?: string[]) {
     engineVersion: ENGINE_VERSION,
     delivered: delivery.delivered,
     failed: delivery.failed,
+    emailed: options.deliver !== false,
   });
 
   return {
@@ -241,6 +353,7 @@ async function deliverNotices(
   result: ComputeResult,
   targets: string[],
   investors: Record<string, string>,
+  payment: (lpId: string) => { label: string; value: string }[] | null,
 ): Promise<{ delivered: number; failed: number; errors: string[] }> {
   let delivered = 0;
   let failed = 0;
@@ -250,6 +363,14 @@ async function deliverNotices(
   // Every send is going to one test address, so what the register holds — or
   // does not hold — cannot reach an investor.
   const redirected = Boolean(emailEnv()?.overrideTo);
+
+  // Everyone else on each investor's profile who gets a copy.
+  const { data: profiles } = await service
+    .from('investors')
+    .select('lp_id, cc_emails')
+    .eq('fund_id', call.fundId)
+    .in('lp_id', targets);
+  const copies = new Map((profiles ?? []).map((p) => [p.lp_id, p.cc_emails ?? []]));
 
   for (const lpId of targets) {
     const row = result.rows.find((r) => r.LP_ID === lpId)!;
@@ -275,11 +396,11 @@ async function deliverNotices(
         email_delivered_to: null,
       };
     } else {
-      const notice = buildNotice(call.model, result, row);
+      const notice = buildNotice(call.model, result, row, { payment: payment(lpId) });
       const pdf = await renderNoticePdf(notice, 'sent', attemptedAt);
       // `deliver` replaces this with the override when one is set; passing the
       // empty string is only reached in that case.
-      const sent = await deliver(noticeEmail(notice, pdf, address));
+      const sent = await deliver(noticeEmail(notice, pdf, address, copies.get(lpId) ?? []));
 
       outcome = sent.ok
         ? {

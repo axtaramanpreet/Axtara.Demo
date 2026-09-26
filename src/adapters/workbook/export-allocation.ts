@@ -11,13 +11,16 @@
  */
 
 import type { CallDetail } from '@/adapters/storage/types';
-import { num, type ComputeResult } from '@/engine';
+import { amountDue, equalizationPartsOf, num, round, type ComputeResult, scheduleLabel } from '@/engine';
 
 /** Build the workbook and hand it to the browser as a download. */
 export async function exportAllocation(call: CallDetail, result: ComputeResult): Promise<void> {
   const XLSX = await import('xlsx');
 
   const components = call.model.components.filter((c) => c.Component_ID);
+  // Columns for a later closing's equalization only on a call that settles some,
+  // so every other export keeps the Expected_Output shape exactly.
+  const eq = result.equalization;
   const header = [
     'LP_ID',
     'LP_Name',
@@ -25,11 +28,12 @@ export async function exportAllocation(call: CallDetail, result: ComputeResult):
     'Opening_UCC',
     'Opening_Paid_In',
     ...components.map((c) => String(c.Component_Name)),
-    'Fee_Rate',
+    result.fee.schedule ? 'Fee_Periods' : 'Fee_Rate',
     'Fee_Gross',
     'Fee_Offset',
     'Fee_Net',
     'Total_Call',
+    ...(eq ? ['Eq_Capital', 'Eq_Interest', 'Eq_Catch_Up_Fee', 'Equalization', 'Amount_Due'] : []),
     'Reduces_Unfunded_Amt',
     'Closing_UCC',
     'Closing_Paid_In',
@@ -47,11 +51,17 @@ export async function exportAllocation(call: CallDetail, result: ComputeResult):
       // Written as text, so a reader cannot mistake an excusal for a zero.
       return cell?.excused ? 'excused' : (cell?.amt ?? 0);
     }),
-    row.feeRate,
+    result.fee.schedule ? scheduleLabel(result.fee.schedule) : row.feeRate,
     row.feeGross,
     row.feeOffset,
     row.feeNet,
     row.total,
+    ...(eq
+      ? (() => {
+          const p = equalizationPartsOf(call.model.equalizationSchedule, row.LP_ID, result.d);
+          return [p.capital, p.interest, p.catchUpFee, row.equalization ?? 0, amountDue(row, result.d)];
+        })()
+      : []),
     row.reduces,
     row.closingUCC,
     row.closingPaid,
@@ -70,6 +80,15 @@ export async function exportAllocation(call: CallDetail, result: ComputeResult):
     result.totals.feeOffset,
     result.totals.feeNet,
     result.totals.total,
+    ...(eq
+      ? [
+          round(eq.closings.reduce((t, c) => t + c.capital, 0), result.d),
+          round(eq.closings.reduce((t, c) => t + c.interest, 0), result.d),
+          round(eq.closings.reduce((t, c) => t + c.catchUpFee, 0), result.d),
+          eq.total,
+          round(result.totals.total + eq.total, result.d),
+        ]
+      : []),
     result.totals.reduces,
     result.totals.closingUCC,
     result.totals.closingPaid,

@@ -14,7 +14,8 @@
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
     "db:types": "supabase gen types typescript --local > src/adapters/storage/database.types.ts",
-    "verify": "tsc -p tsconfig.check.json --noEmit && eslint src --max-warnings=0 && vitest run"
+    "verify": "tsc -p tsconfig.check.json --noEmit && eslint src scripts --max-warnings=0 && vitest run",
+    "demo:reset": "vitest run --config vitest.demo.config.mts"
   },
   "dependencies": {
     "@anthropic-ai/foundry-sdk": "^0.4.8",

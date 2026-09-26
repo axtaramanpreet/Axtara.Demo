@@ -46,6 +46,12 @@ const WORDING = ['gp', 'salutation', 'subject', 'intro', 'closing', 'signOff'] a
 function figuresOf(notice: NoticeData | Record<string, unknown>) {
   const rest = { ...(notice as Record<string, unknown>) };
   for (const key of WORDING) delete rest[key];
+  // Payment instructions come from the fund's terms, which the handoff engine
+  // never had. With no terms passed there are none — asserted, not assumed.
+  if ('payment' in rest) {
+    expect(rest.payment).toBeNull();
+    delete rest.payment;
+  }
   return rest;
 }
 

@@ -193,3 +193,30 @@ describe('the undo looks as live as it is', () => {
     style.remove();
   });
 });
+
+describe('an investor with nowhere to send the notice', () => {
+  const withoutEmail = (overrideTo: string | null) => {
+    const model = structuredClone(ILLUSTRATIVE_FUND);
+    model.lps = model.lps.map((l) => (l.LP_ID === 'LP02' ? { ...l, Contact_Email: '' } : l));
+    const computed = compute(model);
+    const call = {
+      id: 'call-1', fundId: 'fund-1', callNo: 2, stage: 'in_progress', lockedAt: null,
+      sources: { setup: 'template', lps: 'template', components: 'template', fee: 'template', transfers: 'template' },
+      sourceFileName: null, model,
+      notices: computed.rows.filter((r) => r.isActive).map((r) => notice(r.LP_ID, 'draft')),
+    } as unknown as CallDetail;
+    return render(<NoticesTab call={call} result={computed} email={{ configured: true, overrideTo }} onSelect={() => {}} />);
+  };
+
+  it('is named before anything is sent, with the way to fix it', () => {
+    withoutEmail(null);
+    expect(screen.getByText('No notices email')).toBeTruthy();
+    expect(screen.getByText(/LP02 has no address to send to/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Investors' }).getAttribute('href')).toBe('/funds/fund-1/investors');
+  });
+
+  it('is not flagged while every notice goes to the test address', () => {
+    withoutEmail('tester@axtara.example');
+    expect(screen.queryByText('No notices email')).toBeNull();
+  });
+});

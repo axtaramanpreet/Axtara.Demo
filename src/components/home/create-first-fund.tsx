@@ -1,53 +1,25 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
-import { createBrowserSupabase } from '@/adapters/storage/supabase-client';
-import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { NewFundDialog } from './new-fund-dialog';
 
 /**
  * Creating the very first fund.
  *
- * The header carries the same action, but the header only renders on a fund's
+ * The sidebar carries the same action, but the sidebar only renders on a fund's
  * own pages — so before there is a fund there is nowhere to click, and the
  * empty state has to carry its own way out. Without this the first sign-in is a
  * dead end: an account with a client, no funds, and no control that makes one.
  */
 export function CreateFirstFund() {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  async function onCreate() {
-    const name = window.prompt('Name of the fund', 'Illustrative Fund I, L.P.');
-    if (!name?.trim()) return;
-
-    setError(null);
-    try {
-      const repo = createSupabaseRepository(createBrowserSupabase());
-      const created = await repo.createFund(name.trim());
-      startTransition(() => {
-        router.push(`/funds/${created.id}`);
-        router.refresh();
-      });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not create the fund.');
-    }
-  }
-
+  const [open, setOpen] = useState(false);
   return (
-    <div style={{ display: 'grid', gap: 10, marginTop: 18 }}>
-      <div>
-        <Button onClick={onCreate} disabled={pending}>
-          {pending ? 'Creating…' : 'Create the first fund'}
-        </Button>
-      </div>
-      {error ? (
-        <p role="alert" style={{ color: 'var(--destructive)', fontSize: 13, margin: 0 }}>
-          {error}
-        </p>
-      ) : null}
+    <div style={{ marginTop: 18 }}>
+      <Button variant="primary" onClick={() => setOpen(true)}>
+        Create the first fund
+      </Button>
+      {open && <NewFundDialog onClose={() => setOpen(false)} />}
     </div>
   );
 }

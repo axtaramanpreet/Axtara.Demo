@@ -1,17 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState, useTransition } from 'react';
-import { createBrowserSupabase } from '@/adapters/storage/supabase-client';
-import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
+import { useEffect, useRef, useState } from 'react';
 import type { Fund } from '@/adapters/storage/types';
 import { fundCode } from '@/lib/fund-code';
 import { BrandMark, Wordmark } from '@/components/ui/wordmark';
-import { CallsIcon, ChevronDown, ChevronRight, InvestorsIcon, SettingsIcon } from './icons';
+import { NewFundDialog } from '@/components/home/new-fund-dialog';
+import { CallsIcon, ChevronDown, InvestorsIcon, SettingsIcon, ClosingsIcon, FeesIcon, LockIcon } from './icons';
+import { NO_GATES, type FundGates } from '@/lib/fund-gates';
 
 /** Which sidebar entry is lit. */
-export type Module = 'capital-calls' | 'investors' | 'settings';
+export type Module = 'capital-calls' | 'closings' | 'fees' | 'investors' | 'settings';
 
 /**
  * The sidebar.
@@ -20,25 +19,26 @@ export type Module = 'capital-calls' | 'investors' | 'settings';
  * rather than in the page because a capital call belongs to exactly one fund,
  * and switching fund is switching everything below it.
  *
- * "Soon" entries are honest rather than hidden: the page they open says what is
- * coming, which is better than a nav that pretends the product is finished.
+ * A step not open yet stays in the list, dimmed and locked, with the reason
+ * on hover: its page says what comes first.
  */
 export function Sidebar({
   funds,
   fundId,
   module,
   callCount,
+  gates = NO_GATES,
 }: {
   funds: Fund[];
   fundId: string;
   module: Module;
   /** How many calls this fund has, shown under its name. */
   callCount: number;
+  /** Which steps are not open yet, and why. */
+  gates?: FundGates;
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const wrapper = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
 
@@ -65,24 +65,6 @@ export function Sidebar({
     };
   }, [open]);
 
-  async function onNewFund() {
-    setOpen(false);
-    const asked = window.prompt('Name of the new fund');
-    if (!asked?.trim()) return;
-
-    setError(null);
-    try {
-      const repo = createSupabaseRepository(createBrowserSupabase());
-      const created = await repo.createFund(asked.trim());
-      startTransition(() => {
-        router.push(`/funds/${created.id}`);
-        router.refresh();
-      });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not create the fund.');
-    }
-  }
-
   return (
     <aside className="side" data-noprint="1">
       <div className="ws" ref={wrapper}>
@@ -93,7 +75,6 @@ export function Sidebar({
           title="Switch fund"
           aria-haspopup="menu"
           aria-expanded={open}
-          disabled={pending}
           onClick={() => setOpen((v) => !v)}
         >
           <span className="ws-tile">{fundCode(name)}</span>
@@ -131,7 +112,15 @@ export function Sidebar({
               </Link>
             ))}
             <div className="ws-sep" />
-            <button type="button" role="menuitem" className="ws-item add" onClick={onNewFund}>
+            <button
+              type="button"
+              role="menuitem"
+              className="ws-item add"
+              onClick={() => {
+                setOpen(false);
+                setCreating(true);
+              }}
+            >
               <span style={{ width: 22, textAlign: 'center', fontSize: 16, lineHeight: 1 }}>+</span>
               New fund
             </button>
@@ -139,39 +128,18 @@ export function Sidebar({
         )}
       </div>
 
-      {error && (
-        <p role="alert" style={{ color: 'var(--destructive)', fontSize: 12, padding: '0 10px' }}>
-          {error}
-        </p>
-      )}
+      {creating && <NewFundDialog existingNames={funds.map((f) => f.name)} onClose={() => setCreating(false)} />}
 
-      <div className="nav-group">Fund operations</div>
-      <Link
-        href={`/funds/${fundId}`}
-        className={['nav-item', module === 'capital-calls' ? 'on' : ''].filter(Boolean).join(' ')}
-        title="Capital calls"
-      >
-        <CallsIcon />
-        <span>Capital calls</span>
-        <ChevronRight className="chev" />
-      </Link>
+      {/* In the order a new fund is set up and then run: its terms, its
+          investors, who committed at each close, then the calls and fees. */}
+      <div className="nav-group">Set up</div>
+      <NavItem href={`/funds/${fundId}/settings`} on={module === 'settings'} icon={<SettingsIcon />} label="Fund terms" title="Fund terms — from the LPA" />
+      <NavItem href={`/funds/${fundId}/investors`} on={module === 'investors'} icon={<InvestorsIcon />} label="Investors" title="Investors — the fund's register" />
+      <NavItem href={`/funds/${fundId}/closings`} on={module === 'closings'} icon={<ClosingsIcon />} label="Closings" title="Closings and equalization" locked={gates.closings} />
 
-      <div className="nav-group">Administration</div>
-      <SoonItem
-        href={`/funds/${fundId}/investors`}
-        label="Investors"
-        on={module === 'investors'}
-        icon={<InvestorsIcon />}
-        chevron
-      />
-      <Link
-        href={`/funds/${fundId}/settings`}
-        className={['nav-item', module === 'settings' ? 'on' : ''].filter(Boolean).join(' ')}
-        title="Settings — the fund's terms"
-      >
-        <SettingsIcon />
-        <span>Settings</span>
-      </Link>
+      <div className="nav-group">Operations</div>
+      <NavItem href={`/funds/${fundId}`} on={module === 'capital-calls'} icon={<CallsIcon />} label="Capital calls" title="Capital calls" locked={gates.calls} />
+      <NavItem href={`/funds/${fundId}/fees`} on={module === 'fees'} icon={<FeesIcon />} label="Management fees" title="Management fees" locked={gates.fees} />
 
       <div className="side-foot">
         {/* The one brand mark in the product. The handoff put "Fund
@@ -187,30 +155,34 @@ export function Sidebar({
   );
 }
 
-/** A nav entry for a module that is named but not built. */
-function SoonItem({
+/**
+ * One entry. A locked one is still a link — its page says what comes first and
+ * links back to it — but reads as not open yet.
+ */
+function NavItem({
   href,
-  label,
   on,
   icon,
-  chevron,
+  label,
+  title,
+  locked,
 }: {
   href: string;
-  label: string;
   on: boolean;
   icon: React.ReactNode;
-  chevron?: boolean;
+  label: string;
+  title: string;
+  locked?: string | null;
 }) {
   return (
     <Link
       href={href}
-      className={['nav-item', 'dim', on ? 'on' : ''].filter(Boolean).join(' ')}
-      title={`${label} — not built yet`}
+      className={['nav-item', on ? 'on' : '', locked ? 'dim' : ''].filter(Boolean).join(' ')}
+      title={locked ? `${title} — ${locked}` : title}
     >
       {icon}
       <span>{label}</span>
-      <em className="soon">Soon</em>
-      {chevron && <ChevronRight className="chev" />}
+      {locked && <LockIcon />}
     </Link>
   );
 }

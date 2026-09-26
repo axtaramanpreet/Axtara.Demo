@@ -1,3 +1,5 @@
+import { CATEGORIES } from '@/engine/categories';
+
 /**
  * The shape of the accountant's input template.
  *
@@ -16,11 +18,17 @@ export interface ColumnDef {
   num?: boolean;
   /** id of a `<datalist>` supplying suggestions for this column. */
   list?: string;
+  /** Picked from these and nothing else: what the value decides is not left to spelling. */
+  options?: readonly string[];
 }
 
 /** A field in one of the Field / Value / Notes tables. */
 export interface FieldDef {
   key: string;
+  /** What the screen calls it. The key stays the workbook's column name. */
+  label: string;
+  /** Set for the call, not typed: the call's number, the fund's name. */
+  auto?: string;
   /** Shown in the Notes column, explaining the field to the accountant. */
   note: string;
   num?: boolean;
@@ -51,8 +59,8 @@ export const LP_COLUMNS: ColumnDef[] = [
 
 export const COMPONENT_COLUMNS: ColumnDef[] = [
   { key: 'Component_ID', w: 70 },
-  { key: 'Component_Name', w: 200 },
-  { key: 'Category', w: 170, list: 'dl-category' },
+  { key: 'Component_Name', w: 200, list: 'dl-component-names' },
+  { key: 'Category', w: 190, options: CATEGORIES },
   { key: 'Total_Amount', w: 130, num: true },
   { key: 'Allocation_Basis', w: 130, list: 'dl-basis' },
   { key: 'Reduces_Unfunded', w: 70, list: 'dl-yn' },
@@ -82,33 +90,34 @@ export const OFFSET_COLUMNS: ColumnDef[] = [
 ];
 
 export const SETUP_FIELDS: FieldDef[] = [
-  { key: 'Fund_Name', note: 'Shown on every notice.' },
-  { key: 'GP_Name', note: 'The general partner, named in the notice letter.' },
-  { key: 'Reporting_Currency', note: 'ISO code.', pick: 'currency' },
-  { key: 'Call_Number', note: 'Increment each call.', num: true },
-  { key: 'Call_Date', note: 'Effective date of the call (YYYY-MM-DD).', type: 'date' },
-  { key: 'Payment_Due_Date', note: 'When LP wires are due.', type: 'date' },
+  { key: 'Fund_Name', label: 'Fund name', auto: "The fund's own name.", note: 'Shown on every notice.' },
+  { key: 'GP_Name', label: 'General partner', note: 'The general partner, named in the notice letter.' },
+  { key: 'Reporting_Currency', label: 'Currency', note: 'ISO code.', pick: 'currency' },
+  { key: 'Call_Number', label: 'Call number', auto: "Numbered in order within the fund.", note: 'Increment each call.', num: true },
+  { key: 'Call_Date', label: 'Notice date', note: 'Effective date of the call (YYYY-MM-DD).', type: 'date' },
+  { key: 'Payment_Due_Date', label: 'Payment due', note: 'When LP wires are due.', type: 'date' },
   {
     key: 'Default_Mgmt_Fee_Rate_Annual',
+    label: 'Management fee rate',
     note: 'Fraction; 0.02 = 2%. Management_Fee tab wins if set.',
     num: true,
   },
-  { key: 'Default_Mgmt_Fee_Basis', note: 'Commitment | Invested_Capital | NAV.', list: 'dl-basis' },
-  { key: 'Mgmt_Fee_Period_Fraction', note: '0.25 = one quarter.', num: true },
-  { key: 'Org_Expense_Cap', note: 'Cap on organizational expenses.', num: true },
-  { key: 'Rounding_Decimals', note: 'Decimal places for every allocation.', num: true },
-  { key: 'Rounding_Plug_LP_ID', note: 'Absorbs the rounding residual.', pick: 'investor' },
-  { key: 'Signatory_Name', note: 'Who signs the notice. Blank drops the line.' },
-  { key: 'Signatory_Title', note: 'Their title, under the name.' },
-  { key: 'Prepared_By', note: 'Traceability.' },
+  { key: 'Default_Mgmt_Fee_Basis', label: 'Fee charged on', note: 'Commitment | Invested_Capital | NAV.', list: 'dl-basis' },
+  { key: 'Mgmt_Fee_Period_Fraction', label: 'Fee period', note: '0.25 = one quarter.', num: true },
+  { key: 'Org_Expense_Cap', label: 'Organizational expense cap', note: 'Cap on organizational expenses.', num: true },
+  { key: 'Rounding_Decimals', label: 'Rounding decimals', note: 'Decimal places for every allocation.', num: true },
+  { key: 'Rounding_Plug_LP_ID', label: 'Rounding plug', note: 'Absorbs the rounding residual.', pick: 'investor' },
+  { key: 'Signatory_Name', label: 'Signatory', note: 'Who signs the notice. Blank drops the line.' },
+  { key: 'Signatory_Title', label: 'Signatory title', note: 'Their title, under the name.' },
+  { key: 'Prepared_By', label: 'Prepared by', note: 'Traceability.' },
 ];
 
 export const FEE_FIELDS: FieldDef[] = [
-  { key: 'Fee_Basis', note: 'Commitment | Invested_Capital | NAV.', list: 'dl-basis' },
-  { key: 'Default_Fee_Rate_Annual', note: 'Fraction; 0.02 = 2%.', num: true },
-  { key: 'Fee_Period_Fraction', note: 'Portion of annual fee called now.', num: true },
-  { key: 'Reduces_Unfunded', note: 'Y if drawn from commitment.', list: 'dl-yn' },
-  { key: 'Fee_Exempt_LP_IDs', note: 'Comma-separated LP_IDs charged 0%.' },
+  { key: 'Fee_Basis', label: 'Fee charged on', note: 'Commitment | Invested_Capital | NAV.', list: 'dl-basis' },
+  { key: 'Default_Fee_Rate_Annual', label: 'Fee rate', note: 'Fraction; 0.02 = 2%.', num: true },
+  { key: 'Fee_Period_Fraction', label: 'Fee period', note: 'Portion of annual fee called now.', num: true },
+  { key: 'Reduces_Unfunded', label: 'Counts against commitment', note: 'Y if drawn from commitment.', list: 'dl-yn' },
+  { key: 'Fee_Exempt_LP_IDs', label: 'Exempt investors', note: 'Comma-separated LP_IDs charged 0%.' },
 ];
 
 /** Fee keys the parser lifts off the Management_Fee tab. */
@@ -121,6 +130,5 @@ export const DATALISTS: Record<string, string[]> = {
   'dl-lptype': ['LP', 'GP'],
   'dl-status': ['Active', 'Transferred', 'Defaulted'],
   'dl-ttype': ['Full', 'Partial'],
-  'dl-category': ['Deal', 'Partnership Expense', 'Organizational Expense'],
   'dl-offmethod': ['Pro-rata to gross fee', 'Commitment', 'Invested_Capital'],
 };

@@ -64,6 +64,16 @@ describe('the override', () => {
     expect(JSON.stringify(lastBody)).not.toContain('a-real-investor.example');
   });
 
+  it('drops the copies too, so no investor contact is reached', async () => {
+    vi.stubEnv('EMAIL_OVERRIDE_TO', 'tester@axtara.example');
+    stubProvider({ status: 200, body: { id: 'msg-6' } });
+
+    await deliver(noticeEmail(notice, pdf, 'treasury@a-real-investor.example', ['cfo@a-real-investor.example']));
+
+    expect(lastBody?.cc).toBeUndefined();
+    expect(JSON.stringify(lastBody)).not.toContain('a-real-investor.example');
+  });
+
   it('still sends when the register has no address for the investor', async () => {
     // The point of the override is to make testing against real data safe.
     // Refusing over a missing address would block exactly that, and the
@@ -83,6 +93,13 @@ describe('the override', () => {
 
     expect(outcome.ok).toBe(false);
     expect(!outcome.ok && outcome.error).toBe('No address to send to.');
+  });
+
+  it('copies the investor’s other contacts once it is cleared', async () => {
+    stubProvider({ status: 200, body: { id: 'msg-7' } });
+    await deliver(noticeEmail(notice, pdf, 'treasury@investor.example', ['cfo@investor.example', 'treasury@investor.example']));
+    // The main address is not copied to itself.
+    expect(lastBody?.cc).toEqual(['cfo@investor.example']);
   });
 
   it('sends to the investor once it is cleared', async () => {

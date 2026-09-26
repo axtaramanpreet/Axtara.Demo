@@ -12,6 +12,7 @@
  * somebody read out of the fund's agreement.
  */
 
+import { dayAfter } from './dates';
 import type { Cell, CallModel, FeeConfig, FundSetup } from './types';
 
 export type FeeTiming = 'advance' | 'arrears';
@@ -51,6 +52,16 @@ export interface FundTerms {
   catchUpFeeTo: CatchUpFeeTo | null;
   equalizationInterestTo: EqualizationInterestTo | null;
 
+  /** Where investors wire money: printed on every notice and statement. */
+  paymentBankName: string | null;
+  paymentAccountName: string | null;
+  paymentAccountNo: string | null;
+  paymentSwift: string | null;
+  /** ABA, sort code, IFSC or IBAN — whatever the bank's country uses. */
+  paymentRouting: string | null;
+  /** What to quote on the wire. {LP_ID} and {CALL_NO} are filled in per notice; a statement fills {CALL_NO} with EQ and the closing number. */
+  paymentReference: string | null;
+
   note: string | null;
 }
 
@@ -78,6 +89,12 @@ export const BLANK_TERMS: FundTerms = {
   lateCloseInterestBasis: null,
   catchUpFeeTo: null,
   equalizationInterestTo: null,
+  paymentBankName: null,
+  paymentAccountName: null,
+  paymentAccountNo: null,
+  paymentSwift: null,
+  paymentRouting: null,
+  paymentReference: null,
   note: null,
 };
 
@@ -110,9 +127,43 @@ export function termsOn(history: FundTerms[], date: string): FundTerms | null {
 
 /** The settings still blank in these terms, for the screen to flag. */
 export function unsetTerms(terms: FundTerms): (keyof FundTerms)[] {
+  // A term that does not apply (no fee, so no fee basis) is not "unset".
   return (Object.keys(terms) as (keyof FundTerms)[]).filter(
-    (key) => !BOOKKEEPING.has(key) && terms[key] === null,
+    (key) => !BOOKKEEPING.has(key) && terms[key] === null && termApplies(terms, key),
   );
+}
+
+/**
+ * Terms that only mean something once another is set: how a fee is charged
+ * means nothing without a fee, and who receives late-close interest means
+ * nothing without the interest. A rate of zero counts as none.
+ */
+export const DEPENDS_ON: Partial<Record<keyof FundTerms, keyof FundTerms>> = {
+  feeBasis: 'feeRateAnnual',
+  feePeriodFraction: 'feeRateAnnual',
+  feeTiming: 'feeRateAnnual',
+  feeDayCount: 'feeRateAnnual',
+  feeReducesUnfunded: 'feeRateAnnual',
+  catchUpFeeTo: 'feeRateAnnual',
+  lateCloseInterestBasis: 'lateCloseInterestRate',
+  equalizationInterestTo: 'lateCloseInterestRate',
+};
+
+/** Whether a term applies, given the terms it depends on. */
+export function termApplies(terms: Pick<FundTerms, 'feeRateAnnual' | 'lateCloseInterestRate'>, key: keyof FundTerms): boolean {
+  const parent = DEPENDS_ON[key];
+  if (!parent) return true;
+  const value = (terms as Record<string, unknown>)[parent];
+  return value !== null && value !== undefined && value !== 0;
+}
+
+/** The terms with every term that does not apply cleared, so nothing is stored that means nothing. */
+export function withoutOrphans<T extends Omit<FundTerms, 'createdAt'>>(terms: T): T {
+  const out = { ...terms };
+  for (const key of Object.keys(DEPENDS_ON) as (keyof FundTerms)[]) {
+    if (!termApplies(terms, key)) (out as Record<string, unknown>)[key] = null;
+  }
+  return out;
 }
 
 /** Where a term lands in a call. Some land twice: the fee rate is both the
@@ -166,10 +217,12 @@ export interface AppliedTerms {
 /**
  * Put a fund's terms into a call.
  *
- * Only terms that are set are applied, and only those cells are locked; a
- * term still blank in Settings leaves the call's own value alone and editable.
- * So a fund with no terms recorded behaves exactly as before, and recording
- * one term never wipes the rest of a call.
+ * Once a fund has terms, they decide every fund-level cell of a call — the
+ * currency, rounding, the fee and who signs — and every one of those cells is
+ * locked. A term left blank in Fund terms is blank on the call: a workbook
+ * cannot fill it in, and nor can typing on the call. That is what keeps every
+ * call of a fund on the same terms. A fund with no terms recorded (`terms`
+ * null) is left exactly as it was.
  *
  * The rounding plug is not locked: it is picked per call. With `prefillPlug`
  * (a brand-new call) the fund's usual plug fills it if the call has none.
@@ -184,10 +237,12 @@ export function applyFundTerms(
   const changed: AppliedTerms['changed'] = [];
   if (!terms) return { model: next, locked, changed };
 
+  // Every fund-level cell follows the terms — a term left blank there is blank
+  // here too — so a call cannot carry a fee, a signatory or a rounding rule the
+  // fund never recorded, from a workbook or from typing.
   for (const field of TERM_FIELDS) {
     const value = terms[field.term];
-    if (!isSet(value)) continue;
-    const cell = field.toCell ? field.toCell(value as never) : (value as Cell);
+    const cell = !isSet(value) ? '' : field.toCell ? field.toCell(value as never) : (value as Cell);
     for (const ref of field.cells) {
       const target = (ref.step === 'setup' ? next.setup : next.fee) as unknown as Record<string, Cell>;
       const key = String(ref.key);
@@ -260,13 +315,6 @@ export function draftTerms(inForce: FundTerms | null): {
   return { terms, suggested };
 }
 
-/** The calendar day after `date` (YYYY-MM-DD), in UTC. */
-export function dayAfter(date: string): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().slice(0, 10);
-}
-
 /**
  * The fee once the investment period is over, as its own dated row.
  *
@@ -292,16 +340,39 @@ export function afterInvestmentPeriod(
   };
 }
 
-/** The calendar day before `date` (YYYY-MM-DD), in UTC. */
-export function dayBefore(date: string): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
-
 /** Rows that start after `date`: changes already recorded but not yet in force. */
 export function scheduledAfter(history: FundTerms[], date: string): FundTerms[] {
   return history
     .filter((row) => row.effectiveFrom > date)
     .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom) || a.createdAt.localeCompare(b.createdAt));
+}
+
+/** Payment instructions as they print, with the reference filled in. Null until a bank and account are set. */
+export function paymentInstructions(
+  terms: FundTerms | null,
+  fill: { lpId: string; callNo?: string | number },
+): { label: string; value: string }[] | null {
+  if (!terms?.paymentBankName || !terms.paymentAccountNo) return null;
+  const reference = (terms.paymentReference ?? '{LP_ID}')
+    .replaceAll('{LP_ID}', fill.lpId)
+    .replaceAll('{CALL_NO}', fill.callNo === undefined ? '' : String(fill.callNo))
+    .trim();
+  return [
+    { label: 'Bank', value: terms.paymentBankName },
+    { label: 'Account name', value: terms.paymentAccountName ?? '' },
+    { label: 'Account number', value: terms.paymentAccountNo },
+    { label: 'SWIFT / BIC', value: terms.paymentSwift ?? '' },
+    { label: 'Routing', value: terms.paymentRouting ?? '' },
+    { label: 'Reference', value: reference },
+  ].filter((l) => l.value);
+}
+
+/** The payment instructions for one investor on one call: the fund's terms in force on the call date. */
+export function paymentFor(
+  history: FundTerms[],
+  callDate: string,
+  lpId: string,
+  callNo: string | number,
+): { label: string; value: string }[] | null {
+  return paymentInstructions(termsOn(history, callDate || '9999-12-31'), { lpId, callNo });
 }

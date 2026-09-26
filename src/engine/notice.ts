@@ -7,6 +7,9 @@
  * than written by hand.
  */
 
+import { isDeal } from './categories';
+import { amountDue } from './equalization-billing';
+import { scheduleLabel } from './fee-billing';
 import { fmt, fmtDate, num, pct, serialToISO } from './format';
 import type { CallModel, ComputeResult, ComputedRow } from './types';
 
@@ -26,6 +29,16 @@ export interface NoticeAccountLine {
   amt: string;
   /** True for the ruled, bold subtotal lines. */
   strong?: boolean;
+}
+
+/** One later closing's equalization on a notice: its parts, then its total. + to pay, − credited. */
+export interface NoticeEqualization {
+  /** "Equalization — Closing 2 (2 May 2022)" */
+  label: string;
+  mark: string;
+  /** The parts that are not nothing, each labelled for this investor's side of it. */
+  parts: { label: string; amt: string }[];
+  total: string;
 }
 
 export interface NoticeFootnote {
@@ -53,7 +66,17 @@ export interface NoticeData {
   callNo: string | number;
   callDate: string;
   dueDate: string;
+  /**
+   * The amount to wire: what the call draws, plus any equalization it settles.
+   * When `payableToYou`, the fund pays it to the investor instead.
+   */
   total: string;
+  /** An equalization credit larger than the call: the fund pays `total` to the investor. Only then. */
+  payableToYou?: true;
+  /** What the call itself draws, before equalization. Only when it settles some. */
+  called?: string;
+  /** Each later closing's equalization settled on this notice, taken apart. Only when it settles some. */
+  equalization?: NoticeEqualization[];
   /** Lines called against capital commitment. */
   inside: NoticeLine[];
   /** Lines called outside capital commitment. */
@@ -62,6 +85,11 @@ export interface NoticeData {
   subtotalInside: string;
   account: NoticeAccountLine[];
   notes: NoticeFootnote[];
+  /**
+   * Where to wire, from the fund's terms, with this investor's reference filled
+   * in. Null until the fund has a bank and an account number.
+   */
+  payment: { label: string; value: string }[] | null;
 }
 
 /** Superscript markers for footnotes, falling back to `(10)` past nine. */
@@ -85,6 +113,7 @@ export function buildNotice(
   model: CallModel,
   result: ComputeResult,
   row: ComputedRow,
+  options: { payment?: { label: string; value: string }[] | null } = {},
 ): NoticeData {
   const { setup } = model;
   const cur = setup.Reporting_Currency || 'USD';
@@ -125,12 +154,33 @@ export function buildNotice(
         BASIS_TEXT[c.basis] || BASIS_TEXT.Commitment
       }.`,
     );
-    const label = (c.category === 'Deal' ? 'Investment — ' : '') + c.name;
+    const label = (isDeal(c.category) ? 'Investment — ' : '') + c.name;
     (c.reduces ? inside : outside).push({ label, mark: sup(n), amt: fmt(c.amt), neg: false });
   });
 
   // The fee, and its offset shown as a negative line directly beneath.
-  if (row.feeGross || row.feeOffset) {
+  const schedule = result.fee.schedule;
+  if ((row.feeGross || row.feeOffset) && schedule) {
+    // Billed period by period: say which periods, and this investor's fee for
+    // each. No single rate: a step-down or a late close varies it inside a period.
+    const parts = schedule
+      .map((e, i) => ({ e, amount: row.feeByPeriod?.[i] ?? 0 }))
+      .filter((p) => p.amount)
+      .map((p) => `${p.e.label} (${fmtDate(p.e.from)} – ${fmtDate(p.e.to)}) ${cur} ${fmt(p.amount)}`);
+    const fn = noteFor(
+      'fee',
+      `The management fee is for ${parts.join('; ')}, worked out on your ${
+        result.fee.basis === 'Invested_Capital' ? 'invested capital' : 'commitment'
+      } and any fee terms in your side letter${
+        row.feeOffset
+          ? `, and is shown net of your pro-rata share of an aggregate ${cur} ${fmt(result.fee.offsetTotal)} management fee offset; your net management fee is ${cur} ${fmt(row.feeNet)}`
+          : ''
+      }.`,
+    );
+    const feeLines: NoticeLine[] = [{ label: `Management Fee — ${scheduleLabel(schedule)}`, mark: sup(fn), amt: fmt(row.feeGross), neg: false }];
+    if (row.feeOffset) feeLines.push({ label: 'Less: Management Fee Offset', mark: sup(fn), amt: fmt(-row.feeOffset), neg: true });
+    (result.fee.reduces ? inside : outside).push(...feeLines);
+  } else if (row.feeGross || row.feeOffset) {
     const fn = noteFor(
       'fee',
       `The management fee is charged at ${pct(row.feeRate)} per annum on ${
@@ -193,7 +243,44 @@ export function buildNotice(
     );
   }
 
+  // Equalization from a later closing, settled here. The balances already moved
+  // on the closing date, so it is cash on top of the call, not part of it.
+  const eqEntries = (model.equalizationSchedule ?? [])
+    .map((e) => ({ e, amount: num(e.byLp[row.LP_ID] ?? 0) }))
+    .filter((x) => x.amount !== 0);
+  const equalization: NoticeEqualization[] = eqEntries.map(({ e, amount }) => {
+    const n = noteFor(
+      `eq:${e.closingId}`,
+      amount > 0
+        ? `You were admitted at Closing ${e.closingNo} on ${fmtDate(e.closingDate)}. The equalization is your share of what investors already in had paid, with any late-close interest and the management fee for the time before you joined. Your capital account has reflected it since that date; this notice collects it.`
+        : `Investors admitted at Closing ${e.closingNo} on ${fmtDate(e.closingDate)} paid their share of what you had already contributed. Your part of that comes back to you as a credit against this notice. Your capital account has reflected it since that date.`,
+    );
+    const p = e.parts[row.LP_ID] ?? { capital: 0, interest: 0, catchUpFee: 0 };
+    const pays = amount > 0;
+    const parts = [
+      { label: pays ? 'Share of earlier calls' : 'Returned from earlier calls', x: num(p.capital) },
+      { label: pays ? 'Late interest' : 'Share of the late interest', x: num(p.interest) },
+      { label: pays ? 'Catch-up management fee' : 'Share of the catch-up management fee', x: num(p.catchUpFee) },
+    ]
+      .filter((q) => q.x !== 0)
+      .map((q) => ({ label: q.label, amt: fmt(q.x) }));
+    return {
+      label: `Equalization — Closing ${e.closingNo} (${fmtDate(e.closingDate)})${pays ? '' : ', credited to you'}`,
+      mark: sup(n),
+      parts,
+      total: fmt(amount),
+    };
+  });
+
   notes.push(`Amounts are rounded to ${result.d} decimal places.`);
+
+  // An equalization credit can take the call to nothing or past it. Then there
+  // is nothing to wire — past it, the fund pays the rest to the investor — and
+  // the notice must not ask for money or print where to send it.
+  const due = amountDue(row, result.d);
+  const nothingDue = equalization.length > 0 && due <= 0;
+  const payableToYou = equalization.length > 0 && due < 0;
+  const payment = nothingDue ? null : options.payment?.length ? options.payment : null;
 
   const fund = setup.Fund_Name;
   const callNo = setup.Call_Number as string | number;
@@ -231,20 +318,30 @@ export function buildNotice(
       gpName,
     ].filter(Boolean),
     closing: [
-      // The fund's template had a sentence here directing the investor to
-      // "the wiring instructions provided with this notice". There are none,
-      // so it was removed rather than left saying something untrue in the one
-      // paragraph that asks somebody to move money. Put it back when the bank
-      // details exist and can actually accompany the notice.
-      `Kindly ensure that the funds are received by ${dueDate}. If you have any questions ` +
-        'regarding this capital call or require any additional information, please do not ' +
-        'hesitate to contact us.',
+      // Only say the instructions are enclosed when they are: a request for
+      // money that points at wiring details it does not carry is worse than
+      // one that says nothing.
+      payableToYou
+        ? `Nothing is payable by you against this notice: your equalization credit is larger than this call, and ` +
+          `the Fund will pay you ${cur} ${fmt(-due)}. If you have any questions regarding this capital call or ` +
+          'require any additional information, please do not hesitate to contact us.'
+        : nothingDue
+        ? 'Nothing is payable against this notice: your equalization credit covers this call. If you have any ' +
+          'questions regarding this capital call or require any additional information, please do not ' +
+          'hesitate to contact us.'
+        : `Kindly ensure that the funds are received by ${dueDate}${
+            payment ? ', using the payment instructions above' : ''
+          }. If you have any questions ` +
+          'regarding this capital call or require any additional information, please do not ' +
+          'hesitate to contact us.',
       'Thank you for your continued partnership and support.',
     ],
     callNo,
     callDate: fmtDate(serialToISO(setup.Call_Date)),
     dueDate,
-    total: fmt(row.total),
+    total: fmt(Math.abs(due)),
+    ...(payableToYou ? { payableToYou: true as const } : {}),
+    ...(equalization.length ? { called: fmt(row.total), equalization } : {}),
     inside,
     outside,
     hasOutside: outside.length > 0,
@@ -267,5 +364,6 @@ export function buildNotice(
       { label: 'Unfunded Commitment — after this call', amt: fmt(row.closingUCC), strong: true },
     ],
     notes: notes.map((t, i) => ({ n: i + 1, text: t })),
+    payment,
   };
 }

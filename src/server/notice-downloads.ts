@@ -11,7 +11,7 @@
  */
 
 import JSZip from 'jszip';
-import { buildNotice, compute, type NoticeData } from '@/engine';
+import { buildNotice, compute, paymentFor, serialToISO, type NoticeData } from '@/engine';
 import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
 import type { SupabaseClient } from '@/adapters/storage/supabase-client';
 import { getServerSupabase } from '@/lib/supabase/server';
@@ -90,6 +90,8 @@ export async function noticeFilesFor(callId: string, lpIds?: string[]): Promise<
 }> {
   const { call, client } = await loadReadable(callId);
   const result = compute(call.model);
+  const terms = await createSupabaseRepository(client as unknown as SupabaseClient).listFundTerms(call.fundId);
+  const callDate = serialToISO(call.model.setup.Call_Date);
 
   const wanted = lpIds?.length ? new Set(lpIds) : null;
   const rows = result.rows.filter((r) => r.isActive && (!wanted || wanted.has(r.LP_ID)));
@@ -125,7 +127,9 @@ export async function noticeFilesFor(callId: string, lpIds?: string[]): Promise<
     // letterhead, which is the one thing an issued notice must never do.
     const snapshot = state ? frozen.get(state.investorId) : undefined;
     const notice: NoticeData =
-      status === 'sent' && snapshot ? snapshot : buildNotice(call.model, result, row);
+      status === 'sent' && snapshot
+        ? snapshot
+        : buildNotice(call.model, result, row, { payment: paymentFor(terms, callDate, row.LP_ID, call.callNo) });
 
     files.push({
       fileName: noticeFileName(call.callNo, String(row.LP_Name ?? row.LP_ID)),

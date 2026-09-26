@@ -19,6 +19,8 @@ export interface Attachment {
 
 export interface Email {
   to: string;
+  /** Copied on the same message: the investor's other contacts. */
+  cc?: string[];
   subject: string;
   /** Plain text. Every client can read it, and a notice is not a newsletter. */
   text: string;
@@ -59,6 +61,9 @@ export async function deliver(email: Email): Promise<DeliveryResult> {
   if (!to) {
     return { ok: false, error: 'No address to send to.', deliveredTo: null };
   }
+  // Copies are dropped under the override, for the same reason: nothing may
+  // reach an investor's address from a test deployment, copies included.
+  const cc = config.overrideTo ? [] : (email.cc ?? []).filter((a) => a && a !== to);
 
   try {
     const response = await fetch('https://api.resend.com/emails', {
@@ -70,6 +75,7 @@ export async function deliver(email: Email): Promise<DeliveryResult> {
       body: JSON.stringify({
         from: config.from,
         to: [to],
+        ...(cc.length ? { cc } : {}),
         ...(config.replyTo ? { reply_to: config.replyTo } : {}),
         subject: email.subject,
         text: email.text,

@@ -54,7 +54,12 @@ They're stored exactly once: at the moment of sending.
 clients            the client: a GP or manager (Axtara's customer)
  └─ client_members which users belong to it, and their role
  └─ funds          its funds: Fund I, Fund II, …
+     └─ fund_terms dated settings (§ below)
      └─ investors  LP01, LP02… same investor across every call
+     └─ closings   first close, second close…
+         └─ closing_commitments  who each close admitted, and for how much
+         └─ closing_results      a later close's equalization, frozen when finalised
+         └─ closing_statements   the equalization, sent to each investor, when settled now
      └─ calls      Call No. 1, Call No. 2…
          └─ call_register, call_components, call_fee_offsets,
             call_transfers, call_expected_output
@@ -588,6 +593,44 @@ figures came from. Tested in
 Draft calls are left out of `called_to_date` on purpose. Their figures aren't
 stored (§2.1), so only money that was actually called gets counted.
 
+**Update: Home no longer reads this view once a fund has a record.** The view
+shows the *opening* balances of the newest call with a register, so once
+Call 1 was issued it still said paid-in 0.00, and it knew nothing about
+closings. For a fund with finalised closings whose calls agree with them, Home
+now works the card out with `positionFromRecord` (the same code Closings and a
+new call's register use). Every other fund still reads this view, unchanged:
+without closings, the calls' registers are the only record of balances brought
+in from a workbook or moved by transfers. That fund's card still shows the
+latest call's opening balances — a gap, listed below.
+
+### Closings
+
+```
+closings              one per close; finalised_at set once, then frozen
+closing_commitments   lp, amount, side-letter rate, exempt — per closing
+closing_results       the equalization, frozen at finalising (one per closing)
+closing_statements    one per investor a "settle now" closing moves money for: approved, sent, kept
+```
+
+The same rules as calls:
+
+- **Browsers draft, the server fixes.** A browser may insert and edit a draft
+  closing (only `closing_date` and `note`, by column grant) and save its
+  commitments through `save_closing_commitments`. Finalising is
+  `finalise_closing`, which only the service role may run.
+- **Frozen means frozen.** Triggers refuse any change to a finalised closing,
+  its commitments or its result (SQLSTATE `23001`). One column is the exception: `closings.settlement` (how
+  the equalization is settled — `on_closing`, `next_call`, or null for not
+  chosen) can still be set, by the server, until a sent call carried it
+  (`calls.equalization_schedule`) or a statement was sent. A sent statement
+  keeps what it said; only its delivery can be written again.
+- **No fee is recorded by hand.** There used to be a `fee_runs` table, a
+  period's fee recorded as versions. It was dropped (`20260927140000`): the
+  calls that bill a period are its record, and Management fees compares each
+  period with them on its own.
+
+Tested in [closings.test.sql](../supabase/tests/closings.test.sql).
+
 ---
 
 ## 2.11 Honest gaps
@@ -620,6 +663,11 @@ CLI deploy. Worth one look at a real snapshot before this matters.
 **5. Nobody can add a colleague.** `client_members` has a read policy and no insert
 policy, so inviting a user means running SQL by hand. (The README says this
 too.)
+
+**6. For a fund with no closings, the card shows opening balances.** After
+Call 1 is issued it still says paid-in as it was *before* Call 1. Funds with
+closings read the record instead (above). Fixing it for the rest means reading
+the latest issued call's closing balances; not done yet.
 
 ---
 

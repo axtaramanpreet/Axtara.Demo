@@ -48,6 +48,10 @@ describe.skipIf(!up)('Supabase repository (integration)', () => {
   let repo: CallRepository;
 
   beforeAll(async () => {
+    // Whatever an interrupted run left behind, in the order the keys allow.
+    await db.from('calls').delete().eq('fund_id', FUND_ID);
+    await db.from('closings').delete().eq('fund_id', FUND_ID);
+    await db.from('investors').delete().eq('fund_id', FUND_ID);
     await db.from('clients').delete().eq('id', CLIENT_ID);
     await db.from('clients').insert({ id: CLIENT_ID, name: 'Integration Test Client' });
     // Deliberately not named like the seeded fund: a shared name once made the
@@ -64,6 +68,9 @@ describe.skipIf(!up)('Supabase repository (integration)', () => {
     // at its investors fails — and an unchecked failure here quietly left more
     // than a hundred stray calls behind before this was noticed.
     await db.from('calls').delete().eq('fund_id', FUND_ID);
+    // Draft closings too: their commitments hold investors, so a closing left
+    // by a test that failed part-way would block every delete after it.
+    await db.from('closings').delete().eq('fund_id', FUND_ID);
     await db.from('investors').delete().eq('fund_id', FUND_ID);
     await db.from('funds').delete().eq('id', FUND_ID);
     const { error } = await db.from('clients').delete().eq('id', CLIENT_ID);
@@ -143,6 +150,45 @@ describe.skipIf(!up)('Supabase repository (integration)', () => {
     expect(investors.find((i) => i.lpId === 'LP04')?.name).toBe('Delta Insurance Co');
   });
 
+  it('drafts a closing, saves who it admits in one go, and reads it back', async () => {
+    const first = await repo.createClosing(FUND_ID, '2026-01-15', 'First close');
+    expect(first.closingNo).toBe(1);
+    expect(first.finalised).toBe(false);
+
+    await repo.saveClosingCommitments(first.id, [
+      { lpId: 'LP01', name: 'Alpha Pension Trust', amount: 10_000_000 },
+      { lpId: 'LP50', name: 'Brand New Endowment', amount: 2_500_000, feeRateOverride: 0.01, contactEmail: 'ops@new.example' },
+    ]);
+
+    const [loaded] = (await repo.listClosings(FUND_ID)).filter((c) => c.id === first.id);
+    expect(loaded.commitments.map((k) => [k.lpId, k.amount, k.feeRateOverride])).toEqual([
+      ['LP01', 10_000_000, null],
+      ['LP50', 2_500_000, 0.01],
+    ]);
+    expect(loaded.commitments[1].contactEmail).toBe('ops@new.example');
+    // An investor new to the fund exists now, for every later call and closing.
+    expect((await repo.listInvestors(FUND_ID)).some((i) => i.lpId === 'LP50')).toBe(true);
+
+    const second = await repo.createClosing(FUND_ID, '2026-08-01');
+    expect(second.closingNo).toBe(2);
+    // How far the fund has got, as the sidebar and checklist read it: terms were
+    // recorded above, two closings are drafted, none finalised.
+    expect(await repo.getFundProgress(FUND_ID)).toMatchObject({ hasTerms: true, closings: 2, finalisedClosings: 0 });
+    await repo.updateClosing(second.id, { closingDate: '2026-08-15', note: 'Second close' });
+    expect((await repo.listClosings(FUND_ID)).find((c) => c.id === second.id)).toMatchObject({
+      closingDate: '2026-08-15',
+      note: 'Second close',
+    });
+
+    await repo.deleteClosing(second.id);
+    await repo.deleteClosing(first.id);
+    expect(await repo.listClosings(FUND_ID)).toEqual([]);
+  });
+
+  it('has no issued calls for a fund that has done nothing', async () => {
+    expect(await repo.listIssuedCalls(FUND_ID)).toEqual([]);
+  });
+
   it('numbers calls sequentially per fund', async () => {
     const a = await repo.createCall(FUND_ID, ILLUSTRATIVE_FUND, ALL_SOURCES);
     const b = await repo.createCall(FUND_ID, ILLUSTRATIVE_FUND, ALL_SOURCES);
@@ -169,6 +215,43 @@ describe.skipIf(!up)('Supabase repository (integration)', () => {
     expect(lps.find((l) => l.LP_ID === 'LP01')?.Contact_Email).toBe(
       'treasury@alphapension.example',
     );
+  });
+
+  it('keeps the fee periods a call bills, exactly', async () => {
+    const model = structuredClone(ILLUSTRATIVE_FUND);
+    model.feeSchedule = [{ from: '2026-04-01', to: '2026-06-30', label: 'Q2 2026', byLp: { LP01: 125_000.5, LP02: 37_500 } }];
+    const created = await repo.createCall(FUND_ID, model, ALL_SOURCES);
+    expect((await repo.getCall(created.id))!.model.feeSchedule).toEqual(model.feeSchedule);
+    await repo.saveCall(created.id, { ...model, feeSchedule: null }, {});
+    expect((await repo.getCall(created.id))!.model.feeSchedule).toBeUndefined();
+  });
+
+  it('keeps an investor’s profile when a call’s register leaves their details blank', async () => {
+    const investor = await repo.createInvestor(FUND_ID, 'LP77', {
+      name: 'Profile Kept Endowment',
+      type: 'Endowment',
+      email: 'ir@kept.example',
+      ccEmails: ['cfo@kept.example'],
+      country: 'Ireland',
+      kycStatus: 'approved',
+    });
+    const model = structuredClone(ILLUSTRATIVE_FUND);
+    model.lps = [{ ...model.lps[0], LP_ID: 'LP77', LP_Name: '', LP_Type: '', Contact_Email: '', Notes: '' }];
+    await repo.createCall(FUND_ID, model, ALL_SOURCES);
+
+    const [kept] = (await repo.listInvestors(FUND_ID)).filter((i) => i.id === investor.id);
+    expect(kept).toMatchObject({
+      name: 'Profile Kept Endowment',
+      type: 'Endowment',
+      email: 'ir@kept.example',
+      ccEmails: ['cfo@kept.example'],
+      country: 'Ireland',
+      kycStatus: 'approved',
+    });
+    await repo.updateInvestor(investor.id, { country: '', ccEmails: [] });
+    const [cleared] = (await repo.listInvestors(FUND_ID)).filter((i) => i.id === investor.id);
+    // Clearing is the Investors page's to do, and it does.
+    expect([cleared.country, cleared.ccEmails]).toEqual([null, []]);
   });
 
   /**

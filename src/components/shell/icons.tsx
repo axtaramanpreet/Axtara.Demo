@@ -17,6 +17,32 @@ export function CallsIcon() {
   );
 }
 
+/** Closings: a door opening onto a person — investors let in, one close at a time. */
+export function ClosingsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M4 21V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v17" />
+      <path d="M3 21h18" />
+      <circle cx="18" cy="10" r="2" />
+      <path d="M15.5 17a2.5 2.5 0 0 1 5 0" />
+      <path d="M11 12h.01" />
+    </svg>
+  );
+}
+
+/** Management fees: a percentage over a period. */
+export function FeesIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <rect x="3" y="4" width="18" height="17" rx="2" />
+      <path d="M3 9h18M8 2v4M16 2v4" />
+      <path d="M9 17l6-5" />
+      <circle cx="9.5" cy="12.5" r="1" />
+      <circle cx="14.5" cy="16.5" r="1" />
+    </svg>
+  );
+}
+
 export function InvestorsIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden>
@@ -73,18 +99,19 @@ export function ChevronDown() {
   );
 }
 
-export function ChevronRight({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden>
-      <path d="M9 6l6 6-6 6" />
-    </svg>
-  );
-}
-
 export function SendArrow() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden>
       <path d="M12 19V5M5 12l7-7 7 7" />
+    </svg>
+  );
+}
+
+export function LockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="lock">
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
     </svg>
   );
 }

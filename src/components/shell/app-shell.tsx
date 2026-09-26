@@ -53,11 +53,13 @@ export function AppShell({
 
   return (
     <div className="app">
-      <Sidebar funds={funds} fundId={fundId} module={module} callCount={callCount} gates={gates} />
+      <Sidebar funds={funds} fundId={fundId} module={module} gates={gates} />
 
       <div className="content">
         <TopBar
-          fundName={fundName}
+          funds={funds}
+          fundId={fundId}
+          callCount={callCount}
           crumb={crumb}
           userInitials={initialsOf(preparedBy)}
           askTrigger={<AskTrigger />}

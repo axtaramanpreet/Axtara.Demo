@@ -20,7 +20,7 @@ export function Wordmark({ height = 15 }: { height?: number }) {
   );
 }
 
-/** The mark without the letters: a square turned 45°, as the site draws it. */
+/** The mark: a filled square turned 45°, beside the letters or on its own in the rail. */
 export function BrandMark() {
   return <span className="brand-mark" role="img" aria-label="Axtara" />;
 }

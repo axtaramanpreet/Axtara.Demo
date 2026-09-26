@@ -110,7 +110,8 @@ describe('naming a new fund', () => {
     expect(create.disabled).toBe(true);
     await userEvent.type(screen.getByLabelText('Fund name'), '  Fund IV, L.P. ');
     await userEvent.click(create);
-    expect(createFund).toHaveBeenCalledWith('Fund IV, L.P.');
+    // A first fund names no client: it goes to the only one the user belongs to.
+    expect(createFund).toHaveBeenCalledWith('Fund IV, L.P.', undefined);
     expect(push).toHaveBeenCalledWith('/funds/fund-9');
   });
 

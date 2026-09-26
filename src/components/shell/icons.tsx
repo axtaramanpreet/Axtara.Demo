@@ -91,6 +91,15 @@ export function MoonIcon() {
   );
 }
 
+/** Up and down together: a picker that opens a list, rather than a section that folds. */
+export function ChevronUpDown() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M8 9l4-4 4 4M8 15l4 4 4-4" />
+    </svg>
+  );
+}
+
 export function ChevronDown() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden>

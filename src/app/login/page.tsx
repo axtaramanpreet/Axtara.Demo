@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserSupabase } from '@/adapters/storage/supabase-client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Wordmark } from '@/components/ui/wordmark';
+import { BrandMark, Wordmark } from '@/components/ui/wordmark';
 
 /**
  * `useSearchParams` opts a component out of static prerendering, so the form
@@ -20,7 +20,7 @@ export default function LoginPage() {
             brand can introduce itself. The lockup is the site's: the mark, then
             the wordmark. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
-          <span className="brand-mark-static" role="img" aria-label="Axtara" />
+          <BrandMark />
           <Wordmark height={17} />
         </div>
         <h1 style={{ fontSize: 20 }}>Sign in</h1>

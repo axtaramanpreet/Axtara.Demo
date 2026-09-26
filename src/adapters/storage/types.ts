@@ -88,6 +88,9 @@ export type InvestorPatch = Partial<Omit<FundInvestor, 'id' | 'lpId'>>;
 export interface Fund {
   id: string;
   name: string;
+  /** The client — the GP or manager — the fund belongs to. */
+  clientId: string;
+  clientName: string;
 }
 
 /** One investor's notice workflow state for one call. */
@@ -165,7 +168,8 @@ export interface FundPosition {
  */
 export interface CallRepository {
   listFunds(): Promise<Fund[]>;
-  createFund(name: string): Promise<Fund>;
+  /** A new fund under `clientId`, or under the user's only client when none is named. */
+  createFund(name: string, clientId?: string): Promise<Fund>;
   /**
    * Remove a fund. The database refuses this once the fund has any call
    * history, so it only ever undoes a mistake.

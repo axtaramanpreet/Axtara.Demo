@@ -108,34 +108,45 @@ function fromInvestorPatch(p: InvestorPatch): Database['public']['Tables']['inve
   };
 }
 
+/** A fund row, with the client it belongs to. */
+function fundFrom(r: { id: string; name: string; client_id: string; clients: unknown }): Fund {
+  const client = (Array.isArray(r.clients) ? r.clients[0] : r.clients) as { name: string } | null;
+  return { id: r.id, name: r.name, clientId: r.client_id, clientName: client?.name ?? '' };
+}
+
 export function createSupabaseRepository(db: SupabaseClient): CallRepository {
   return {
     async listFunds(): Promise<Fund[]> {
       const { data, error } = await db
         .from('funds')
-        .select('id, name')
+        .select('id, name, client_id, clients!inner ( name )')
         .is('archived_at', null)
         .order('name');
       if (error) throw asError(error, 'load the fund list');
-      return data ?? [];
+      return (data ?? []).map(fundFrom);
     },
 
-    async createFund(name: string): Promise<Fund> {
-      // A client must exist to own the fund. Where a user belongs to several,
-      // this takes the first — a client picker is a later concern.
-      const { data: clients, error: clientError } = await db.from('clients').select('id').limit(1);
-      if (clientError) throw asError(clientError, 'find your client');
-      if (!clients?.length) {
-        throw new Error('You are not a member of any client yet, so there is nowhere to put this fund.');
+    async createFund(name: string, clientId?: string): Promise<Fund> {
+      // A client must own the fund: the one the user is working in, or — for a
+      // first fund, before there is one to be in — the client they belong to.
+      let owner = clientId;
+      if (!owner) {
+        const { data: clients, error: clientError } = await db.from('clients').select('id').limit(2);
+        if (clientError) throw asError(clientError, 'find your client');
+        if (!clients?.length) {
+          throw new Error('You are not a member of any client yet, so there is nowhere to put this fund.');
+        }
+        if (clients.length > 1) throw new Error('Choose which client the fund is for.');
+        owner = clients[0].id;
       }
 
       const { data, error } = await db
         .from('funds')
-        .insert({ client_id: clients[0].id, name })
-        .select('id, name')
+        .insert({ client_id: owner, name })
+        .select('id, name, client_id, clients!inner ( name )')
         .single();
       if (error) throw asError(error, `create the fund "${name}"`);
-      return data;
+      return fundFrom(data);
     },
 
     async deleteFund(fundId: string): Promise<void> {

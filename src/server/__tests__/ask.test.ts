@@ -49,7 +49,7 @@ function call(callNo: number): CallDetail {
   } as unknown as CallDetail;
 }
 
-const context = buildFundContext({ id: 'fund-1', name: 'Illustrative Fund II, L.P.' }, [call(2)]);
+const context = buildFundContext({ id: 'fund-1', name: 'Illustrative Fund II, L.P.', clientId: 'client-1', clientName: 'Illustrative GP' }, [call(2)]);
 
 describe('what the model is told', () => {
   it('states every rule the handoff sets', () => {
@@ -84,7 +84,7 @@ describe('what the model is told', () => {
 
 describe('the snapshot', () => {
   it('describes every call, newest first', () => {
-    const many = buildFundContext({ id: 'c', name: 'Fund' }, [call(1), call(3), call(2)]);
+    const many = buildFundContext({ id: 'c', name: 'Fund', clientId: 'client-1', clientName: 'Illustrative GP' }, [call(1), call(3), call(2)]);
     expect((many.calls as { call_number: number }[]).map((c) => c.call_number)).toEqual([3, 2, 1]);
   });
 
@@ -97,7 +97,7 @@ describe('the snapshot', () => {
     // A fund with a long history outgrows one request. Dropping the oldest and
     // saying so beats sending half the data as though it were all of it.
     const lots = buildFundContext(
-      { id: 'c', name: 'Fund' },
+      { id: 'c', name: 'Fund', clientId: 'client-1', clientName: 'Illustrative GP' },
       Array.from({ length: 60 }, (_, i) => call(i + 1)),
     );
     expect(lots.calls.length).toBeLessThan(60);

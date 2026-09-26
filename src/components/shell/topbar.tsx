@@ -1,8 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { useCallback, useRef, useState } from 'react';
+import type { Fund } from '@/adapters/storage/types';
+import { fundCode } from '@/lib/fund-code';
+import { useDismiss } from '@/lib/hooks/use-dismiss';
 import { ThemeIconButton, useRail } from '@/components/theme';
-import { PanelIcon } from './icons';
+import { NewFundDialog } from '@/components/home/new-fund-dialog';
+import { ChevronDown, PanelIcon } from './icons';
 
 /** Where you are, as the top bar says it. */
 export interface Crumb {
@@ -15,17 +20,22 @@ export interface Crumb {
 /**
  * The top bar.
  *
- * It says where you are and offers the three things that are true on every
- * screen: collapse the sidebar, ask a question, change the theme. Nothing about
- * the current screen lives here — that belongs to the screen.
+ * Which fund you are in — and a switch to any other of the client's funds, or
+ * a new one — then where you are inside it. Beside that, the three things true
+ * on every screen: collapse the sidebar, ask a question, change the theme.
  */
 export function TopBar({
-  fundName,
+  funds,
+  fundId,
+  callCount,
   crumb,
   userInitials,
   askTrigger,
 }: {
-  fundName: string;
+  funds: Fund[];
+  fundId: string;
+  /** How many calls this fund has, said on the switcher. */
+  callCount: number;
   crumb: Crumb;
   /** Initials of whoever prepared the call, from the register. */
   userInitials: string;
@@ -33,6 +43,17 @@ export function TopBar({
   askTrigger: React.ReactNode;
 }) {
   const { rail, setRail } = useRail();
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const wrapper = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const close = useCallback(() => setOpen(false), []);
+  useDismiss(open, close, wrapper, trigger);
+
+  const current = funds.find((f) => f.id === fundId);
+  const name = current?.name ?? 'Fund';
+  // The client's funds only: another client is switched to in the sidebar.
+  const siblings = funds.filter((f) => f.clientId === current?.clientId);
 
   return (
     <div className="topbar" data-noprint="1">
@@ -47,17 +68,63 @@ export function TopBar({
         <PanelIcon />
       </button>
 
+      <div className="fund-switch" ref={wrapper}>
+        <button
+          ref={trigger}
+          type="button"
+          className="fund-switch-btn"
+          title={`${name} · ${callCount} capital call${callCount === 1 ? '' : 's'} · switch fund`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <b>{name}</b>
+          <span className="fund-tag">Fund</span>
+          <ChevronDown />
+        </button>
+        {open && (
+          <div className="ws-menu fund-menu" role="menu" aria-label="Funds">
+            {siblings.map((f) => (
+              <Link
+                key={f.id}
+                role="menuitem"
+                href={`/funds/${f.id}`}
+                className={['ws-item', f.id === fundId ? 'on' : ''].filter(Boolean).join(' ')}
+                onClick={close}
+              >
+                <span className="ws-tile">{fundCode(f.name)}</span>
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {f.name}
+                </span>
+              </Link>
+            ))}
+            <div className="ws-sep" />
+            <button
+              type="button"
+              role="menuitem"
+              className="ws-item add"
+              onClick={() => {
+                close();
+                setCreating(true);
+              }}
+            >
+              <span style={{ width: 26, textAlign: 'center', fontSize: 16, lineHeight: 1 }}>+</span>
+              New fund
+            </button>
+          </div>
+        )}
+      </div>
+
       <nav className="crumb" aria-label="Breadcrumb">
-        <span>{fundName}</span>
-        <i>/</i>
         {crumb.module && (
           <>
+            <i>/</i>
             <Link href={crumb.module.href} style={{ color: 'var(--muted-foreground)', textDecoration: 'none' }}>
               {crumb.module.label}
             </Link>
-            <i>/</i>
           </>
         )}
+        <i>/</i>
         <b>{crumb.leaf}</b>
       </nav>
 
@@ -68,6 +135,14 @@ export function TopBar({
           {userInitials}
         </span>
       </div>
+
+      {creating && (
+        <NewFundDialog
+          existingNames={siblings.map((f) => f.name)}
+          clientId={current?.clientId}
+          onClose={() => setCreating(false)}
+        />
+      )}
     </div>
   );
 }

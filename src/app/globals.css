@@ -324,19 +324,15 @@ body {
   opacity: 0.7;
 }
 
-.side-foot {
-  margin-top: auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-  width: 100%;
-}
 .side-brand {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 6px 10px 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 10px 16px;
   min-width: 0;
+  color: var(--foreground);
+  text-decoration: none;
 }
 .wordmark {
   font-weight: 600;
@@ -351,8 +347,7 @@ body {
 .rail .ws-btn > svg,
 .rail .nav-item svg.lock,
 .rail .nav-group,
-.rail .nav-item span,
-.rail .side-foot span:not(.wordmark):not(.brand-mark) {
+.rail .nav-item span {
   display: none;
 }
 .rail .ws-btn {
@@ -402,14 +397,66 @@ body {
 }
 .rail .side-brand {
   justify-content: center;
-  padding: 6px 0 0;
-}
-.rail .side-brand .wordmark {
-  font-size: 10px;
-  letter-spacing: 0;
+  padding: 8px 0 18px;
 }
 
 /* --- Top bar -------------------------------------------------------------- */
+
+/* The fund, and a switch to the client's other funds. */
+.fund-switch {
+  position: relative;
+  min-width: 0;
+}
+.fund-switch-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  min-width: 0;
+  max-width: 360px;
+}
+.fund-switch-btn:hover {
+  background: var(--muted);
+}
+.fund-switch-btn b {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fund-switch-btn > svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  stroke: var(--muted-foreground);
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fund-tag {
+  flex: none;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--chart-2);
+  background: color-mix(in oklch, var(--chart-2) 12%, transparent);
+  border: 1px solid color-mix(in oklch, var(--chart-2) 30%, transparent);
+}
+.fund-menu {
+  right: auto;
+  width: 300px;
+  z-index: 40;
+}
 
 .topbar {
   display: flex;
@@ -430,9 +477,6 @@ body {
   font-size: 14px;
   min-width: 0;
   color: var(--foreground);
-}
-.topbar .crumb span {
-  color: var(--muted-foreground);
 }
 .topbar .crumb b {
   font-weight: 500;
@@ -1253,27 +1297,19 @@ table.working td {
 .brand-word {
   display: block;
   background: currentColor;
-  -webkit-mask: url('/AXTARA-black.svg') no-repeat center / contain;
-  mask: url('/AXTARA-black.svg') no-repeat center / contain;
+  /* AXTARA-black.svg, with a thin outline added to every letter so it reads at
+     sidebar size: the original is kept as the source artwork. */
+  -webkit-mask: url('/AXTARA-wordmark.svg') no-repeat center / contain;
+  mask: url('/AXTARA-wordmark.svg') no-repeat center / contain;
 }
 
-/* The mark on its own, for where the wordmark will not fit. Drawn rather than
-   loaded — it is a square turned 45°, and a request for that is silly. */
+/* The mark: a filled square turned 45°, beside the wordmark, and on its own
+   where the letters will not fit. Drawn rather than loaded. */
 .brand-mark {
-  display: none;
-  width: 11px;
-  height: 11px;
-  border: 1px solid currentColor;
-  transform: rotate(45deg);
-  flex: none;
-}
-
-/* The same diamond where it is always wanted, rather than only in the rail. */
-.brand-mark-static {
   display: block;
-  width: 11px;
-  height: 11px;
-  border: 1px solid currentColor;
+  width: 10px;
+  height: 10px;
+  background: currentColor;
   transform: rotate(45deg);
   flex: none;
 }
@@ -1281,9 +1317,6 @@ table.working td {
 /* Collapsed, there is no room for six letters, so the mark stands in. */
 .rail .brand-word {
   display: none;
-}
-.rail .brand-mark {
-  display: block;
 }
 
 /* --- Notices layout ------------------------------------------------------- */

@@ -15,10 +15,13 @@ import { Button } from '@/components/ui/button';
  */
 export function NewFundDialog({
   existingNames = [],
+  clientId,
   onClose,
 }: {
   /** Names already in use, to warn before creating a second fund of the same name. */
   existingNames?: string[];
+  /** The client the fund is for: the one being worked in. Absent for a first fund. */
+  clientId?: string;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -51,7 +54,7 @@ export function NewFundDialog({
     setBusy(true);
     setError(null);
     try {
-      const created = await createSupabaseRepository(createBrowserSupabase()).createFund(trimmed);
+      const created = await createSupabaseRepository(createBrowserSupabase()).createFund(trimmed, clientId);
       startTransition(() => {
         router.push(`/funds/${created.id}`);
         router.refresh();

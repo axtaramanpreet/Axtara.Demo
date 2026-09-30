@@ -15,7 +15,7 @@
 
 import { CATEGORIES, categoryOf } from './categories';
 import { allocate, type AllocationPart } from './allocate';
-import { fmt, ids, num, round, serialToISO, yes } from './format';
+import { fmt, fmtDate, ids, num, round, serialToISO, yes } from './format';
 import { applyTransfers } from './transfers';
 import type {
   AllocationBasis,
@@ -133,10 +133,25 @@ export function compute(model: CallModel): ComputeResult {
     );
   }
 
+  // Equalization settled on this call moves the balances here: a late
+  // investor's paid-in rises and unfunded falls, an earlier one's the other way.
+  // Unfunded after it is what this call's UCC shares are measured against, so
+  // the late investor is not called as if they had paid nothing yet.
+  const eqMove: Record<string, { paid: number; reduces: number }> = {};
+  for (const e of eqSchedule ?? []) {
+    if (e.settles !== 'on_call') continue;
+    for (const [id, p] of Object.entries(e.parts)) {
+      const m = (eqMove[id] ??= { paid: 0, reduces: 0 });
+      m.paid += num(p.capital) + num(p.catchUpFee);
+      m.reduces += num(p.inside ?? 0) + (e.feeReducesUnfunded ? num(p.catchUpFee) : 0);
+    }
+  }
+  const eqReducesOf = (id: string) => round(eqMove[id]?.reduces ?? 0, d);
+
   /** The figure an LP's share is measured against, for a given basis. */
   const basisOf = (l: LPRow, basis: string): number =>
     basis === 'UCC'
-      ? num(l.Opening_UCC)
+      ? num(l.Opening_UCC) - eqReducesOf(l.LP_ID)
       : basis === 'Invested_Capital'
         ? num(l.Opening_Invested_Capital)
         : num(l.Commitment);
@@ -348,6 +363,8 @@ export function compute(model: CallModel): ComputeResult {
 
     const openUCC = num(l.Opening_UCC);
     const openPaid = num(l.Opening_Paid_In);
+    const eqPaid = isActive ? round(eqMove[id]?.paid ?? 0, d) : 0;
+    const eqReduces = isActive ? eqReducesOf(id) : 0;
 
     return {
       ...l,
@@ -361,13 +378,15 @@ export function compute(model: CallModel): ComputeResult {
       total,
       ...(eqSchedule && {
         equalization: isActive ? round(eqSchedule.reduce((t, e) => t + num(e.byLp[id] ?? 0), 0), d) : 0,
+        eqPaid,
+        eqReduces,
       }),
       reduces,
       outside,
       openUCC,
       openPaid,
-      closingUCC: round(openUCC - reduces, d),
-      closingPaid: round(openPaid + total, d),
+      closingUCC: round(openUCC - reduces - eqReduces, d),
+      closingPaid: round(openPaid + total + eqPaid, d),
       excusedFrom: excusedOf[id] || [],
     };
   });
@@ -375,11 +394,13 @@ export function compute(model: CallModel): ComputeResult {
   // An LP being called more against commitment than they have left unfunded is
   // a warning, not a failure — it can be legitimate (recycling, defaults).
   rows
-    .filter((r) => r.isActive && r.reduces > r.openUCC + TIE_TOLERANCE)
+    .filter((r) => r.isActive && r.reduces > r.openUCC - (r.eqReduces ?? 0) + TIE_TOLERANCE)
     .forEach((r) =>
       add(
         'warn',
-        `${r.LP_ID} ${r.LP_Name}: call against commitment (${fmt(r.reduces)}) exceeds unfunded commitment (${fmt(r.openUCC)}).`,
+        `${r.LP_ID} ${r.LP_Name}: call against commitment (${fmt(r.reduces)}) exceeds unfunded commitment (${fmt(r.openUCC - (r.eqReduces ?? 0))}${
+          r.eqReduces ? ', after the equalization' : ''
+        }).`,
       ),
     );
 
@@ -400,17 +421,19 @@ export function compute(model: CallModel): ComputeResult {
     feeNet: sum('feeNet'),
     total: sum('total'),
     reduces: sum('reduces'),
+    ...(eqSchedule && { eqPaid: sum('eqPaid'), eqReduces: sum('eqReduces') }),
     closingUCC: sum('closingUCC'),
     closingPaid: sum('closingPaid'),
   };
 
+  const eqText = (x: number, sign: string) => (Math.abs(x) >= TIE_TOLERANCE ? ` ${sign} ${fmt(x)} equalization` : '');
   add(
-    Math.abs(totals.closingUCC - (totals.openUCC - totals.reduces)) < TIE_TOLERANCE ? 'ok' : 'fail',
-    `Unfunded roll-forward ties: ${fmt(totals.openUCC)} − ${fmt(totals.reduces)} = ${fmt(totals.closingUCC)}.`,
+    Math.abs(totals.closingUCC - (totals.openUCC - totals.reduces - (totals.eqReduces ?? 0))) < TIE_TOLERANCE ? 'ok' : 'fail',
+    `Unfunded roll-forward ties: ${fmt(totals.openUCC)} − ${fmt(totals.reduces)}${eqText(totals.eqReduces ?? 0, '−')} = ${fmt(totals.closingUCC)}.`,
   );
   add(
-    Math.abs(totals.closingPaid - (totals.openPaid + totals.total)) < TIE_TOLERANCE ? 'ok' : 'fail',
-    `Paid-in roll-forward ties: ${fmt(totals.openPaid)} + ${fmt(totals.total)} = ${fmt(totals.closingPaid)}.`,
+    Math.abs(totals.closingPaid - (totals.openPaid + totals.total + (totals.eqPaid ?? 0))) < TIE_TOLERANCE ? 'ok' : 'fail',
+    `Paid-in roll-forward ties: ${fmt(totals.openPaid)} + ${fmt(totals.total)}${eqText(totals.eqPaid ?? 0, '+')} = ${fmt(totals.closingPaid)}.`,
   );
 
   // What each component is decides what is done with it, so a category that is
@@ -447,14 +470,23 @@ export function compute(model: CallModel): ComputeResult {
     if (missing.length) {
       add('fail', `The equalization on this call names ${missing.join(', ')}, who ${missing.length === 1 ? 'is' : 'are'} not on this call's register.`);
     }
-    // Each investor's net is its three parts; a schedule where they differ was
-    // not worked out from the closing.
+    // Each investor's net is its parts; a schedule where they differ was not
+    // worked out from the closing.
     for (const e of eqSchedule) {
       for (const [id, x] of Object.entries(e.byLp)) {
         const p = e.parts[id];
-        if (!p || Math.abs(num(x) - (num(p.capital) + num(p.interest) + num(p.catchUpFee))) > TIE_TOLERANCE) {
-          add('fail', `Closing ${e.closingNo}: ${id}'s equalization does not add up to its capital, interest and catch-up fee.`);
+        if (!p || Math.abs(num(x) - (num(p.capital) + num(p.interest) + num(p.catchUpFee) + num(p.feeInterest ?? 0))) > TIE_TOLERANCE) {
+          add('fail', `Closing ${e.closingNo}: ${id}'s equalization does not add up to its capital, interest, catch-up fee and fee interest.`);
         }
+      }
+    }
+    // Interest that runs to when the investor pays runs to this call's due date.
+    const dueDate = serialToISO(model.setup.Payment_Due_Date);
+    for (const e of eqSchedule.filter((x) => x.interestToDueDate)) {
+      if (!dueDate) {
+        add('fail', `Set the payment due date: interest on Closing ${e.closingNo}'s equalization runs to it.`);
+      } else if (e.interestUntil !== dueDate && !(dueDate <= e.closingDate && e.interestUntil === e.closingDate)) {
+        add('fail', `Closing ${e.closingNo}'s interest runs to ${fmtDate(e.interestUntil ?? e.closingDate)}, not this call's due date ${fmtDate(dueDate)}. Open Setup to bring it up to date.`);
       }
     }
 
@@ -470,7 +502,7 @@ export function compute(model: CallModel): ComputeResult {
     }
     const closings = eqSchedule.map((e) => {
       const xs = Object.values(e.byLp).map((x) => num(x));
-      const part = (k: 'capital' | 'interest' | 'catchUpFee') => round(Object.values(e.parts).reduce((t, p) => t + num(p[k]), 0), d);
+      const part = (k: 'capital' | 'interest' | 'catchUpFee' | 'feeInterest') => round(Object.values(e.parts).reduce((t, p) => t + num(p[k] ?? 0), 0), d);
       return {
         closingId: e.closingId,
         closingNo: e.closingNo,
@@ -480,6 +512,8 @@ export function compute(model: CallModel): ComputeResult {
         capital: part('capital'),
         interest: part('interest'),
         catchUpFee: part('catchUpFee'),
+        feeInterest: part('feeInterest'),
+        interestUntil: e.interestUntil ?? e.closingDate,
       };
     });
     for (const c of closings) {

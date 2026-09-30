@@ -243,17 +243,27 @@ export function buildNotice(
     );
   }
 
-  // Equalization from a later closing, settled here. The balances already moved
-  // on the closing date, so it is cash on top of the call, not part of it.
+  // Equalization from a later closing, settled here: on top of what the call
+  // draws. A schedule marked `settles: 'on_call'` moves the balances on this
+  // notice (the account lines show it); an older one moved them on the closing
+  // date, and its notes say so.
   const eqEntries = (model.equalizationSchedule ?? [])
     .map((e) => ({ e, amount: num(e.byLp[row.LP_ID] ?? 0) }))
     .filter((x) => x.amount !== 0);
   const equalization: NoticeEqualization[] = eqEntries.map(({ e, amount }) => {
+    const onCall = e.settles === 'on_call';
+    const interestTo = e.interestUntil && e.interestUntil !== e.closingDate ? ` Late interest runs from each earlier call's due date to ${fmtDate(e.interestUntil)}, this notice's due date.` : '';
     const n = noteFor(
       `eq:${e.closingId}`,
       amount > 0
-        ? `You were admitted at Closing ${e.closingNo} on ${fmtDate(e.closingDate)}. The equalization is your share of what investors already in had paid, with any late-close interest and the management fee for the time before you joined. Your capital account has reflected it since that date; this notice collects it.`
-        : `Investors admitted at Closing ${e.closingNo} on ${fmtDate(e.closingDate)} paid their share of what you had already contributed. Your part of that comes back to you as a credit against this notice. Your capital account has reflected it since that date.`,
+        ? `You were admitted at Closing ${e.closingNo} on ${fmtDate(e.closingDate)}. The equalization is your share of what investors already in had paid, with any late-close interest and the management fee already billed to them for the time before you joined.${interestTo} ${
+            onCall
+              ? 'It is contributed with this notice: your paid-in and unfunded commitment move here. Interest is not a contribution and does not count against your commitment.'
+              : 'Your capital account has reflected it since that date; this notice collects it.'
+          }`
+        : `Investors admitted at Closing ${e.closingNo} on ${fmtDate(e.closingDate)} paid their share of what you had already contributed. Your part of that comes back to you as a credit against this notice.${interestTo} ${
+            onCall ? 'It is returned with this notice, and restored to your unfunded commitment here.' : 'Your capital account has reflected it since that date.'
+          }`,
     );
     const p = e.parts[row.LP_ID] ?? { capital: 0, interest: 0, catchUpFee: 0 };
     const pays = amount > 0;
@@ -261,6 +271,7 @@ export function buildNotice(
       { label: pays ? 'Share of earlier calls' : 'Returned from earlier calls', x: num(p.capital) },
       { label: pays ? 'Late interest' : 'Share of the late interest', x: num(p.interest) },
       { label: pays ? 'Catch-up management fee' : 'Share of the catch-up management fee', x: num(p.catchUpFee) },
+      { label: pays ? 'Interest on the catch-up fee' : 'Share of the interest on the catch-up fee', x: num(p.feeInterest ?? 0) },
     ]
       .filter((q) => q.x !== 0)
       .map((q) => ({ label: q.label, amt: fmt(q.x) }));
@@ -358,9 +369,13 @@ export function buildNotice(
             },
           ]
         : []),
+      // Equalization settled on this call moves the balances here, so the
+      // column adds up on the page. Interest is not a contribution.
+      ...(row.eqPaid ? [{ label: row.eqPaid > 0 ? 'Equalization — contributed this notice' : 'Equalization — returned this notice', amt: fmt(row.eqPaid) }] : []),
       { label: 'Total Contributions to Date', amt: fmt(row.closingPaid), strong: true },
       { label: 'Unfunded Commitment — before this call', amt: fmt(row.openUCC) },
       { label: 'Less: applied against commitment this call', amt: fmt(-row.reduces) },
+      ...(row.eqReduces ? [{ label: 'Less: equalization applied against commitment', amt: fmt(-row.eqReduces) }] : []),
       { label: 'Unfunded Commitment — after this call', amt: fmt(row.closingUCC), strong: true },
     ],
     notes: notes.map((t, i) => ({ n: i + 1, text: t })),

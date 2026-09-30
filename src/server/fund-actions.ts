@@ -9,11 +9,15 @@
  */
 
 import {
+  equalizationForStatement,
   equalizationInputFor,
   equalize,
   firstClosing,
   fmtDate,
   paymentInstructions,
+  serialToISO,
+  settlementConflict,
+  suggestedStatementDueDate,
   termsOn,
   type EqualizationResult,
   type FundHistory,
@@ -128,6 +132,13 @@ export async function finaliseClosing(
     throw new ActionError('Choose how the equalization is settled: statements now, or on the next capital call.', 400);
   }
   if (settlement && !SETTLEMENTS.includes(settlement)) throw new ActionError('That is not a way to settle an equalization.', 400);
+  const conflict = settlement && settlementConflict(
+    history.closings.map((c) => (c.id === closingId ? { ...c, finalised: true } : c)),
+    (id) => history.calls.some((call) => call.equalizationSchedule?.some((e) => e.closingId === id)),
+    closingId,
+    settlement,
+  );
+  if (conflict) throw new ActionError(conflict, 409);
 
   const service = createServiceSupabase();
   const { error } = await service.rpc('finalise_closing', {
@@ -188,6 +199,14 @@ export async function setClosingSettlement(
     );
   }
 
+  const conflict = settlementConflict(
+    history.closings,
+    (id) => history.calls.some((call) => call.equalizationSchedule?.some((e) => e.closingId === id)),
+    closingId,
+    settlement,
+  );
+  if (conflict) throw new ActionError(conflict, 409);
+
   const service = createServiceSupabase();
   const { data: statements, error: readError } = await service.from('closing_statements').select('status').eq('closing_id', closingId);
   if (readError) throw new ActionError(readError.message, 400);
@@ -235,6 +254,19 @@ async function sentStatement(userClient: UserSupabase, closingId: string, lpId: 
   return (data?.payload as unknown as StatementInput | undefined) ?? null;
 }
 
+/** The payment due date a closing's statements were approved with, if any were. Read as the user. */
+async function approvedDueDate(userClient: UserSupabase, closingId: string): Promise<string | null> {
+  const { data, error } = await userClient
+    .from('closing_statements')
+    .select('payment_due_date')
+    .eq('closing_id', closingId)
+    .not('payment_due_date', 'is', null)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new ActionError(error.message, 400);
+  return data?.payment_due_date ?? null;
+}
+
 export async function statementFor(fundId: string, closingId: string, lpId: string, options: { client?: UserSupabase } = {}) {
   const { history, closings, fundName, userClient } = await readFund(fundId, options.client);
   const closing = closings.find((c) => c.id === closingId);
@@ -254,13 +286,21 @@ export async function statementFor(fundId: string, closingId: string, lpId: stri
     lpId,
     callNo: `EQ${closing.closingNo}`,
   });
+  // Settled by statement, it is payable by the date chosen at approval — or,
+  // before that, the date that would be suggested — and interest runs to it.
+  const dueDate =
+    closing.finalised && closing.settlement === 'on_closing'
+      ? ((await approvedDueDate(userClient, closingId)) ?? suggestedStatementDueDate(closing.closingDate))
+      : null;
+  const shown = dueDate ? equalizationForStatement(result, dueDate) : result;
   const pdf = await renderStatementPdf({
     fund: fundName,
     closingNo: closing.closingNo,
-    line,
-    result,
+    line: shown.lines.find((l) => l.lpId === lpId)!,
+    result: shown,
     finalised: closing.finalised,
     payment,
+    dueDate,
     settlement: closing.settlement ?? null,
   });
   return { pdf, fileName: statementFileName(closing.closingNo, line.name) };
@@ -293,13 +333,19 @@ async function statementClosing(fundId: string, closingId: string, client?: User
   const service = createServiceSupabase();
   const { data: rows, error } = await service
     .from('closing_statements')
-    .select('id, status, investor_id, investors!inner ( lp_id )')
+    .select('id, status, investor_id, payment_due_date, investors!inner ( lp_id )')
     .eq('closing_id', closingId);
   if (error) throw new ActionError(error.message, 400);
   const statusOf = new Map(
     (rows ?? []).map((r) => [(r.investors as unknown as { lp_id: string }).lp_id, r.status as 'draft' | 'approved' | 'sent']),
   );
-  return { ...fund, closing, result: closing.result, owing, statusOf, service };
+  // One closing, one date: the interest the earlier investors share is what
+  // the late investors pay, so everyone's statement runs it to the same day.
+  // It can change until the first statement is sent.
+  const dueDate = (rows ?? []).find((r) => r.status !== 'draft' && r.payment_due_date)?.payment_due_date ?? null;
+  const sentDueDate = (rows ?? []).find((r) => r.status === 'sent' && r.payment_due_date)?.payment_due_date ?? null;
+  const anySent = (rows ?? []).some((r) => r.status === 'sent');
+  return { ...fund, closing, result: closing.result, owing, statusOf, dueDate, sentDueDate, anySent, service };
 }
 
 async function investorIds(service: Service, fundId: string, lpIds: string[]) {
@@ -308,24 +354,61 @@ async function investorIds(service: Service, fundId: string, lpIds: string[]) {
   return new Map((data ?? []).map((i) => [i.lp_id, i]));
 }
 
-/** Approve the statements not yet approved or sent — all of them, or the investors named. */
-export async function approveStatements(fundId: string, closingId: string, lpIds?: string[], options: { client?: UserSupabase } = {}) {
-  const { user, closing, owing, statusOf, service, clientId } = await statementClosing(fundId, closingId, options.client);
+/**
+ * Approve the statements not yet approved or sent — all of them, or the
+ * investors named — payable by `paymentDueDate`. Interest runs to that date
+ * when the terms say so. Every statement of a closing has the same date: until
+ * one is sent, a new date is put on those already approved too; once one is
+ * sent, the rest must match it.
+ */
+export async function approveStatements(
+  fundId: string,
+  closingId: string,
+  lpIds: string[] | undefined,
+  paymentDueDate: string,
+  options: { client?: UserSupabase } = {},
+) {
+  const { user, closing, owing, statusOf, dueDate, sentDueDate, anySent, service, clientId } = await statementClosing(fundId, closingId, options.client);
+  const due = serialToISO(paymentDueDate);
+  if (!due) throw new ActionError('Say the date the statements are payable by.', 400);
+  if (due < closing.closingDate) {
+    throw new ActionError(`The payment due date cannot be before the closing (${fmtDate(closing.closingDate)}).`, 400);
+  }
+  if (anySent && due !== sentDueDate) {
+    throw new ActionError(
+      sentDueDate
+        ? `Closing ${closing.closingNo}'s statements already sent are payable by ${fmtDate(sentDueDate)}: the rest must be too, so the interest adds up.`
+        : `Closing ${closing.closingNo}'s statements were sent before a payment date was recorded, so the rest cannot be given one. Settle the rest on the next call instead.`,
+      409,
+    );
+  }
   const targets = owing.filter((id) => (!lpIds || lpIds.includes(id)) && !['approved', 'sent'].includes(statusOf.get(id) ?? 'draft'));
-  if (!targets.length) throw new ActionError('There are no statements left to approve.', 400);
-  const ids = await investorIds(service, fundId, targets);
+  // Approved, not sent, and payable by another date: they move to this one.
+  const redated = dueDate && dueDate !== due ? owing.filter((id) => statusOf.get(id) === 'approved') : [];
+  if (!targets.length && !redated.length) throw new ActionError('There are no statements left to approve.', 400);
+  const ids = await investorIds(service, fundId, [...targets, ...redated]);
   const now = new Date().toISOString();
-  const { error } = await service.from('closing_statements').upsert(
+  if (redated.length) {
+    const { error: redateError } = await service
+      .from('closing_statements')
+      .update({ payment_due_date: due, updated_at: now })
+      .eq('closing_id', closingId)
+      .eq('status', 'approved')
+      .in('investor_id', redated.map((lpId) => ids.get(lpId)!.id));
+    if (redateError) throw new ActionError(redateError.message, 400);
+  }
+  const { error } = targets.length ? await service.from('closing_statements').upsert(
     targets.map((lpId) => ({
       closing_id: closingId,
       investor_id: ids.get(lpId)!.id,
       status: 'approved',
+      payment_due_date: due,
       approved_at: now,
       approved_by: user.id,
       updated_at: now,
     })),
     { onConflict: 'closing_id,investor_id' },
-  );
+  ) : { error: null };
   if (error) throw new ActionError(error.message, 400);
   await service.from('audit_log').insert({
     client_id: clientId,
@@ -334,9 +417,9 @@ export async function approveStatements(fundId: string, closingId: string, lpIds
     action: 'statements.approved',
     entity_type: 'closing',
     entity_id: closingId,
-    after: asJson({ closingNo: closing.closingNo, lpIds: targets }),
+    after: asJson({ closingNo: closing.closingNo, lpIds: targets, redated, paymentDueDate: due, previousDueDate: dueDate }),
   });
-  return { approved: targets.length };
+  return { approved: targets.length, redated: redated.length, paymentDueDate: due };
 }
 
 /**
@@ -351,22 +434,26 @@ export async function sendStatements(
   lpIds?: string[],
   options: { client?: UserSupabase; deliver?: boolean } = {},
 ) {
-  const { user, closing, result, history, fundName, owing, statusOf, service, clientId } = await statementClosing(fundId, closingId, options.client);
+  const { user, closing, result, history, fundName, owing, statusOf, dueDate, service, clientId } = await statementClosing(fundId, closingId, options.client);
   const targets = owing.filter((id) => (!lpIds || lpIds.includes(id)) && statusOf.get(id) === 'approved');
   if (!targets.length) throw new ActionError('No approved statements to send. Approve them first.', 400);
+  if (!dueDate) throw new ActionError('The approved statements have no payment due date. Approve them again with one.', 409);
 
   const { data: frozen, error: frozenError } = await service.from('closing_results').select('id').eq('closing_id', closingId).single();
   if (frozenError) throw new ActionError(frozenError.message, 400);
 
   const ids = await investorIds(service, fundId, targets);
   const terms = termsOn(history.terms, closing.closingDate);
+  // The frozen equalization, with interest run to the date it is payable by.
+  const asked = equalizationForStatement(result, dueDate);
   const input = (lpId: string): StatementInput => ({
     fund: fundName,
     closingNo: closing.closingNo,
-    line: result.lines.find((l) => l.lpId === lpId)!,
-    result,
+    line: asked.lines.find((l) => l.lpId === lpId)!,
+    result: asked,
     finalised: true,
     payment: paymentInstructions(terms, { lpId, callNo: `EQ${closing.closingNo}` }),
+    dueDate,
     settlement: 'on_closing',
   });
 

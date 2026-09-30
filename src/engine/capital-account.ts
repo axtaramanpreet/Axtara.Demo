@@ -14,8 +14,7 @@
 
 import { round } from './format';
 import { registerMismatches } from './fund-register';
-import type { FundHistory } from './fund-history';
-import { termsOn } from './fund-terms';
+import { equalizationMovements, type FundHistory } from './fund-history';
 
 export interface AccountEntry {
   date: string;
@@ -27,7 +26,7 @@ export interface AccountEntry {
   paid: number;
   /** The part of `paid` that counted against their commitment. */
   drawn: number;
-  /** Late-close interest paid (+) or received (−): not capital, so no balance moves. */
+  /** Late-close interest, on capital and on the catch-up fee, paid (+) or received (−): not capital, so no balance moves. */
   interest: number;
   /** Balances after this entry. */
   commitmentAfter: number;
@@ -38,7 +37,7 @@ export interface AccountEntry {
 
 /**
  * How a closing's equalization reached the investor, for the account's label.
- * The balances move on the closing date either way; this says where the cash is.
+ * Settled on a call, the balances move on that call; otherwise on the closing.
  */
 function settledHow(c: FundHistory['closings'][number], calls: FundHistory['calls']): string {
   if (c.settlement === 'on_closing') return ', by statement';
@@ -112,20 +111,21 @@ export function capitalAccount(history: FundHistory, lpId: string, through: stri
     if (amount) {
       steps.push({ date: c.closingDate, kind: 'closing', label: `Closing ${c.closingNo}: committed`, commitment: amount, paid: 0, drawn: 0, interest: 0, ref: { closingId: c.id, closingNo: c.closingNo } });
     }
-    const line = c.result?.lines.find((l) => l.lpId === lpId);
-    if (line) {
-      const feeReduces = termsOn(history.terms, c.closingDate)?.feeReducesUnfunded ?? true;
-      steps.push({
-        date: c.closingDate,
-        kind: 'equalization',
-        label: `Closing ${c.closingNo}: equalization ${line.net >= 0 ? 'paid' : 'refund'}${settledHow(c, calls)}`,
-        commitment: 0,
-        paid: line.capital + line.catchUpFee,
-        drawn: line.inside + (feeReduces ? line.catchUpFee : 0),
-        interest: line.interest,
-        ref: { closingId: c.id, closingNo: c.closingNo },
-      });
-    }
+  }
+  for (const m of equalizationMovements({ ...history, calls })) {
+    if (m.lpId !== lpId || m.date > through) continue;
+    const c = finalised.find((k) => k.id === m.closingId);
+    if (!c) continue;
+    steps.push({
+      date: m.date,
+      kind: 'equalization',
+      label: `Closing ${c.closingNo}: equalization ${m.net >= 0 ? 'paid' : 'refund'}${settledHow(c, calls)}`,
+      commitment: 0,
+      paid: m.paid,
+      drawn: m.drawn,
+      interest: m.interest,
+      ref: { closingId: c.id, closingNo: c.closingNo },
+    });
   }
 
   for (const c of calls) {

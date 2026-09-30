@@ -12,6 +12,7 @@ import { compute, type CallModel } from '@/engine';
 import { ILLUSTRATIVE_FUND } from '@/engine/fixtures/illustrative-fund';
 import type { CallDetail } from '@/adapters/storage/types';
 import { AllocationTab } from '../allocation-tab';
+import { allocationTable } from '@/adapters/workbook/export-allocation';
 
 afterEach(cleanup);
 
@@ -59,3 +60,55 @@ describe('a call settling a later closing', () => {
     expect(screen.queryByText('Amount_Due')).toBeNull();
   });
 });
+
+describe('a call billing fee periods', () => {
+  // Two periods: Q2 bills the first investor 100 and the second 200; Q3 150 and 300.
+  const periodModel = (): CallModel => {
+    const base = structuredClone(ILLUSTRATIVE_FUND);
+    base.golden = null;
+    const [a, b] = base.lps.map((l) => String(l.LP_ID));
+    return {
+      ...base,
+      fee: { ...base.fee, offsets: [] },
+      feeSchedule: [
+        { from: '2026-04-01', to: '2026-06-30', label: 'Q2 2026', byLp: { [a]: 100, [b]: 200 } },
+        { from: '2026-07-01', to: '2026-09-30', label: 'Q3 2026', byLp: { [a]: 150, [b]: 300 } },
+      ],
+    };
+  };
+
+  it('gives each period its own column, then the fee in all', () => {
+    const model = periodModel();
+    const [a] = model.lps.map((l) => String(l.LP_ID));
+    show(model);
+    const head = screen.getAllByRole('columnheader').map((h) => h.textContent);
+    const at = (label: string) => head.indexOf(label);
+    expect(at('Fee_Q2_2026')).toBeGreaterThan(-1);
+    expect(at('Fee_Q3_2026')).toBe(at('Fee_Q2_2026') + 1);
+    expect(at('Fee_Gross')).toBe(at('Fee_Q3_2026') + 1);
+    const cells = [...(screen.getAllByText(a)[0].closest('tr') as HTMLElement).querySelectorAll('td')].map((td) => td.textContent);
+    expect([at('Fee_Q2_2026'), at('Fee_Q3_2026'), at('Fee_Gross')].map((i) => cells[i])).toEqual(['100.00', '150.00', '250.00']);
+    const total = [...(screen.getByText('TOTAL').closest('tr') as HTMLElement).querySelectorAll('td')].map((td) => td.textContent);
+    const offset = head.length - total.length;
+    expect([at('Fee_Q2_2026'), at('Fee_Q3_2026'), at('Fee_Gross')].map((i) => total[i - offset])).toEqual(['300.00', '450.00', '750.00']);
+  });
+
+  it('and the download has the same columns, with the same figures', () => {
+    const model = periodModel();
+    const [a] = model.lps.map((l) => String(l.LP_ID));
+    const [header, ...body] = allocationTable({ id: 'call-1', callNo: 3, model } as unknown as CallDetail, compute(model));
+    const at = (label: string) => header.indexOf(label);
+    const row = body.find((r) => r[0] === a)!;
+    const totals = body[body.length - 1];
+    expect([at('Fee_Q2_2026'), at('Fee_Q3_2026'), at('Fee_Gross')].map((i) => row[i])).toEqual([100, 150, 250]);
+    expect([at('Fee_Q2_2026'), at('Fee_Q3_2026'), at('Fee_Gross')].map((i) => totals[i])).toEqual([300, 450, 750]);
+  });
+
+  it('adds no period columns to a call that charges rate × share of a year', () => {
+    const base = structuredClone(ILLUSTRATIVE_FUND);
+    base.golden = null;
+    const [header] = allocationTable({ id: 'call-1', callNo: 3, model: base } as unknown as CallDetail, compute(base));
+    expect(header.filter((h) => String(h).startsWith('Fee_'))).toEqual(['Fee_Rate', 'Fee_Gross', 'Fee_Offset', 'Fee_Net']);
+  });
+});
+

@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { equalize, type EqualizationInput, type PriorCall } from '../equalization';
+import { equalize, equalizationRunTo, type EqualizationInput, type PriorCall } from '../equalization';
 import { BLANK_TERMS, type FundTerms } from '../fund-terms';
 
 const terms = (patch: Partial<FundTerms> = {}): FundTerms => ({
@@ -96,11 +96,77 @@ describe('the late investor', () => {
     expect(late.feeSlices.map((s) => s.fractionWorking)).toEqual(['0.25', '0.25', '0.25 × 31/92']);
   });
 
-  it('owes the three together', () => {
-    // 1,000,000 + 23,598.17 + 58,423.91 = 1,082,022.08
-    expect(late.net).toBe(1_082_022.08);
+  it('pays interest on the catch-up fee, from the first close to their closing', () => {
+    // The fund manager's rule: 58,423.91 × 8% × 212/365 (1 Jan → 1 Aug) = 2,714.71
+    expect(late.feeInterest).toBe(2_714.71);
+    expect(r.totals.feeInterest).toBe(2_714.71);
+    expect(r.totals.feeInterestToGp).toBe(2_714.71);
+  });
+
+  it('owes the four together', () => {
+    // 1,000,000 + 23,598.17 + 58,423.91 + 2,714.71 = 1,084,736.79
+    expect(late.net).toBe(1_084_736.79);
+  });
+
+  it('records where the capital interest stops, the fund manager’s rule when blank', () => {
+    expect(r.totals.interestUntil).toBe('collection_due_date');
+    expect(r.totals.catchUpFeeInterest).toBe('first_close');
   });
 });
+
+describe('interest on the catch-up fee, the other ways', () => {
+  it('per period: each period’s part from that period’s start', () => {
+    // Q1 25,000 × 8% × 212/365 = 1,161.64   Q2 25,000 × 8% × 122/365 = 668.49
+    // Q3 8,423.91 × 8% × 31/365 = 57.24                     total 1,887.37
+    const late = lineOf(equalize(base({ terms: [terms({ catchUpFeeInterest: 'per_period' })] })), 'LP07');
+    expect(late.feeInterest).toBe(1_887.37);
+  });
+
+  it('none: no interest on the fee', () => {
+    const late = lineOf(equalize(base({ terms: [terms({ catchUpFeeInterest: 'none' })] })), 'LP07');
+    expect(late.feeInterest).toBe(0);
+    expect(late.net).toBe(1_082_022.08);
+  });
+
+  it('goes where the fee goes: shared by commitment when the earlier investors get the fee', () => {
+    // 2,714.71 split 6:4 → LP01 1,628.83, LP02 1,085.88
+    const r = equalize(base({ terms: [terms({ catchUpFeeTo: 'existing_lps' })] }));
+    expect(lineOf(r, 'LP01').feeInterest).toBe(-1_628.83);
+    expect(lineOf(r, 'LP02').feeInterest).toBe(-1_085.88);
+    expect(r.totals.feeInterestToGp).toBe(0);
+  });
+});
+
+describe('capital interest run to a later date', () => {
+  const r = equalize(base());
+  const later = equalizationRunTo(r, '2026-09-01');
+  const lineIn = (x: typeof r, id: string) => x.lines.find((l) => l.lpId === id)!;
+
+  it('is the same calculation, to the collecting call’s due date', () => {
+    // To 1 Sep: call 1 198 days, call 2 109 days
+    // 333,333.33 × 8% × 198/365 = 14,465.75   666,666.67 × 8% × 109/365 = 15,926.94
+    expect(lineIn(later, 'LP07').calls.map((c) => [c.days, c.interest])).toEqual([
+      [198, 14_465.75],
+      [109, 15_926.94],
+    ]);
+    expect(lineIn(later, 'LP07').interest).toBe(30_392.69);
+    expect(round2(lineIn(later, 'LP01').interest + lineIn(later, 'LP02').interest)).toBe(-30_392.69);
+    expect(later.totals).toMatchObject({ interest: 30_392.69, interestRunTo: '2026-09-01' });
+  });
+
+  it('leaves capital and the catch-up fee as finalised, and the net follows the interest', () => {
+    const [a, b] = [lineIn(r, 'LP07'), lineIn(later, 'LP07')];
+    expect([b.capital, b.inside, b.catchUpFee, b.feeInterest]).toEqual([a.capital, a.inside, a.catchUpFee, a.feeInterest]);
+    // 1,000,000 + 30,392.69 + 58,423.91 + 2,714.71 = 1,091,531.31
+    expect(b.net).toBe(1_091_531.31);
+  });
+
+  it('on or before the closing date gives back what finalising worked out', () => {
+    expect(equalizationRunTo(r, '2026-08-01')).toBe(r);
+  });
+});
+
+const round2 = (x: number) => Math.round(x * 100) / 100;
 
 describe('the earlier investors', () => {
   const r = equalize(base());
@@ -232,5 +298,32 @@ describe('awkward cases', () => {
   it('charges no catch-up fee to an exempt late investor', () => {
     const r = equalize(base({ newcomers: [{ lpId: 'GP02', name: 'Co-GP', commitment: 5_000_000, feeExempt: true }] }));
     expect(lineOf(r, 'GP02').catchUpFee).toBe(0);
+  });
+});
+
+describe('the interest split, where a cent is left over', () => {
+  // Three earlier investors, 1m each, paid 100,000 each into call 1 (due 15 Feb).
+  // LP07 (1m) closes 2 Aug: share 300,000 × 1/4 = 75,000; 168 days at 8%:
+  // 75,000 × 8% × 168/365 = 2,761.64, a third each = 920.5479… → 920.55, 920.55,
+  // and the first of the equal shares takes the rest: 2,761.64 − 1,841.10 = 920.54.
+  const input = base({
+    closingDate: '2026-08-02',
+    existing: ['LP01', 'LP02', 'LP03'].map((lpId) => ({ lpId, name: lpId, commitment: 1_000_000 })),
+    newcomers: [{ lpId: 'LP07', name: 'Eta', commitment: 1_000_000 }],
+    priorCalls: [{ callNo: 1, dueDate: '2026-02-15', lines: ['LP01', 'LP02', 'LP03'].map((lpId) => ({ lpId, capital: 100_000, inside: 100_000 })) }],
+    terms: [terms({ catchUpFeeInterest: 'none', feeRateAnnual: null })],
+  });
+  const r = equalize(input);
+
+  it('gives the leftover cent to the plug at finalising', () => {
+    expect(lineOf(r, 'LP07').interest).toBe(2_761.64);
+    expect(['LP01', 'LP02', 'LP03'].map((id) => lineOf(r, id).interest)).toEqual([-920.54, -920.55, -920.55]);
+  });
+
+  it('and the same way when it is worked out again to a later date', () => {
+    // Worked again a day on, to 3 Aug: 75,000 × 8% × 169/365 = 2,778.08, a third
+    // 926.03 each, and the first takes 2,778.08 − 1,852.06 = 926.02.
+    const next = equalizationRunTo(r, '2026-08-03');
+    expect(['LP01', 'LP02', 'LP03', 'LP07'].map((id) => next.lines.find((l) => l.lpId === id)!.interest)).toEqual([-926.02, -926.03, -926.03, 2_778.08]);
   });
 });

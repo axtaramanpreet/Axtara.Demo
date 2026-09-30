@@ -6,13 +6,13 @@ import { useState, useTransition } from 'react';
 import { createBrowserSupabase } from '@/adapters/storage/supabase-client';
 import { createSupabaseRepository } from '@/adapters/storage/supabase-repository';
 import type { Closing, ClosingCommitmentInput, ClosingStatement, FundInvestor } from '@/adapters/storage/types';
-import { fmt, fmtDate, pct, type EqualizationResult, type Position, type Settlement } from '@/engine';
+import { fmt, fmtDate, pct, settlementConflict, type EqualizationResult, type Position, type Settlement } from '@/engine';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { InfoTip } from '@/components/ui/info-tip';
 import { Tag } from '@/components/ui/tag';
 import { EqualizationPanel } from './equalization-panel';
-import { SettlementCard, SettlementOptions } from './settlement-choice';
+import { SettlementCard, SettlementOptions, type SettlementBlocked } from './settlement-choice';
 import { StatementsCard } from './statements-card';
 import { TemplateButtons } from '@/components/ui/template-buttons';
 import { COMMITMENTS_SHEET, commitmentsTemplate, readCommitmentsTemplate, type WorkbookWriter } from '@/adapters/workbook/templates';
@@ -73,6 +73,16 @@ export function ClosingsScreen({
   const [error, setError] = useState<string | null>(null);
   const repo = () => createSupabaseRepository(createBrowserSupabase());
   const refresh = () => startRefresh(() => router.refresh());
+  /** The ways each closing may not be settled, because of the closings around it. */
+  const settlementBlockedFor = (closingId: string): SettlementBlocked => {
+    const carried = (id: string) => (settledOn[id] ?? []).length > 0;
+    const out: SettlementBlocked = {};
+    for (const way of ['on_closing', 'next_call'] as const) {
+      const why = settlementConflict(closings, carried, closingId, way);
+      if (why) out[way] = why;
+    }
+    return out;
+  };
 
   const committed = positions.reduce((s, p) => s + p.commitment, 0);
   const paid = positions.reduce((s, p) => s + p.paidIn, 0);
@@ -215,6 +225,7 @@ export function ClosingsScreen({
           blockedBy={
             closings.find((x) => !x.finalised && x.id !== c.id && x.closingDate < c.closingDate)?.closingNo ?? null
           }
+          settlementBlocked={settlementBlockedFor(c.id)}
           onChanged={refresh}
         />
       ))}
@@ -262,6 +273,7 @@ function ClosingCard({
   investors,
   canWrite,
   blockedBy,
+  settlementBlocked,
   onChanged,
 }: {
   fundId: string;
@@ -277,6 +289,8 @@ function ClosingCard({
   canWrite: boolean;
   /** An earlier draft closing that has to be finalised first. */
   blockedBy: number | null;
+  /** Ways to settle its equalization not open to it, with the reason. */
+  settlementBlocked: SettlementBlocked;
   onChanged: () => void;
 }) {
   const editable = canWrite && !closing.finalised;
@@ -626,6 +640,7 @@ function ClosingCard({
                 settlement={closing.settlement ?? null}
                 settledOn={settledOn}
                 statementsSent={statements.filter((x) => x.status === 'sent').length}
+                blocked={settlementBlocked}
                 canWrite={canWrite}
                 onChanged={onChanged}
               />
@@ -678,7 +693,7 @@ function ClosingCard({
           {toSettle && (
             <>
               <strong style={{ marginTop: 4 }}>How is the equalization settled?</strong>
-              <SettlementOptions name={`finalise-${closing.id}`} value={settlement} onChange={setSettlement} />
+              <SettlementOptions name={`finalise-${closing.id}`} value={settlement} onChange={setSettlement} blocked={settlementBlocked} />
             </>
           )}
           <p className="text-muted" style={{ margin: 0 }}>

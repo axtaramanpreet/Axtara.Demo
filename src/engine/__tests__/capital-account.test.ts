@@ -16,7 +16,7 @@ import { ILLUSTRATIVE_FUND } from '../fixtures/illustrative-fund';
 
 const model = structuredClone(ILLUSTRATIVE_FUND);
 const call1 = issuedCallFrom(1, '2026-09-30', '2026-10-14', compute(model).rows);
-const terms: FundTerms = { ...BLANK_TERMS, effectiveFrom: '2024-01-01', createdAt: '', feeBasis: 'Commitment', feeRateAnnual: 0.02, feePeriodFraction: 0.25, lateCloseInterestRate: 0.08, feeReducesUnfunded: true };
+const terms: FundTerms = { ...BLANK_TERMS, effectiveFrom: '2024-01-01', createdAt: '', feeBasis: 'Commitment', feeRateAnnual: 0.02, feePeriodFraction: 0.25, lateCloseInterestRate: 0.08, feeReducesUnfunded: true, catchUpFeeUntil: 'closing_date' };
 const first: ClosingRecord = {
   id: 'c1', closingNo: 1, closingDate: '2024-01-01', finalised: true, result: null,
   commitments: model.lps.map((l) => ({ lpId: l.LP_ID, name: l.LP_Name, amount: Number(l.Commitment), feeRateOverride: null, feeExempt: l.Fee_Exempt === 'Y' })),
@@ -49,7 +49,9 @@ describe('an investor’s capital account', () => {
   it('keeps late-close interest out of the balances', () => {
     const eq = capitalAccount(history, 'LP07', '2026-12-01').entries.find((e) => e.kind === 'equalization')!;
     const line = history.closings[1].result!.lines.find((l) => l.lpId === 'LP07')!;
-    expect(eq.interest).toBe(line.interest);
+    // Interest on the capital and on the catch-up fee, together.
+    expect(line.feeInterest).toBeGreaterThan(0);
+    expect(eq.interest).toBeCloseTo(line.interest + line.feeInterest!, 2);
     expect(eq.interest).toBeGreaterThan(0);
     // Paid in is the capital and the catch-up fee; the interest is shown, not counted.
     expect(eq.paidAfter).toBeCloseTo(line.capital + line.catchUpFee, 2);

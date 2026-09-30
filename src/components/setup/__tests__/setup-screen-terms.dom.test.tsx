@@ -301,7 +301,7 @@ describe('the rounding plug, before the register is filled in', () => {
 });
 
 describe('fee periods, for a fund with closings', () => {
-  const quarterly: FundTerms = { ...BLANK_TERMS, effectiveFrom: '2026-01-01', createdAt: '2026-01-01T00:00:00Z', feeBasis: 'Commitment', feeRateAnnual: 0.02, feePeriodFraction: 0.25, feeTiming: 'advance', feeReducesUnfunded: true };
+  const quarterly: FundTerms = { ...BLANK_TERMS, effectiveFrom: '2026-01-01', createdAt: '2026-01-01T00:00:00Z', feeBasis: 'Commitment', feeRateAnnual: 0.02, feePeriodFraction: 0.25, feeTiming: 'advance', feeReducesUnfunded: true, catchUpFeeUntil: 'closing_date' };
   const close: ClosingRecord = {
     id: 'c1', closingNo: 1, closingDate: '2026-01-01', finalised: true, result: null,
     commitments: [{ lpId: 'LP01', name: 'Alpha', amount: 10e6, feeRateOverride: null, feeExempt: false }],
@@ -365,7 +365,7 @@ describe('fee periods, for a fund with closings', () => {
 });
 
 describe('a later closing settled on the next call', () => {
-  const quarterly: FundTerms = { ...BLANK_TERMS, effectiveFrom: '2026-01-01', createdAt: '2026-01-01T00:00:00Z', feeBasis: 'Commitment', feeRateAnnual: 0.02, feePeriodFraction: 0.25, feeTiming: 'advance', feeReducesUnfunded: true };
+  const quarterly: FundTerms = { ...BLANK_TERMS, effectiveFrom: '2026-01-01', createdAt: '2026-01-01T00:00:00Z', feeBasis: 'Commitment', feeRateAnnual: 0.02, feePeriodFraction: 0.25, feeTiming: 'advance', feeReducesUnfunded: true, catchUpFeeUntil: 'closing_date' };
   const first: ClosingRecord = {
     id: 'c1', closingNo: 1, closingDate: '2026-01-01', finalised: true, result: null,
     commitments: [{ lpId: 'LP01', name: 'Alpha', amount: 10e6, feeRateOverride: null, feeExempt: false }],
@@ -401,7 +401,7 @@ describe('a later closing settled on the next call', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     const saved = (saveCall.mock.calls.at(-1) as unknown as [string, CallModel])[1];
     expect(saved.equalizationSchedule).toEqual([
-      { closingId: 'c2', closingNo: 2, closingDate: '2026-05-01', byLp: { LP07: 33_241.76 }, parts: { LP07: { capital: 0, interest: 0, catchUpFee: 33_241.76 } } },
+      { closingId: 'c2', closingNo: 2, closingDate: '2026-05-01', byLp: { LP07: 33_241.76 }, parts: { LP07: { capital: 0, inside: 0, interest: 0, catchUpFee: 33_241.76, feeInterest: 0 } }, interestUntil: '2026-05-01', settles: 'on_call', feeReducesUnfunded: true },
     ]);
   });
 

@@ -10,6 +10,8 @@
 import { describe, expect, it } from 'vitest';
 import { equalize } from '../equalization';
 import { BLANK_TERMS, type FundTerms } from '../fund-terms';
+import { buildEqualizationSchedule, equalizationOwed } from '../equalization-billing';
+import { equalizationMovements, positionsOn, type FundHistory, type Settlement } from '../fund-history';
 import { positionsAsOf, type IssuedCall } from '../positions';
 
 const terms: FundTerms = {
@@ -68,9 +70,29 @@ const commitments = {
   LP07: { name: 'Eta', changes: [{ from: '2026-08-01', amount: 5e6 }] },
 };
 
+/** The fund's record: the two closings, the second finalised with `eq`, settled as given. */
+const fund = (settlement: Settlement, calls: IssuedCall[] = [call1, call2]): FundHistory => ({
+  terms: [terms],
+  closings: [
+    {
+      id: 'k1', closingNo: 1, closingDate: '2026-01-01', finalised: true, result: null,
+      commitments: [
+        { lpId: 'LP01', name: 'Alpha', amount: 6e6, feeRateOverride: null, feeExempt: false },
+        { lpId: 'LP02', name: 'Beta', amount: 4e6, feeRateOverride: null, feeExempt: false },
+      ],
+    },
+    {
+      id: 'k2', closingNo: 2, closingDate: '2026-08-01', finalised: true, result: eq, settlement,
+      commitments: [{ lpId: 'LP07', name: 'Eta', amount: 5e6, feeRateOverride: null, feeExempt: false }],
+    },
+  ],
+  calls,
+});
+
 const after = positionsAsOf('2026-09-01', {
   calls: [call1, call2],
-  equalizations: [{ closingDate: '2026-08-01', lines: eq.lines, feeReducesUnfunded: true }],
+  equalizations: [{ closingDate: '2026-08-01', lines: eq.lines }],
+  movements: equalizationMovements(fund('on_closing')),
   commitments,
 });
 const of = (lpId: string) => after.find((p) => p.lpId === lpId)!;
@@ -114,7 +136,8 @@ describe('on other dates', () => {
   it('knows nothing of the late investor before they joined', () => {
     const before = positionsAsOf('2026-07-31', {
       calls: [call1, call2],
-      equalizations: [{ closingDate: '2026-08-01', lines: eq.lines, feeReducesUnfunded: true }],
+      equalizations: [{ closingDate: '2026-08-01', lines: eq.lines }],
+      movements: equalizationMovements(fund('on_closing')),
       commitments,
     });
     expect(before.map((p) => p.lpId)).toEqual(['LP01', 'LP02']);
@@ -136,5 +159,40 @@ describe('a fund that came from a workbook', () => {
     const [p] = positionsAsOf('2026-03-01', { calls: [imported] });
     // Paid 2,000,000 before Axtara, 600,000 since. Drawn 2,000,000 + 600,000 of 6,000,000.
     expect(p).toMatchObject({ commitment: 6e6, paidIn: 2_600_000, unfunded: 3_400_000, invested: 2_400_000 });
+  });
+});
+
+describe('settled on the next call: the balances move on that call', () => {
+  // The fund manager's rule. Until the call that collects it is sent, LP07 has
+  // paid nothing and all 5,000,000 is unfunded; the earlier investors have not
+  // had their refund. Invested capital stays dated at the closing.
+  const owed = equalizationOwed(fund('next_call'), '2026-09-01', { dueDate: '2026-09-15' });
+  const schedule = buildEqualizationSchedule(owed);
+  const call3: IssuedCall = { callNo: 3, callDate: '2026-09-01', dueDate: '2026-09-15', lines: [], equalizationSchedule: schedule };
+
+  it('leaves the late investor fully unfunded until the collecting call', () => {
+    const before = positionsOn(fund('next_call'), '2026-09-01');
+    expect(before.find((p) => p.lpId === 'LP07')).toMatchObject({ commitment: 5e6, paidIn: 0, unfunded: 5e6, invested: 933_333.33 });
+    expect(before.find((p) => p.lpId === 'LP01')).toMatchObject({ paidIn: 1_800_000, unfunded: 4_320_000 });
+  });
+
+  it('moves them on the collecting call, to where settling at the closing would have put them', () => {
+    const settled = positionsOn(fund('next_call', [call1, call2, call3]), '2026-09-01');
+    const atClosing = positionsOn(fund('on_closing'), '2026-09-01');
+    expect(settled).toEqual(atClosing);
+    expect(settled.find((p) => p.lpId === 'LP07')).toMatchObject({ paidIn: 1_058_423.91, unfunded: 4_008_242.76 });
+  });
+
+  it('keeps an older sent call’s rule: its closing moved the balances on the closing date', () => {
+    const older = {
+      ...call3,
+      equalizationSchedule: schedule.map((e) => {
+        const o = { ...e };
+        delete o.settles;
+        return o;
+      }),
+    };
+    const on = positionsOn(fund('next_call', [call1, call2, older]), '2026-08-15');
+    expect(on.find((p) => p.lpId === 'LP07')).toMatchObject({ paidIn: 1_058_423.91 });
   });
 });

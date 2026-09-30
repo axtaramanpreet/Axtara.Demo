@@ -52,6 +52,8 @@ export interface ClosingStatement {
   closingId: string;
   lpId: string;
   status: 'draft' | 'approved' | 'sent';
+  /** The date it is payable by, set when approved: interest runs to it. */
+  paymentDueDate: string | null;
   approvedAt: string | null;
   sentAt: string | null;
   sentToEmail: string | null;

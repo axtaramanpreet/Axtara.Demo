@@ -6,7 +6,7 @@
 -- ---------------------------------------------------------------------------
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(11);
+select plan(15);
 
 insert into auth.users (id, instance_id, aud, role, email)
 values ('aaaaaaaa-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-000000000000',
@@ -28,10 +28,19 @@ select finalise_closing('33333333-3333-3333-3333-333333333302', '{"lines": []}':
 
 -- --- The server approves and sends ------------------------------------------
 
+select throws_ok(
+  $$ insert into closing_statements (closing_id, investor_id, status, approved_at, approved_by)
+     values ('33333333-3333-3333-3333-333333333302', '44444444-4444-4444-4444-444444444407', 'approved', now(), 'aaaaaaaa-0000-0000-0000-00000000000a') $$,
+  '23514', null, 'an approved statement must say when it is payable by'
+);
 select lives_ok(
-  $$ insert into closing_statements (id, closing_id, investor_id, status, approved_at, approved_by)
-     values ('66666666-6666-6666-6666-666666666601', '33333333-3333-3333-3333-333333333302', '44444444-4444-4444-4444-444444444407', 'approved', now(), 'aaaaaaaa-0000-0000-0000-00000000000a') $$,
-  'the server can approve a statement'
+  $$ insert into closing_statements (id, closing_id, investor_id, status, payment_due_date, approved_at, approved_by)
+     values ('66666666-6666-6666-6666-666666666601', '33333333-3333-3333-3333-333333333302', '44444444-4444-4444-4444-444444444407', 'approved', '2026-05-15', now(), 'aaaaaaaa-0000-0000-0000-00000000000a') $$,
+  'the server can approve a statement, payable by a date'
+);
+select lives_ok(
+  $$ update closing_statements set payment_due_date = '2026-05-29' where id = '66666666-6666-6666-6666-666666666601' $$,
+  'and, until it is sent, change that date'
 );
 select throws_ok(
   $$ update closing_statements set status = 'sent', sent_at = now() where id = '66666666-6666-6666-6666-666666666601' $$,
@@ -56,6 +65,10 @@ select throws_ok(
   '23001', null, 'nor go back to approved'
 );
 select throws_ok(
+  $$ update closing_statements set payment_due_date = '2026-06-30' where id = '66666666-6666-6666-6666-666666666601' $$,
+  '23001', null, 'nor its payment due date: interest ran to it'
+);
+select throws_ok(
   $$ delete from closing_statements where id = '66666666-6666-6666-6666-666666666601' $$,
   '23001', null, 'nor be deleted'
 );
@@ -69,11 +82,22 @@ select throws_ok(
   '23001', null, 'and once a statement is sent, how the closing is settled is fixed'
 );
 
+-- A statement sent before dates were recorded has none, and can still be emailed again.
+insert into investors (id, fund_id, lp_id, lp_name)
+values ('44444444-4444-4444-4444-444444444401', '22222222-2222-2222-2222-222222222222', 'LP01', 'Alpha');
+insert into closing_statements (id, closing_id, investor_id, status, sent_at, payload, result_id)
+values ('66666666-6666-6666-6666-666666666602', '33333333-3333-3333-3333-333333333302', '44444444-4444-4444-4444-444444444401', 'sent', now(),
+        '{"line": {"net": -1}}'::jsonb, (select id from closing_results where closing_id = '33333333-3333-3333-3333-333333333302'));
+select lives_ok(
+  $$ update closing_statements set email_status = 'delivered', email_attempted_at = now() where id = '66666666-6666-6666-6666-666666666602' $$,
+  'a statement sent before dates were recorded can still have its delivery recorded'
+);
+
 -- --- Browsers read, and only their own fund's ---------------------------------
 
 set local role authenticated;
 set local request.jwt.claims = '{"sub": "aaaaaaaa-0000-0000-0000-00000000000a", "role": "authenticated"}';
-select is((select count(*) from closing_statements), 1::bigint, 'a member of the fund sees its statements');
+select is((select count(*) from closing_statements), 2::bigint, 'a member of the fund sees its statements');
 select throws_ok(
   $$ insert into closing_statements (closing_id, investor_id) values ('33333333-3333-3333-3333-333333333302', '44444444-4444-4444-4444-444444444407') $$,
   '42501', null, 'but cannot write one'

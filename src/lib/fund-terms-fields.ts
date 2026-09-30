@@ -180,7 +180,7 @@ export const GROUPS: Group[] = [
         kind: 'rate',
         placeholder: 'e.g. 8%, or blank for none',
         hint: 'A year. Blank means no interest.',
-        info: 'An investor who joins at a later closing pays their share of earlier calls. Many LPAs add interest on that, at this rate a year, from each call’s due date to the closing.',
+        info: 'An investor who joins at a later closing pays their share of earlier calls. Many LPAs add interest on that, at this rate a year, from each call’s due date.',
       },
       {
         key: 'lateCloseInterestBasis',
@@ -204,10 +204,41 @@ export const GROUPS: Group[] = [
         ],
       },
       {
+        key: 'equalizationInterestUntil',
+        label: 'Interest runs until',
+        kind: 'select',
+        info: 'Interest on the late investor’s share of earlier calls starts on each call’s due date. It stops either when they actually pay — the due date of the call or statement that collects it — or on the closing date.',
+        options: [
+          { value: 'collection_due_date', label: 'They pay (the collecting call or statement is due)' },
+          { value: 'closing_date', label: 'The closing date' },
+        ],
+      },
+      {
+        key: 'catchUpFeeInterest',
+        label: 'Interest on the catch-up fee',
+        kind: 'select',
+        info: 'A late investor pays the management fee they missed. Interest on it, at the same rate, runs to their closing: on the whole fee from the first closing, or on each fee period’s part from that period’s start. Or none.',
+        options: [
+          { value: 'first_close', label: 'From the first closing' },
+          { value: 'per_period', label: 'From each fee period’s start' },
+          { value: 'none', label: 'None' },
+        ],
+      },
+      {
+        key: 'catchUpFeeUntil',
+        label: 'Catch-up fee covers',
+        kind: 'select',
+        info: 'A late investor pays the management fee as if they had joined at the first closing. The catch-up covers the fee periods already billed to the investors in before them, and every later period bills them in full like everyone else — or it covers every day up to their closing, and later periods bill them from that day.',
+        options: [
+          { value: 'billed_periods', label: 'The fee periods already billed' },
+          { value: 'closing_date', label: 'Every day up to the closing' },
+        ],
+      },
+      {
         key: 'catchUpFeeTo',
         label: 'Catch-up fee goes to',
         kind: 'select',
-        info: 'A late investor also pays the management fee they would have paid since the first close. This is who receives it.',
+        info: 'A late investor also pays the management fee they missed before joining — the catch-up fee. This is who receives it.',
         options: [
           { value: 'gp', label: 'The general partner' },
           { value: 'existing_lps', label: 'The existing investors' },

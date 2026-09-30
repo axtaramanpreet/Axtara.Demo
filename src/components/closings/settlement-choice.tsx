@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import type { Settlement } from '@/engine';
+
+/** A way to settle that is not open to this closing, and why. */
+export type SettlementBlocked = Partial<Record<Settlement, string>>;
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tag } from '@/components/ui/tag';
@@ -10,12 +13,14 @@ const SETTLEMENT_OPTIONS: { value: Settlement; label: string; detail: string }[]
   {
     value: 'on_closing',
     label: 'Settle now',
-    detail: 'Each investor gets a statement: a late investor pays what they owe, an earlier one is told what comes back.',
+    detail:
+      'Each investor gets a statement, payable by a date you pick when approving: a late investor pays what they owe, an earlier one is told what comes back. Balances move on the closing date.',
   },
   {
     value: 'next_call',
     label: 'On the next capital call',
-    detail: 'Added to a late investor’s next call and taken off an earlier investor’s. No extra document.',
+    detail:
+      'Added to a late investor’s next call and taken off an earlier investor’s. No extra document. Balances move on that call: until then, a late investor has paid nothing and all their commitment is unfunded.',
   },
 ];
 
@@ -24,11 +29,14 @@ export function SettlementOptions({
   value,
   onChange,
   disabled,
+  blocked = {},
   name,
 }: {
   value: Settlement | null;
   onChange: (s: Settlement) => void;
   disabled?: boolean;
+  /** Ways not open to this closing, each with the reason, shown under it. */
+  blocked?: SettlementBlocked;
   name: string;
 }) {
   return (
@@ -43,7 +51,7 @@ export function SettlementOptions({
             padding: '10px 12px',
             border: `1px solid ${value === o.value ? 'var(--foreground)' : 'var(--border)'}`,
             borderRadius: 8,
-            cursor: disabled ? 'default' : 'pointer',
+            cursor: disabled || blocked[o.value] ? 'default' : 'pointer',
           }}
         >
           <input
@@ -51,7 +59,7 @@ export function SettlementOptions({
             name={name}
             value={o.value}
             checked={value === o.value}
-            disabled={disabled}
+            disabled={disabled || Boolean(blocked[o.value])}
             onChange={() => onChange(o.value)}
             style={{ marginTop: 3 }}
           />
@@ -60,6 +68,11 @@ export function SettlementOptions({
             <span className="text-muted" style={{ fontSize: 12, textWrap: 'pretty' }}>
               {o.detail}
             </span>
+            {blocked[o.value] && (
+              <span style={{ display: 'block', fontSize: 12, marginTop: 4, color: 'var(--foreground)', textWrap: 'pretty' }}>
+                Not open to this closing: {blocked[o.value]}
+              </span>
+            )}
           </span>
         </label>
       ))}
@@ -81,6 +94,7 @@ export function SettlementCard({
   settlement,
   settledOn,
   statementsSent,
+  blocked,
   canWrite,
   onChanged,
 }: {
@@ -92,6 +106,8 @@ export function SettlementCard({
   settledOn: number[];
   /** Statements already sent for it; once there is one, the choice is fixed too. */
   statementsSent: number;
+  /** Ways not open to it, because of the closings around it. */
+  blocked?: SettlementBlocked;
   canWrite: boolean;
   onChanged: () => void;
 }) {
@@ -147,10 +163,11 @@ export function SettlementCard({
           value={choice}
           onChange={setChoice}
           disabled={!canWrite || locked || busy}
+          blocked={blocked}
         />
         <p className="text-muted" style={{ fontSize: 12, margin: 0, textWrap: 'pretty' }}>
-          Either way, each investor&rsquo;s paid-in and unfunded changed on the closing date; this only decides when the
-          cash moves.
+          The amounts are fixed. This decides which document asks for the money and when paid-in and unfunded move: on
+          the closing date when settled now, on the call when settled on the next call.
         </p>
         {error && (
           <p role="alert" style={{ color: 'var(--destructive)', margin: 0, fontSize: 13 }}>

@@ -128,8 +128,34 @@ Only finalised closings count; a draft is previewed, never counted.
 
 - `equalize()` (`equalization.ts`): capital moved = called × N/(T+N) per earlier
   call, split among late investors by commitment and refunded by what each
-  paid into that call; interest per call from its due date to the closing;
-  catch-up fee from `feeForRange`.
+  holds of that call — what they paid, as moved by earlier closings'
+  equalization (`equalizationInputFor`); interest per call from its due date
+  to the closing (`interestOnCalls`); catch-up fee from `feeForRange` over
+  the fee periods already billed to the others (`catchUpFeeThrough`; blank
+  `catchUpFeeUntil` = `billed_periods`, or `closing_date` for every day to the
+  closing), recorded as `totals.feeCoveredThrough` — `feeInvestorsFrom` starts
+  the late commitment's fee the day after, so later periods bill them in full
+  (older results without it: from the closing date); and
+  interest on it (`catchUpFeeInterest`: from the first close by default, or
+  per period, or none) as its own part `feeInterest`, paid where the fee goes.
+- Interest runs to when the late investor pays by default
+  (`equalizationInterestUntil` blank = `collection_due_date`; blank is the FM
+  rule here, not "not set"). The frozen result stops at the closing; the
+  collecting call (its `Payment_Due_Date`) or statement (its
+  `payment_due_date`, picked at approval, suggested closing + 10 working days)
+  re-dates it with `equalizationRunTo` — never by equalizing again. Interest
+  never moves paid-in or unfunded.
+- Settled on the next call, balances move on that call, not on the closing
+  (`equalizationMovements`, read by `positionsOn` and `capitalAccount`):
+  until it the late investor is at nothing paid and full commitment unfunded.
+  New schedule entries carry `settles: 'on_call'`; `compute()` then adds
+  `eqPaid` / `eqReduces` to the closing balances and shares UCC-basis
+  components on unfunded after the equalization. Entries without `settles`
+  (sent before the rule) moved balances on the closing date and still do.
+  Invested capital stays dated at the closing. A closing is not settled now
+  while an earlier one waits for its call, nor made to wait after a later one
+  was settled now (`settlementConflict`, enforced by finalise and the
+  settlement change): it would refund capital not yet paid.
 - `feeForRange()` (`fee-run.ts`) slices a period wherever terms, commitment or
   invested capital change; `trueUp()` keeps charged, should-have and the
   difference. `feeLedgerFor` (`fee-billing.ts`) compares every period with what
@@ -193,24 +219,26 @@ suite.
   ledger compares against what was billed once a period is billed.
 - **Settling a later closing's equalization** (`src/engine/equalization-billing.ts`).
   `closings.settlement` is `on_closing` (statements now), `next_call`, or null
-  (not chosen — every closing finalised before this existed). Balances move on
-  the closing date either way (`positionsOn` is unchanged); the choice only
-  decides which document asks for the cash, and stays open until a sent call
-  carried it or a statement was sent (the trigger enforces both). A call after
+  (not chosen — every closing finalised before this existed). The choice
+  decides which document asks for the cash and when balances move (closing
+  date when settled now, the collecting call when settled on it — see above),
+  and stays open until a sent call carried it or a statement was sent (the
+  trigger enforces both). A call after
   an unchosen closing is refused approval (`unsettledClosings`).
   - Next call: `calls.equalization_schedule` (`model.equalizationSchedule`) is
     derived in setup (`withEqualization`, on load and every edit), never typed:
     everything still owed (`equalizationOwed`), settled in full on that call,
-    kept per investor both as a net (`byLp`) and in its three parts (`parts`:
-    capital, late interest, catch-up fee — `compute` fails if they don't add
-    up). Setup shows capital and interest on Call components and the catch-up
-    fee on Management fee; the notice shows one block per closing with the
+    kept per investor both as a net (`byLp`) and in its parts (`parts`:
+    capital and its `inside` share, late interest, catch-up fee, fee interest
+    — `compute` fails if they don't add up). Setup shows capital and interest
+    on Call components and the fee parts on Management fee; the notice shows one block per closing with the
     parts and their total.
     A credit larger than an investor's call is paid to them: `amountDue` goes
     negative and the notice says "Amount payable to you", asking for nothing
     (`payableToYou`). `compute`
-    adds `row.equalization`; `row.total` stays what the call draws and the
-    roll-forward ignores it. The amount to wire is `amountDue(row)` — use it
+    adds `row.equalization`; `row.total` stays what the call draws. The
+    roll-forward takes only `eqPaid` / `eqReduces` (capital and fee, on
+    `settles: 'on_call'` entries), never interest. The amount to wire is `amountDue(row)` — use it
     wherever a figure means "pay this" (notice, email, allocation, export).
     Fields appear only when a call carries some, so the equivalence suite holds.
   - Now: `closing_statements` (server-only writes, read RLS, frozen once sent);

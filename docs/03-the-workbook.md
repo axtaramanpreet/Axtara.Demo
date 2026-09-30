@@ -11,7 +11,7 @@ The code is small: three files, 389 lines, in
 |---|---:|---|
 | [parse-workbook.ts](../src/adapters/workbook/parse-workbook.ts) | 157 | `.xlsx` → `CallModel` |
 | [template-layout.ts](../src/adapters/workbook/template-layout.ts) | 121 | the list of every tab's columns and fields |
-| [export-allocation.ts](../src/adapters/workbook/export-allocation.ts) | 111 | computed result → `.xlsx` download |
+| [export-allocation.ts](../src/adapters/workbook/export-allocation.ts) | 147 | computed result → `.xlsx` download |
 
 An **adapter** is code that translates between the outside world and the
 engine. The engine only speaks `CallModel`. The adapters make everything else
@@ -319,6 +319,18 @@ Reduces_Unfunded_Amt | Closing_UCC | Closing_Paid_In | Status
 
 Because the order matches, the accountant can put our output next to their
 own model and compare the two column by column.
+
+Two kinds of call add columns, and only they do (`allocationTable`):
+
+- **A call that bills fee periods** (a fund with closings): `Fee_Periods`
+  instead of `Fee_Rate`, then one column per period it bills —
+  `Fee_Q2_2026`, `Fee_Q3_2026` — before `Fee_Gross`, which is their sum.
+- **A call that settles a later closing's equalization**: after `Total_Call`,
+  `Eq_Capital`, `Eq_Interest`, `Eq_Catch_Up_Fee` (the fee for the time before
+  a late investor joined), `Eq_Fee_Interest`, `Equalization` and
+  `Amount_Due`; and `Eq_Reduces_Unfunded` after `Reduces_Unfunded_Amt`.
+
+The Allocation tab on screen shows the same columns.
 
 Plus a `TOTAL` row, and a title row naming the fund, call number, dates and
 currency.

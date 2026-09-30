@@ -93,11 +93,19 @@ export function issuedCallFrom(
   };
 }
 
+/** A finalised equalization, for the invested capital it moved: that stays dated at the closing. */
 export interface FinalisedEqualization {
   closingDate: string;
   lines: EqualizationLine[];
-  /** Whether the catch-up fee counts against commitment, as the fund's fee does. */
-  feeReducesUnfunded: boolean;
+}
+
+/** An equalization's move of one investor's paid-in and unfunded, on the date it moved. */
+export interface BalanceMovement {
+  date: string;
+  lpId: string;
+  name: string;
+  paid: number;
+  drawn: number;
 }
 
 export interface Position {
@@ -121,6 +129,7 @@ export function positionsAsOf(
   input: {
     calls: IssuedCall[];
     equalizations?: FinalisedEqualization[];
+    movements?: BalanceMovement[];
     commitments?: Record<string, { name: string; changes: DatedAmount[] }>;
     decimals?: number;
   },
@@ -160,11 +169,14 @@ export function positionsAsOf(
 
   for (const e of eqs) {
     for (const l of e.lines) {
-      const p = at(l.lpId, l.name);
-      p.paidIn += l.capital + l.catchUpFee;
-      p.drawn += l.inside + (e.feeReducesUnfunded ? l.catchUpFee : 0);
-      p.invested += l.calls.reduce((s, c) => s + c.capital * (dealShare.get(c.callNo) ?? 0), 0);
+      at(l.lpId, l.name).invested += l.calls.reduce((s, c) => s + c.capital * (dealShare.get(c.callNo) ?? 0), 0);
     }
+  }
+  for (const m of input.movements ?? []) {
+    if (m.date > date) continue;
+    const p = at(m.lpId, m.name);
+    p.paidIn += m.paid;
+    p.drawn += m.drawn;
   }
 
   // Commitment: the fund's closings where it has them, else the latest call's.

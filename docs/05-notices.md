@@ -398,7 +398,8 @@ notice keeps the block frozen in its payload like everything else.
 `GET /api/funds/[fundId]/closings/[closingId]/statement?lpId=LP07`
 ([statement-pdf.tsx](../src/server/statement-pdf.tsx)). It shows every earlier
 call and the investor's share, the interest working per call, the catch-up fee
-period by period, the total, and — for someone who pays — where to wire it,
+period by period, interest on that fee, the date it is payable by, the total,
+and — for someone who pays — where to wire it,
 with `EQ` and the closing number as `{CALL_NO}` in the reference (`LP07/MGP3/EQ2`). A draft closing prints DRAFT with figures
 worked out now; a finalised one prints FINAL from what was frozen. Earlier
 investors get a statement of what comes back to them, and an investor who
@@ -407,16 +408,46 @@ increased their commitment is told so rather than "you were admitted".
 **Settling it: now, or on the next call.** Finalising a later closing asks
 how its equalization is settled (`closings.settlement`), and a closing
 finalised before that asked shows "Not chosen" on Closings — calls dated after
-it are refused approval until someone picks (`unsettledClosings`). Either way
-the balances move on the closing date; the choice only decides which document
-asks for the cash. It can change until money has been asked for — a sent call
-that carried it, or a sent statement — and then the database refuses too.
+it are refused approval until someone picks (`unsettledClosings`). The choice
+decides which document asks for the cash, and when the balances move: on the
+closing date when settled now, on the collecting call when settled on the next
+call (`equalizationMovements`). It can change until money has been asked for —
+a sent call that carried it, or a sent statement — and then the database
+refuses too. Order matters: a later closing refunds everyone by what they hold
+of each earlier call, a waiting closing's late investors included, so a
+closing is not settled now while an earlier one waits for its call, and one is
+not made to wait once a later one was settled now (`settlementConflict`; the
+Closings screen greys out that choice and says why).
+
+**Interest runs to when the investor pays** (the fund manager's rule, and what
+a blank term means; `equalization_interest_until = 'closing_date'` keeps it at
+the closing). The frozen result holds interest to the closing date; the
+document that collects it works it out again to its own due date from the
+frozen shares, rate and basis (`equalizationRunTo`), never by equalizing
+again. Interest is not a contribution: it moves neither paid-in nor unfunded.
+The catch-up fee covers the fee periods already billed to the investors in
+before (`catch_up_fee_until`, blank = `billed_periods`): a quarter billed
+before the closing is covered whole, and every later quarter bills the late
+investor in full with everyone else, so the fee columns agree across
+investors. `closing_date` instead covers every day to the closing, and later
+periods bill them from that day. The catch-up fee carries interest at the same rate (`catch_up_fee_interest`,
+blank = from the first close to the late investor's closing; `per_period`
+runs each fee period's part from its own start; `none`), paid where the fee
+goes, as its own part `feeInterest`.
 
 - **Settle now.** Each investor whose equalization moves money gets a statement
   that goes the way notices do: approved, then sent, then kept as sent
   (`closing_statements`, written only by the server; `approveStatements`,
-  `sendStatements`, `retryStatementDelivery` in `fund-actions.ts`). Sending
-  confirms first, saying how much is asked for and returned. The email
+  `sendStatements`, `retryStatementDelivery` in `fund-actions.ts`). Approving
+  names the date they are payable by (`closing_statements.payment_due_date`,
+  suggested as ten working days after the closing — weekends skipped, holidays
+  not known), one date for the whole closing; interest runs to it, and the card
+  shows the amounts for the date picked. Until the first is sent the date can
+  change, and the ones already approved move with it; then it is fixed. Once
+  sent, the capital account shows interest to that date too
+  (`ClosingRecord.statementDueDate`). Sending confirms first, saying how
+  much is asked for and returned, and by when. The date is frozen with a sent
+  statement. The email
   ([statement-email.ts](../src/server/statement-email.ts)) carries the PDF,
   copies the investor's CC contacts, and follows `EMAIL_OVERRIDE_TO` like a
   notice: everything goes to the one address and copies are dropped. Switching
@@ -425,17 +456,26 @@ that carried it, or a sent statement — and then the database refuses too.
   (`calls.equalization_schedule`, like the fee schedule), worked out from the
   record, never typed, and settled in full on that call (`equalizationOwed`,
   `buildEqualizationSchedule`): a late investor's amount is added, an earlier
-  investor's credit taken off. It is kept in its three parts — share of
-  earlier calls, late interest, catch-up fee — so the setup screen shows the
-  first two with the call's components and the catch-up fee with the
-  management fee. The notice shows one block under Total Amount Called:
+  investor's credit taken off. It is kept in its parts — share of earlier
+  calls (and the part of it `inside` commitment), late interest, catch-up fee,
+  interest on that fee — so the setup screen shows the first two with the
+  call's components and the fee parts with the management fee. Late interest
+  runs to the call's payment due date, so editing that date works it out
+  again, and a call without one is refused. The notice shows one block under Total Amount Called:
   "Equalization — Closing N", with a footnote, each part that is not nothing,
   the equalization total, and then Total Amount Due
   (`amountDue`). A credit larger than the call is paid to the investor: the
   notice reads "Amount payable to you", prints no wiring details, and says the
-  fund pays them; at exactly nothing it says nothing is payable. It is cash on top of the call, not part of the roll-forward,
-  so paid-in and unfunded are not moved twice. Approve and send refuse a call
-  whose schedule is not what is still owed. The downloadable statement for such
+  fund pays them; at exactly nothing it says nothing is payable. The balances
+  move on this call (`settles: 'on_call'`): until it, a late investor has paid
+  nothing and all their commitment is unfunded, so its opening balances show
+  that, and the call adds the equalization's capital and catch-up fee to
+  paid-in (`eqPaid`) and its inside part and fee to what is drawn
+  (`eqReduces`). A UCC-basis component is shared on unfunded after the
+  equalization, or the late investor would be over-called. The notice's
+  account lines show both moves. A schedule sent before this rule (no
+  `settles`) moved the balances on the closing date and keeps doing so.
+  Approve and send refuse a call whose schedule is not what is still owed. The downloadable statement for such
   a closing carries no payment instructions: it says the next call collects it.
 
 Downloading a statement needs read access only.

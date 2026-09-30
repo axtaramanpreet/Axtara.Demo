@@ -13,7 +13,7 @@ import { type ClosingRecord, type FundHistory } from '../fund-history';
 import { BLANK_TERMS, type FundTerms } from '../fund-terms';
 import type { IssuedCall } from '../positions';
 
-const terms: FundTerms = { ...BLANK_TERMS, effectiveFrom: '2026-01-01', createdAt: '', feeBasis: 'Commitment', feeRateAnnual: 0.02, feePeriodFraction: 0.25, feeReducesUnfunded: true };
+const terms: FundTerms = { ...BLANK_TERMS, effectiveFrom: '2026-01-01', createdAt: '', feeBasis: 'Commitment', feeRateAnnual: 0.02, feePeriodFraction: 0.25, feeReducesUnfunded: true, catchUpFeeUntil: 'closing_date' };
 const first: ClosingRecord = {
   id: 'c1', closingNo: 1, closingDate: '2026-01-01', finalised: true, result: null,
   commitments: [

@@ -707,6 +707,7 @@ export type Database = {
           id: string
           investor_id: string
           payload: Json | null
+          payment_due_date: string | null
           result_id: string | null
           sent_at: string | null
           sent_by: string | null
@@ -727,6 +728,7 @@ export type Database = {
           id?: string
           investor_id: string
           payload?: Json | null
+          payment_due_date?: string | null
           result_id?: string | null
           sent_at?: string | null
           sent_by?: string | null
@@ -747,6 +749,7 @@ export type Database = {
           id?: string
           investor_id?: string
           payload?: Json | null
+          payment_due_date?: string | null
           result_id?: string | null
           sent_at?: string | null
           sent_by?: string | null
@@ -834,11 +837,14 @@ export type Database = {
       }
       fund_terms: {
         Row: {
+          catch_up_fee_interest: string | null
           catch_up_fee_to: string | null
+          catch_up_fee_until: string | null
           created_at: string
           created_by: string | null
           effective_from: string
           equalization_interest_to: string | null
+          equalization_interest_until: string | null
           fee_basis: string | null
           fee_day_count: string | null
           fee_exempt_lp_ids: string[]
@@ -868,11 +874,14 @@ export type Database = {
           signatory_title: string | null
         }
         Insert: {
+          catch_up_fee_interest?: string | null
           catch_up_fee_to?: string | null
+          catch_up_fee_until?: string | null
           created_at?: string
           created_by?: string | null
           effective_from: string
           equalization_interest_to?: string | null
+          equalization_interest_until?: string | null
           fee_basis?: string | null
           fee_day_count?: string | null
           fee_exempt_lp_ids?: string[]
@@ -902,11 +911,14 @@ export type Database = {
           signatory_title?: string | null
         }
         Update: {
+          catch_up_fee_interest?: string | null
           catch_up_fee_to?: string | null
+          catch_up_fee_until?: string | null
           created_at?: string
           created_by?: string | null
           effective_from?: string
           equalization_interest_to?: string | null
+          equalization_interest_until?: string | null
           fee_basis?: string | null
           fee_day_count?: string | null
           fee_exempt_lp_ids?: string[]

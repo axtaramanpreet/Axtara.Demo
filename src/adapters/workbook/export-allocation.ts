@@ -13,14 +13,19 @@
 import type { CallDetail } from '@/adapters/storage/types';
 import { amountDue, equalizationPartsOf, num, round, type ComputeResult, scheduleLabel } from '@/engine';
 
-/** Build the workbook and hand it to the browser as a download. */
-export async function exportAllocation(call: CallDetail, result: ComputeResult): Promise<void> {
-  const XLSX = await import('xlsx');
-
+/**
+ * The Allocation sheet's table: the header, one row per investor, and the
+ * totals. One column per fee period a call bills, and the equalization's
+ * parts, only on a call that has them — every other call keeps the
+ * Expected_Output shape exactly.
+ */
+export function allocationTable(call: CallDetail, result: ComputeResult): (string | number)[][] {
   const components = call.model.components.filter((c) => c.Component_ID);
   // Columns for a later closing's equalization only on a call that settles some,
   // so every other export keeps the Expected_Output shape exactly.
   const eq = result.equalization;
+  // One column per fee period the call bills, in the schedule's order.
+  const periods = result.fee.schedule ?? [];
   const header = [
     'LP_ID',
     'LP_Name',
@@ -29,12 +34,14 @@ export async function exportAllocation(call: CallDetail, result: ComputeResult):
     'Opening_Paid_In',
     ...components.map((c) => String(c.Component_Name)),
     result.fee.schedule ? 'Fee_Periods' : 'Fee_Rate',
+    ...periods.map((p) => `Fee_${p.label.replace(/\s+/g, '_')}`),
     'Fee_Gross',
     'Fee_Offset',
     'Fee_Net',
     'Total_Call',
-    ...(eq ? ['Eq_Capital', 'Eq_Interest', 'Eq_Catch_Up_Fee', 'Equalization', 'Amount_Due'] : []),
+    ...(eq ? ['Eq_Capital', 'Eq_Interest', 'Eq_Catch_Up_Fee', 'Eq_Fee_Interest', 'Equalization', 'Amount_Due'] : []),
     'Reduces_Unfunded_Amt',
+    ...(eq ? ['Eq_Reduces_Unfunded'] : []),
     'Closing_UCC',
     'Closing_Paid_In',
     'Status',
@@ -52,6 +59,7 @@ export async function exportAllocation(call: CallDetail, result: ComputeResult):
       return cell?.excused ? 'excused' : (cell?.amt ?? 0);
     }),
     result.fee.schedule ? scheduleLabel(result.fee.schedule) : row.feeRate,
+    ...periods.map((_, i) => row.feeByPeriod?.[i] ?? 0),
     row.feeGross,
     row.feeOffset,
     row.feeNet,
@@ -59,10 +67,11 @@ export async function exportAllocation(call: CallDetail, result: ComputeResult):
     ...(eq
       ? (() => {
           const p = equalizationPartsOf(call.model.equalizationSchedule, row.LP_ID, result.d);
-          return [p.capital, p.interest, p.catchUpFee, row.equalization ?? 0, amountDue(row, result.d)];
+          return [p.capital, p.interest, p.catchUpFee, p.feeInterest, row.equalization ?? 0, amountDue(row, result.d)];
         })()
       : []),
     row.reduces,
+    ...(eq ? [row.eqReduces ?? 0] : []),
     row.closingUCC,
     row.closingPaid,
     row.isActive ? 'Active' : String(row.Status),
@@ -76,6 +85,7 @@ export async function exportAllocation(call: CallDetail, result: ComputeResult):
     result.totals.openPaid,
     ...components.map((_, i) => result.totals.comps[i] ?? 0),
     '',
+    ...periods.map((p) => p.total),
     result.totals.feeGross,
     result.totals.feeOffset,
     result.totals.feeNet,
@@ -85,15 +95,24 @@ export async function exportAllocation(call: CallDetail, result: ComputeResult):
           round(eq.closings.reduce((t, c) => t + c.capital, 0), result.d),
           round(eq.closings.reduce((t, c) => t + c.interest, 0), result.d),
           round(eq.closings.reduce((t, c) => t + c.catchUpFee, 0), result.d),
+          round(eq.closings.reduce((t, c) => t + c.feeInterest, 0), result.d),
           eq.total,
           round(result.totals.total + eq.total, result.d),
         ]
       : []),
     result.totals.reduces,
+    ...(eq ? [round(result.totals.eqReduces ?? 0, result.d)] : []),
     result.totals.closingUCC,
     result.totals.closingPaid,
     '',
   ];
+
+  return [header, ...rows, totals];
+}
+
+/** Build the workbook and hand it to the browser as a download. */
+export async function exportAllocation(call: CallDetail, result: ComputeResult): Promise<void> {
+  const XLSX = await import('xlsx');
 
   const allocation = XLSX.utils.aoa_to_sheet([
     [`${call.model.setup.Fund_Name} — Capital Call No. ${call.callNo}`],
@@ -103,9 +122,7 @@ export async function exportAllocation(call: CallDetail, result: ComputeResult):
       )} · amounts in ${call.model.setup.Reporting_Currency}`,
     ],
     [],
-    header,
-    ...rows,
-    totals,
+    ...allocationTable(call, result),
   ]);
 
   const checks = XLSX.utils.aoa_to_sheet([

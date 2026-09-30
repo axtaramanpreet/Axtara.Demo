@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useState } from 'react';
-import { fmt, fmtDate, pct, type EqualizationLine, type EqualizationResult } from '@/engine';
+import { dayBefore, daysBetween, fmt, fmtDate, pct, type EqualizationLine, type EqualizationResult } from '@/engine';
 import { Card } from '@/components/ui/card';
 import { CheckList } from '@/components/ui/check-list';
 import { Stat } from '@/components/ui/stat';
@@ -30,6 +30,8 @@ export function EqualizationPanel({
   const late = result.lines.filter((l) => l.role !== 'earlier');
   const latePays = late.reduce((s, l) => s + Math.max(l.net, 0), 0);
   const failing = result.checks.filter((c) => c.level === 'fail').length;
+  const toDue = t.interestUntil === 'collection_due_date';
+  const feeInterest = t.feeInterest ?? 0;
 
   return (
     <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
@@ -37,7 +39,9 @@ export function EqualizationPanel({
         <Stat
           label="Late investors pay"
           value={fmt(latePays)}
-          info="Capital for the calls they missed, interest for paying late, and the management fee since the first close."
+          info={`Capital for the calls they missed, interest for paying late, and the management fee since the first close${
+            feeInterest ? ', with interest on it' : ''
+          }.${toDue ? ' Interest here runs to the closing date; the call or statement that collects it works it out to its own due date.' : ''}`}
         />
         <Stat
           label="Capital moved"
@@ -47,13 +51,30 @@ export function EqualizationPanel({
         <Stat
           label="Interest"
           value={fmt(t.interest)}
-          info="Charged on each call's share from that call's due date to the closing date, at the fund's late-close rate."
+          info={`Charged on each call's share from that call's due date to ${
+            toDue ? 'when it is paid — shown here to the closing date' : 'the closing date'
+          }, at the fund's late-close rate. Not a contribution: it does not count against commitment.`}
         />
         <Stat
           label="Catch-up fee"
           value={fmt(t.catchUpFee)}
-          info="The management fee the late investors would have paid had they been in from the first close."
+          info={
+            t.feeCoveredThrough && t.feeCoveredThrough !== dayBefore(result.closingDate)
+              ? `The management fee already billed to the investors in before — from the first close to ${fmtDate(t.feeCoveredThrough)}. Later fee periods bill the late investors in full, with everyone else.`
+              : 'The management fee the late investors would have paid had they been in from the first close, up to this closing. Later fee periods bill them from the closing date.'
+          }
         />
+        {feeInterest !== 0 && (
+          <Stat
+            label="Interest on the fee"
+            value={fmt(feeInterest)}
+            info={
+              t.catchUpFeeInterest === 'per_period'
+                ? "On each fee period's part of the catch-up fee, from that period's start to the closing date, at the late-close rate."
+                : 'On the whole catch-up fee, from the first close to this closing, at the late-close rate.'
+            }
+          />
+        )}
         <Stat
           label="Paid in, after the close"
           value={pct(t.paidInPct)}
@@ -79,6 +100,7 @@ export function EqualizationPanel({
                 <th style={{ textAlign: 'right' }}>Capital</th>
                 <th style={{ textAlign: 'right' }}>Interest</th>
                 <th style={{ textAlign: 'right' }}>Catch-up fee</th>
+                {feeInterest !== 0 && <th style={{ textAlign: 'right' }}>Fee interest</th>}
                 <th style={{ textAlign: 'right' }}>Pays / receives</th>
                 <th />
               </tr>
@@ -103,6 +125,7 @@ export function EqualizationPanel({
                     <td className="num">{money(l.capital)}</td>
                     <td className="num">{money(l.interest)}</td>
                     <td className="num">{money(l.catchUpFee)}</td>
+                    {feeInterest !== 0 && <td className="num">{money(l.feeInterest ?? 0)}</td>}
                     <td className="num" style={{ fontWeight: 600 }}>
                       {l.net > 0 ? `pays ${fmt(l.net)}` : l.net < 0 ? `receives ${fmt(-l.net)}` : '—'}
                     </td>
@@ -119,7 +142,7 @@ export function EqualizationPanel({
                   </tr>
                   {open === l.lpId && (
                     <tr>
-                      <td colSpan={8} style={{ background: 'var(--muted)', padding: '12px 16px' }}>
+                      <td colSpan={feeInterest !== 0 ? 9 : 8} style={{ background: 'var(--muted)', padding: '12px 16px' }}>
                         <Working line={l} result={result} />
                       </td>
                     </tr>
@@ -222,12 +245,27 @@ function Working({ line, result }: { line: EqualizationLine; result: Equalizatio
         </table>
       )}
 
+      {late && (line.feeInterest ?? 0) !== 0 && result.totals.interestRate && (
+        <div className="mono" style={{ fontSize: 12 }}>
+          Interest on the catch-up fee:{' '}
+          {result.totals.catchUpFeeInterest === 'per_period'
+            ? line.feeSlices
+                .filter((s) => s.amount !== 0)
+                .map((s) => `${fmt(s.amount)} × ${pct(result.totals.interestRate!)} × ${daysBetween(s.from, result.closingDate)}/365`)
+                .join(' + ')
+            : `${fmt(line.catchUpFee)} × ${pct(result.totals.interestRate)} × ${daysBetween(line.feeSlices[0]?.from ?? result.closingDate, result.closingDate)}/365`}{' '}
+          = {fmt(line.feeInterest ?? 0)}
+        </div>
+      )}
+
       <div className="mono" style={{ fontSize: 12 }}>
         {late
-          ? `${fmt(line.capital)} capital + ${fmt(line.interest)} interest + ${fmt(line.catchUpFee)} catch-up fee = ${fmt(line.net)}`
+          ? `${fmt(line.capital)} capital + ${fmt(line.interest)} interest + ${fmt(line.catchUpFee)} catch-up fee${
+              line.feeInterest ? ` + ${fmt(line.feeInterest)} interest on it` : ''
+            } = ${fmt(line.net)}`
           : `${fmt(-line.capital)} capital back${line.interest ? ` + ${fmt(-line.interest)} interest` : ''}${
               line.catchUpFee ? ` + ${fmt(-line.catchUpFee)} of the catch-up fee` : ''
-            } = ${fmt(-line.net)} received`}
+            }${line.feeInterest ? ` + ${fmt(-line.feeInterest)} of the interest on it` : ''} = ${fmt(-line.net)} received`}
       </div>
     </div>
   );

@@ -68,7 +68,7 @@ function withEqualization(
 ): { model: CallModel; message: string | null } {
   if (readOnly) return { model, message: null };
   const on = serialToISO(model.setup.Call_Date) || today;
-  const owed = equalizationOwed(history, on, callNo);
+  const owed = equalizationOwed(history, on, { excludeCallNo: callNo, dueDate: serialToISO(model.setup.Payment_Due_Date) });
   const had = model.equalizationSchedule ?? null;
   if (!owed.length && !had) return { model, message: null };
   const fresh = buildEqualizationSchedule(owed);
@@ -939,16 +939,11 @@ function TermsNote({
   );
 }
 
-/**
- * The management fee on this call, investor by investor: what it is charged
- * on, the rate — the fund's, a side letter's, or none for the exempt — the
- * share of a year, and what that comes to after offsets.
- */
 type EqSchedule = NonNullable<CallModel['equalizationSchedule']>;
 
 /** Who is on a closing's equalization for a part, and their amount (+ pays, − credited). */
-const partRows = (e: EqSchedule[number], keys: ('capital' | 'interest' | 'catchUpFee')[]) =>
-  Object.entries(e.parts).filter(([, p]) => keys.some((k) => p[k] !== 0));
+const partRows = (e: EqSchedule[number], keys: ('capital' | 'interest' | 'catchUpFee' | 'feeInterest')[]) =>
+  Object.entries(e.parts).filter(([, p]) => keys.some((k) => (p[k] ?? 0) !== 0));
 
 /**
  * A later closing's equalization for the capital called before an investor
@@ -972,7 +967,7 @@ function EqualizationCapital({ schedule, names, currency }: { schedule: EqSchedu
                 <tr>
                   <th>Closing {e.closingNo}</th>
                   <th style={{ textAlign: 'right' }}>Share of earlier calls</th>
-                  <th style={{ textAlign: 'right' }}>Late interest</th>
+                  <th style={{ textAlign: 'right' }}>Late interest, to {fmtDate(e.interestUntil ?? e.closingDate)}</th>
                 </tr>
               </thead>
               <tbody>
@@ -992,7 +987,11 @@ function EqualizationCapital({ schedule, names, currency }: { schedule: EqSchedu
       })}
       <p className="text-muted" style={{ fontSize: 12, padding: '8px 16px', margin: 0, textWrap: 'pretty' }}>
         Worked out from the closing, not typed: a late investor pays (+), an earlier one is credited (brackets). It is
-        cash on top of what this call draws — balances moved on the closing date.
+        on top of what this call draws.{' '}
+        {schedule.every((e) => e.settles === 'on_call')
+          ? 'Paid-in and unfunded move on this call: until it, a late investor has paid nothing and all their commitment is unfunded. Interest does not count against commitment.'
+          : 'Balances moved on the closing date.'}
+        {schedule.some((e) => e.interestToDueDate) && ' Interest runs to this call’s payment due date, so it follows that date.'}
       </p>
     </Card>
   );
@@ -1004,14 +1003,15 @@ function EqualizationCapital({ schedule, names, currency }: { schedule: EqSchedu
  * is, though it is not part of any fee period.
  */
 function EqualizationCatchUp({ schedule, names, currency }: { schedule: EqSchedule; names: Map<string, string>; currency: string }) {
-  const withFee = schedule.filter((e) => partRows(e, ['catchUpFee']).length);
+  const withFee = schedule.filter((e) => partRows(e, ['catchUpFee', 'feeInterest']).length);
   if (!withFee.length) return null;
   return (
-    <Card title="Catch-up fee from later closings" subtitle={`${currency} · the fee for the time before they joined`}>
+    <Card title="Catch-up fee from later closings" subtitle={`${currency} · the fee already billed to the others before they joined`}>
       {withFee.map((e) => {
-        const rows = partRows(e, ['catchUpFee']);
+        const rows = partRows(e, ['catchUpFee', 'feeInterest']);
+        const withInterest = rows.some(([, p]) => (p.feeInterest ?? 0) !== 0);
         // Paid among investors it adds up to nothing; paid to the manager, to the manager's share.
-        const toManager = rows.reduce((t, [, p]) => t + p.catchUpFee, 0);
+        const toManager = rows.reduce((t, [, p]) => t + p.catchUpFee + (p.feeInterest ?? 0), 0);
         return (
           <div key={e.closingId} style={{ overflowX: 'auto' }}>
             <table className="table">
@@ -1019,6 +1019,7 @@ function EqualizationCatchUp({ schedule, names, currency }: { schedule: EqSchedu
                 <tr>
                   <th>Closing {e.closingNo}</th>
                   <th style={{ textAlign: 'right' }}>Catch-up fee</th>
+                  {withInterest && <th style={{ textAlign: 'right' }}>Interest on it</th>}
                 </tr>
               </thead>
               <tbody>
@@ -1028,6 +1029,11 @@ function EqualizationCatchUp({ schedule, names, currency }: { schedule: EqSchedu
                       <span className="mono">{id}</span> {names.get(id) ?? ''}
                     </td>
                     <td className="num">{p.catchUpFee > 0 ? `pays ${fmt(p.catchUpFee)}` : `receives ${fmt(-p.catchUpFee)}`}</td>
+                    {withInterest && (
+                      <td className="num">
+                        {!p.feeInterest ? '—' : p.feeInterest > 0 ? `pays ${fmt(p.feeInterest)}` : `receives ${fmt(-p.feeInterest)}`}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -1044,6 +1050,11 @@ function EqualizationCatchUp({ schedule, names, currency }: { schedule: EqSchedu
   );
 }
 
+/**
+ * The management fee on this call, investor by investor: what it is charged
+ * on, the rate — the fund's, a side letter's, or none for the exempt — the
+ * share of a year, and what that comes to after offsets.
+ */
 function FeePreview({
   result,
   basis,

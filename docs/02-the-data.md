@@ -622,8 +622,17 @@ The same rules as calls:
   its commitments or its result (SQLSTATE `23001`). One column is the exception: `closings.settlement` (how
   the equalization is settled — `on_closing`, `next_call`, or null for not
   chosen) can still be set, by the server, until a sent call carried it
-  (`calls.equalization_schedule`) or a statement was sent. A sent statement
-  keeps what it said; only its delivery can be written again.
+  (`calls.equalization_schedule`) or a statement was sent. A statement is
+  approved with the date it is payable by (`payment_due_date`, required once
+  approved); a sent statement keeps what it said, that date included; only its
+  delivery can be written again.
+- **Two terms say how equalization interest runs** (`20260930090000`):
+  `fund_terms.equalization_interest_until` (`closing_date` or
+  `collection_due_date`), `catch_up_fee_until` (`billed_periods`,
+  `closing_date`) and `catch_up_fee_interest` (`none`, `first_close`,
+  `per_period`). Blank is the fund manager's rule — `collection_due_date`,
+  `billed_periods` and `first_close` — which is a deliberate exception to "blank means not set":
+  anything already finalised or sent keeps what it said.
 - **No fee is recorded by hand.** There used to be a `fee_runs` table, a
   period's fee recorded as versions. It was dropped (`20260927140000`): the
   calls that bill a period are its record, and Management fees compares each

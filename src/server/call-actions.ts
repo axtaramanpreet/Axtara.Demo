@@ -158,7 +158,7 @@ async function recordProblems(
       `Choose how Closing ${c.closingNo}'s equalization is settled, on Closings: it is owed, and nothing asks for it yet.`,
     );
   }
-  const owed = equalizationOwed(before, on, call.callNo);
+  const owed = equalizationOwed(before, on, { excludeCallNo: call.callNo, dueDate: serialToISO(call.model.setup.Payment_Due_Date) });
   const carried = call.model.equalizationSchedule ?? [];
   if (owed.length || carried.length) {
     problems.push(...equalizationScheduleDifferences(carried, buildEqualizationSchedule(owed)));
@@ -454,6 +454,8 @@ function roundTotals(totals: ComputeResult['totals'], decimals: number): Compute
     feeNet: round(totals.feeNet, decimals),
     total: round(totals.total, decimals),
     reduces: round(totals.reduces, decimals),
+    ...(totals.eqPaid !== undefined && { eqPaid: round(totals.eqPaid, decimals) }),
+    ...(totals.eqReduces !== undefined && { eqReduces: round(totals.eqReduces, decimals) }),
     closingUCC: round(totals.closingUCC, decimals),
     closingPaid: round(totals.closingPaid, decimals),
   };

@@ -175,9 +175,10 @@ export interface CallModel {
   feeSchedule?: FeeScheduleEntry[] | null;
   /**
    * Later closings' equalization this call settles, investor by investor: a
-   * late investor pays (+), an earlier one is credited (−). Cash only — the
-   * balances moved on the closing date, so it is not part of what the call
-   * draws down. `null` or absent: it settles none.
+   * late investor pays (+), an earlier one is credited (−). On top of what
+   * the call draws; an entry marked `settles: 'on_call'` also moves paid-in and
+   * unfunded on this call (an older one moved them on the closing date).
+   * `null` or absent: it settles none.
    */
   equalizationSchedule?: EqualizationDueEntry[] | null;
 }
@@ -191,17 +192,37 @@ export interface EqualizationDueEntry {
   byLp: Record<string, number>;
   /** The same, taken apart — so each part is shown with what it belongs to. */
   parts: Record<string, EqualizationParts>;
+  /**
+   * The date the capital interest runs to: the closing date, or this call's
+   * payment due date when the terms run it to when the investor pays. Absent on
+   * a schedule saved before it was recorded (interest to the closing date).
+   */
+  interestUntil?: string;
+  /** True when the interest runs to this call's payment due date, so the call must have one. */
+  interestToDueDate?: boolean;
+  /**
+   * 'on_call': the balances move on this call — the late investor's paid-in
+   * rises and unfunded falls here, not on the closing date. Absent on a
+   * schedule saved before that was the rule: they moved on the closing date.
+   */
+  settles?: 'on_call';
+  /** Whether the catch-up fee counts against commitment, as the fund's fee did on the closing date. */
+  feeReducesUnfunded?: boolean;
 }
 
 /**
- * An investor's equalization, in its three parts, each + to pay or − credited:
- * their share of earlier calls, interest for paying it late, and the
- * management fee for the time before they joined.
+ * An investor's equalization, in its parts, each + to pay or − credited: their
+ * share of earlier calls, interest for paying it late, the management fee for
+ * the time before they joined, and interest on that fee.
  */
 export interface EqualizationParts {
   capital: number;
+  /** The part of `capital` that counts against commitment (draws unfunded). Not added to the amount. Absent on schedules saved before it was recorded. */
+  inside?: number;
   interest: number;
   catchUpFee: number;
+  /** Interest on the catch-up fee. Absent on schedules saved before it existed: none. */
+  feeInterest?: number;
 }
 
 /** One fee period a call bills: what each investor is charged for it. */
@@ -259,6 +280,10 @@ export type ComputedRow = LPRow & {
   total: number;
   /** What this call settles of later closings' equalization (+ pays, − credited). Only on a call that settles some. */
   equalization?: number;
+  /** The part of it that is paid-in: capital and catch-up fee, on a schedule that moves balances on this call. Only on a call that settles some. */
+  eqPaid?: number;
+  /** The part of it that draws unfunded commitment. Only on a call that settles some. */
+  eqReduces?: number;
   /** The part of `total` that draws down unfunded commitment. */
   reduces: number;
   /** The part of `total` called outside commitment. `total - reduces`. */
@@ -282,6 +307,9 @@ export interface ComputedTotals {
   feeNet: number;
   total: number;
   reduces: number;
+  /** Equalization this call moves into paid-in, and out of unfunded. Only on a call that settles some. */
+  eqPaid?: number;
+  eqReduces?: number;
   closingUCC: number;
   closingPaid: number;
 }
@@ -363,6 +391,9 @@ export interface ComputeResult {
       capital: number;
       interest: number;
       catchUpFee: number;
+      feeInterest: number;
+      /** The date the capital interest runs to. */
+      interestUntil: string;
     }[];
     /** Paid less credited: what the fund collects net. */
     total: number;

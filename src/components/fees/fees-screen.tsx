@@ -359,6 +359,7 @@ function InvestorFees({ lines, total }: { lines: FeeLine[]; total: number }) {
  * income when the terms give it to the manager.
  */
 function CatchUpFees({ fundId, catchUps }: { fundId: string; catchUps: CatchUpFee[] }) {
+  const withInterest = catchUps.some((c) => c.interest !== 0);
   const people = (xs: { lpId: string; name: string; fee: number }[]) =>
     xs.map((x) => (
       <div key={x.lpId}>
@@ -366,7 +367,7 @@ function CatchUpFees({ fundId, catchUps }: { fundId: string; catchUps: CatchUpFe
       </div>
     ));
   return (
-    <Card style={{ marginTop: 16 }} title="Catch-up fees from later closings" subtitle="the fee a late investor pays for the time before they joined">
+    <Card style={{ marginTop: 16 }} title="Catch-up fees from later closings" subtitle="the fee already billed to the others before a late investor joined">
       <div style={{ overflowX: 'auto' }}>
         <table className="table">
           <thead>
@@ -376,6 +377,7 @@ function CatchUpFees({ fundId, catchUps }: { fundId: string; catchUps: CatchUpFe
               <th>Paid by</th>
               <th>Goes to</th>
               <th style={{ textAlign: 'right' }}>Amount</th>
+              {withInterest && <th style={{ textAlign: 'right' }}>Interest on it</th>}
             </tr>
           </thead>
           <tbody>
@@ -404,6 +406,7 @@ function CatchUpFees({ fundId, catchUps }: { fundId: string; catchUps: CatchUpFe
                 <td className="num" style={{ fontWeight: 600 }}>
                   {fmt(c.total)}
                 </td>
+                {withInterest && <td className="num">{c.interest ? fmt(c.interest) : '—'}</td>}
               </tr>
             ))}
           </tbody>
@@ -413,6 +416,7 @@ function CatchUpFees({ fundId, catchUps }: { fundId: string; catchUps: CatchUpFe
         Worked out and fixed when the closing was finalised; the working is on Closings. Paid to the manager, it is fee
         income on top of the periods above. Paid to the investors already in, it only moves money between investors,
         and the manager&rsquo;s fee is unchanged.
+        {withInterest && ' Interest on it, for paying it late, goes the same way; it is interest, not fee income.'}
       </p>
     </Card>
   );

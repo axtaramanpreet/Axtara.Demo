@@ -19,7 +19,14 @@
  *   late share(j, c) = moved(c) split by new commitment         (plug to the largest)
  *   refund(i, c)     = moved(c) split by what i paid into c      (plug to the largest)
  *   interest(j, c)   = late share(j, c) × rate × days(c) / 365
- *                      days(c) = due date of c → closing date
+ *                      days(c) = due date of c → the closing date here; when
+ *                      the terms run it to when the late investor pays, the
+ *                      call or statement that collects it works it out again
+ *                      to its own due date (`capitalInterest`)
+ *
+ * The catch-up fee can carry interest too, at the same rate, to the closing:
+ * on the whole fee from the first closing, or on each fee period's part from
+ * that period's start (`catchUpFeeInterest`).
  *
  * Refunds follow what each investor actually paid into each call, not their
  * commitment, so an investor excused from a call gets nothing back for it, and
@@ -30,10 +37,18 @@
  */
 
 import { allocate } from './allocate';
-import { dayBefore, daysBetween } from './dates';
+import { dayAfter, dayBefore, daysBetween } from './dates';
 import { feeForRange, type FeeInvestor, type FeeSlice } from './fee-run';
 import { fmt, fmtDate, pct as pctText, round } from './format';
-import { termsOn, type FundTerms } from './fund-terms';
+import {
+  catchUpFeeInterestOf,
+  interestUntilOf,
+  termsOn,
+  type CatchUpFeeInterest,
+  type EqualizationInterestTo,
+  type EqualizationInterestUntil,
+  type FundTerms,
+} from './fund-terms';
 
 /** One earlier call, as it was issued. */
 export interface PriorCall {
@@ -64,6 +79,12 @@ export interface EqualizationInput {
   }[];
   priorCalls: PriorCall[];
   terms: FundTerms[];
+  /**
+   * The last day the catch-up fee covers: the end of the last fee period
+   * already billed to the investors in before (`catchUpFeeThrough`), or the day
+   * before the closing. Absent: the day before the closing.
+   */
+  feeThrough?: string;
   decimals?: number;
 }
 
@@ -83,6 +104,10 @@ export interface CallShare {
   days: number;
   /** + paid by a late investor, − received by an earlier one. */
   interest: number;
+  /** Which side of the call this is: a late investor catching up, or an earlier one refunded. */
+  side?: 'late' | 'earlier';
+  /** For an earlier investor: what they paid into this call — what their share of the interest follows. */
+  paid?: number;
 }
 
 export interface EqualizationLine {
@@ -97,6 +122,8 @@ export interface EqualizationLine {
   inside: number;
   interest: number;
   catchUpFee: number;
+  /** Interest on the catch-up fee: + paid by a late investor, − received. Absent on a closing finalised before it existed. */
+  feeInterest?: number;
   /** How the catch-up fee was reached, for a late investor. */
   feeSlices: FeeSlice[];
   /** What this investor pays (+) or receives (−) in all. */
@@ -126,6 +153,24 @@ export interface EqualizationResult {
     /** The late-close interest rate a year, and how it accrues. Null rate: none. */
     interestRate: number | null;
     interestBasis: 'simple' | 'compound';
+    /** Who the capital interest goes to. Absent on a closing finalised before it was recorded. */
+    interestTo?: EqualizationInterestTo;
+    /** Where the capital interest stops. Interest above runs to the closing; with 'collection_due_date' the collecting document works it out again. */
+    interestUntil?: EqualizationInterestUntil;
+    /**
+     * The last day the catch-up fee covers. The late investor's fee periods
+     * start the day after. Absent on a closing finalised before it was
+     * recorded: the day before the closing.
+     */
+    feeCoveredThrough?: string;
+    /** Decimal places it was rounded to. Absent on a closing finalised before it was recorded: 2. */
+    decimals?: number;
+    /** The date the capital interest above runs to: the closing date, unless `equalizationRunTo` moved it. */
+    interestRunTo?: string;
+    /** Interest on the catch-up fee, and how it was worked out. */
+    feeInterest?: number;
+    feeInterestToGp?: number;
+    catchUpFeeInterest?: CatchUpFeeInterest;
   };
   checks: EqualizationCheck[];
 }
@@ -143,7 +188,7 @@ export function equalize(input: EqualizationInput): EqualizationResult {
   const line = (lpId: string, name: string, role: 'late' | 'earlier'): EqualizationLine => {
     let l = lines.get(lpId);
     if (!l) {
-      l = { lpId, name, role, commitment: 0, calls: [], capital: 0, inside: 0, interest: 0, catchUpFee: 0, feeSlices: [], net: 0 };
+      l = { lpId, name, role, commitment: 0, calls: [], capital: 0, inside: 0, interest: 0, catchUpFee: 0, feeInterest: 0, feeSlices: [], net: 0 };
       lines.set(lpId, l);
     } else if (l.role !== role) {
       l.role = 'both';
@@ -159,9 +204,6 @@ export function equalize(input: EqualizationInput): EqualizationResult {
   const rate = terms?.lateCloseInterestRate ?? null;
   const compound = terms?.lateCloseInterestBasis === 'compound';
   const interestTo = terms?.equalizationInterestTo ?? 'existing_lps';
-  const plugOf = (parts: { id: string; basis: number }[]) =>
-    parts.reduce((a, b) => (b.basis > a.basis ? b : a), parts[0])?.id;
-
   let movedTotal = 0;
   let interestTotal = 0;
   let interestToFund = 0;
@@ -189,25 +231,6 @@ export function equalize(input: EqualizationInput): EqualizationResult {
       const insideParts = call.lines.filter((l) => l.inside > 0).map((l) => ({ id: l.lpId, basis: l.inside }));
       const refundIn = insideParts.length ? allocate(movedInside, insideParts, plugOf(insideParts), d).out : {};
 
-      const days = Math.max(0, daysBetween(call.dueDate, input.closingDate));
-      const lateInterest: Record<string, number> = {};
-      for (const n of input.newcomers) {
-        const share = late[n.lpId] ?? 0;
-        const years = days / 365;
-        const amount = rate ? round(compound ? share * ((1 + rate) ** years - 1) : share * rate * years, d) : 0;
-        lateInterest[n.lpId] = amount;
-        interestTotal += amount;
-      }
-      const callInterest = Object.values(lateInterest).reduce((s, x) => s + x, 0);
-
-      // Interest to the earlier investors follows their refunds for this call.
-      const received =
-        interestTo === 'existing_lps' && callInterest > 0
-          ? allocate(callInterest, paidParts, plugOf(paidParts), d).out
-          : {};
-      if (interestTo === 'fund') interestToFund += callInterest;
-      if (interestTo === 'gp') interestToGp += callInterest;
-
       for (const n of input.newcomers) {
         const l = lines.get(n.lpId)!;
         l.calls.push({
@@ -217,8 +240,9 @@ export function equalize(input: EqualizationInput): EqualizationResult {
           moved,
           capital: late[n.lpId] ?? 0,
           inside: lateIn[n.lpId] ?? 0,
-          days,
-          interest: lateInterest[n.lpId] ?? 0,
+          days: 0,
+          interest: 0,
+          side: 'late',
         });
       }
       for (const p of paidParts) {
@@ -231,7 +255,9 @@ export function equalize(input: EqualizationInput): EqualizationResult {
           capital: -(refund[p.id] ?? 0),
           inside: -(refundIn[p.id] ?? 0),
           days: 0,
-          interest: -(received[p.id] ?? 0),
+          interest: 0,
+          side: 'earlier',
+          paid: p.basis,
         });
       }
 
@@ -243,11 +269,30 @@ export function equalize(input: EqualizationInput): EqualizationResult {
     }
   }
 
+  // Interest on the capital, to the closing date: one calculation, shared with
+  // the call or statement that collects it when the terms run it to then.
+  if (N > 0 && T > 0) {
+    const worked = interestOnCalls([...lines.values()], input.closingDate, { rate, compound, to: interestTo }, d);
+    for (const l of lines.values()) {
+      for (const c of l.calls) {
+        const x = worked.byCall.get(l.lpId)?.get(`${c.side}|${c.callNo}`);
+        if (!x) continue;
+        c.interest = x.interest;
+        c.days = x.days;
+      }
+    }
+    interestTotal = worked.paid;
+    interestToFund = worked.toFund;
+    interestToGp = worked.toGp;
+  }
+
   // --- The management fee a late investor missed ----------------------------
   const feeTo = terms?.catchUpFeeTo ?? 'gp';
   let feeTotal = 0;
   let feeToGp = 0;
-  const feeEnd = dayBefore(input.closingDate);
+  const feeEnd = input.feeThrough ?? dayBefore(input.closingDate);
+  // Who shares the catch-up fee, and so its interest, when the earlier investors get it.
+  const feeParts = input.existing.map((e) => ({ id: e.lpId, basis: e.commitment }));
   if (N > 0 && input.feeStart <= feeEnd) {
     const late: FeeInvestor[] = input.newcomers.map((n) => ({
       lpId: n.lpId,
@@ -264,11 +309,44 @@ export function equalize(input: EqualizationInput): EqualizationResult {
       feeTotal += f.fee;
     }
     if (feeTo === 'existing_lps' && feeTotal > 0 && T > 0) {
-      const parts = input.existing.map((e) => ({ id: e.lpId, basis: e.commitment }));
-      const out = allocate(round(feeTotal, d), parts, plugOf(parts), d).out;
+      const out = allocate(round(feeTotal, d), feeParts, plugOf(feeParts), d).out;
       for (const e of input.existing) lines.get(e.lpId)!.catchUpFee -= out[e.lpId] ?? 0;
     } else {
       feeToGp = round(feeTotal, d);
+    }
+  }
+
+  // --- Interest on the catch-up fee, to the closing ---------------------------
+  // At the late-close rate: on the whole fee from the first closing, or on each
+  // fee period's part from that period's start. It goes where the fee goes.
+  const feeInterestMode = catchUpFeeInterestOf(terms);
+  let feeInterestTotal = 0;
+  let feeInterestToGp = 0;
+  if (rate && feeInterestMode !== 'none' && feeTotal > 0) {
+    const grow = (amount: number, from: string) => {
+      const years = Math.max(0, daysBetween(from, input.closingDate)) / 365;
+      return compound ? amount * ((1 + rate) ** years - 1) : amount * rate * years;
+    };
+    for (const n of input.newcomers) {
+      const l = lines.get(n.lpId)!;
+      const lateFee = l.feeSlices.reduce((t, x) => t + x.amount, 0);
+      if (!lateFee) continue;
+      const amount = round(
+        feeInterestMode === 'first_close' ? grow(lateFee, input.feeStart) : l.feeSlices.reduce((t, x) => t + grow(x.amount, x.from), 0),
+        d,
+      );
+      l.feeInterest = (l.feeInterest ?? 0) + amount;
+      feeInterestTotal += amount;
+    }
+    feeInterestTotal = round(feeInterestTotal, d);
+    if (feeTo === 'existing_lps' && T > 0 && feeInterestTotal > 0) {
+      const out = allocate(feeInterestTotal, feeParts, plugOf(feeParts), d).out;
+      for (const e of input.existing) {
+        const l = lines.get(e.lpId)!;
+        l.feeInterest = (l.feeInterest ?? 0) - (out[e.lpId] ?? 0);
+      }
+    } else {
+      feeInterestToGp = feeInterestTotal;
     }
   }
 
@@ -278,7 +356,8 @@ export function equalize(input: EqualizationInput): EqualizationResult {
     l.inside = round(l.calls.reduce((s, c) => s + c.inside, 0), d);
     l.interest = round(l.calls.reduce((s, c) => s + c.interest, 0), d);
     l.catchUpFee = round(l.catchUpFee, d);
-    l.net = round(l.capital + l.interest + l.catchUpFee, d);
+    l.feeInterest = round(l.feeInterest ?? 0, d);
+    l.net = round(l.capital + l.interest + l.catchUpFee + l.feeInterest, d);
   }
   const all = [...lines.values()];
 
@@ -320,9 +399,29 @@ export function equalize(input: EqualizationInput): EqualizationResult {
     checks.push({
       level: 'ok',
       text: feeTotal
-        ? `Catch-up management fee ${fmt(feeTotal)} from ${fmtDate(input.feeStart)} to ${fmtDate(feeEnd)}, ${feeTo === 'gp' ? 'to the general partner' : 'shared among the earlier investors'}.`
-        : 'No catch-up management fee.',
+        ? `Catch-up management fee ${fmt(feeTotal)} from ${fmtDate(input.feeStart)} to ${fmtDate(feeEnd)}, ${feeTo === 'gp' ? 'to the general partner' : 'shared among the earlier investors'}.${
+            input.feeThrough !== undefined && feeEnd !== dayBefore(input.closingDate)
+              ? ` That is the fee periods already billed to the investors in before; from ${fmtDate(dayAfter(feeEnd))} the late investors are billed with everyone else.`
+              : ''
+          }`
+        : feeEnd < input.feeStart
+          ? 'No catch-up management fee: no fee period had been billed before this closing, so the late investors are billed every period in full with everyone else.'
+          : 'No catch-up management fee.',
     });
+    if (feeInterestTotal) {
+      checks.push({
+        level: 'ok',
+        text: `Interest on the catch-up fee ${fmt(feeInterestTotal)} at ${pctText(rate!)} a year, ${
+          feeInterestMode === 'first_close' ? `from ${fmtDate(input.feeStart)}` : 'from each fee period’s start'
+        } to ${fmtDate(input.closingDate)}, ${feeTo === 'gp' ? 'to the general partner' : 'shared among the earlier investors'}.`,
+      });
+    }
+    if (interestUntilOf(terms) === 'collection_due_date' && interestTotal) {
+      checks.push({
+        level: 'info',
+        text: 'Interest on capital is shown to the closing date. The call or statement that collects it works it out to its own due date.',
+      });
+    }
 
     if (!terms) {
       checks.push({ level: 'warn', text: 'No fund terms are in force on the closing date; interest and the catch-up fee are nil.' });
@@ -347,7 +446,112 @@ export function equalize(input: EqualizationInput): EqualizationResult {
       paidInPct,
       interestRate: rate,
       interestBasis: compound ? 'compound' : 'simple',
+      decimals: d,
+      feeCoveredThrough: feeEnd,
+      interestTo,
+      interestUntil: interestUntilOf(terms),
+      feeInterest: feeInterestTotal,
+      feeInterestToGp,
+      catchUpFeeInterest: feeInterestMode,
     },
     checks,
+  };
+}
+
+/** The rounding residual of an equalization split goes to the largest share. */
+const plugOf = (parts: { id: string; basis: number }[]) => parts.reduce((a, b) => (b.basis > a.basis ? b : a), parts[0])?.id;
+
+/**
+ * Interest on the capital moved at a later close, from each earlier call's due
+ * date to `until`: what each late investor pays, per call, and how it is shared
+ * among the investors who hold that call (by what each holds of it), or kept
+ * by the fund or the general partner.
+ *
+ * The one calculation of it: `equalize` runs it to the closing date, and the
+ * call or statement that collects the equalization runs it again to its own due
+ * date, from the capital shares frozen at finalising.
+ */
+export function interestOnCalls(
+  lines: Pick<EqualizationLine, 'lpId' | 'calls'>[],
+  until: string,
+  how: { rate: number | null; compound: boolean; to: EqualizationInterestTo },
+  d = 2,
+): {
+  byCall: Map<string, Map<string, { interest: number; days: number }>>;
+  byLp: Record<string, number>;
+  paid: number;
+  toFund: number;
+  toGp: number;
+} {
+  const byCall = new Map<string, Map<string, { interest: number; days: number }>>();
+  const byLp: Record<string, number> = {};
+  const put = (lpId: string, key: string, interest: number, days: number) => {
+    const m = byCall.get(lpId) ?? new Map();
+    m.set(key, { interest, days });
+    byCall.set(lpId, m);
+    byLp[lpId] = round((byLp[lpId] ?? 0) + interest, d);
+  };
+  const sideOf = (c: CallShare) => c.side ?? (c.capital > 0 ? 'late' : 'earlier');
+  // Every earlier call, with its late shares and the earlier investors who paid it.
+  const calls = new Map<number, { dueDate: string; late: { id: string; share: number }[]; paid: { id: string; basis: number }[] }>();
+  for (const l of lines) {
+    for (const c of l.calls) {
+      const e = calls.get(c.callNo) ?? { dueDate: c.dueDate, late: [], paid: [] };
+      if (sideOf(c) === 'late') e.late.push({ id: l.lpId, share: c.capital });
+      else e.paid.push({ id: l.lpId, basis: c.paid ?? -c.capital });
+      calls.set(c.callNo, e);
+    }
+  }
+
+  let paid = 0;
+  let toFund = 0;
+  let toGp = 0;
+  for (const [callNo, call] of [...calls].sort((a, b) => a[1].dueDate.localeCompare(b[1].dueDate) || a[0] - b[0])) {
+    const days = Math.max(0, daysBetween(call.dueDate, until));
+    const years = days / 365;
+    let callInterest = 0;
+    for (const j of call.late) {
+      const amount = how.rate ? round(how.compound ? j.share * ((1 + how.rate) ** years - 1) : j.share * how.rate * years, d) : 0;
+      put(j.id, `late|${callNo}`, amount, days);
+      callInterest += amount;
+    }
+    paid += callInterest;
+    const received = how.to === 'existing_lps' && callInterest > 0 && call.paid.length ? allocate(callInterest, call.paid, plugOf(call.paid), d).out : {};
+    if (how.to === 'fund') toFund += callInterest;
+    if (how.to === 'gp') toGp += callInterest;
+    for (const p of call.paid) put(p.id, `earlier|${callNo}`, -(received[p.id] ?? 0), 0);
+  }
+  return { byCall, byLp, paid: round(paid, d), toFund: round(toFund, d), toGp: round(toGp, d) };
+}
+
+/**
+ * A finalised equalization with its capital interest run to `until` instead
+ * of the closing date: each call's days and interest, each investor's interest
+ * and net, and the totals. Worked out from the frozen capital shares, rate and
+ * basis — the closing is not equalized again, so capital and the catch-up fee
+ * are exactly as finalised, and rounded as it was. `until` on or before the
+ * closing date gives the result back unchanged.
+ */
+export function equalizationRunTo(result: EqualizationResult, until: string): EqualizationResult {
+  if (until <= result.closingDate) return result;
+  const d = result.totals.decimals ?? 2;
+  const worked = interestOnCalls(
+    result.lines,
+    until,
+    { rate: result.totals.interestRate, compound: result.totals.interestBasis === 'compound', to: result.totals.interestTo ?? 'existing_lps' },
+    d,
+  );
+  const lines = result.lines.map((l) => {
+    const calls = l.calls.map((c) => {
+      const x = worked.byCall.get(l.lpId)?.get(`${c.side ?? (c.capital > 0 ? 'late' : 'earlier')}|${c.callNo}`);
+      return x ? { ...c, days: x.days, interest: x.interest } : c;
+    });
+    const interest = round(calls.reduce((t, c) => t + c.interest, 0), d);
+    return { ...l, calls, interest, net: round(l.capital + interest + l.catchUpFee + (l.feeInterest ?? 0), d) };
+  });
+  return {
+    ...result,
+    lines,
+    totals: { ...result.totals, interest: worked.paid, interestToFund: worked.toFund, interestToGp: worked.toGp, interestRunTo: until },
   };
 }

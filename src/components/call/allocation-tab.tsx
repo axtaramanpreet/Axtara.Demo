@@ -17,6 +17,8 @@ export function AllocationTab({ call, result }: { call: CallDetail; result: Comp
   const components = call.model.components.filter((c) => c.Component_ID);
   // A call settling a later closing's equalization: cash on top of what it calls.
   const eq = result.equalization;
+  // The fee periods it bills, each its own column, in the schedule's order.
+  const periods = result.fee.schedule ?? [];
 
   async function onExport() {
     setExporting(true);
@@ -58,6 +60,11 @@ export function AllocationTab({ call, result }: { call: CallDetail; result: Comp
                 </th>
               ))}
               <th style={{ textAlign: 'right' }}>{result.fee.schedule ? 'Fee periods' : 'Fee_Rate'}</th>
+              {periods.map((p) => (
+                <th key={p.label} style={{ textAlign: 'right' }}>
+                  Fee_{p.label.replace(/\s+/g, '_')}
+                </th>
+              ))}
               <th style={{ textAlign: 'right' }}>Fee_Gross</th>
               <th style={{ textAlign: 'right' }}>Fee_Offset</th>
               <th style={{ textAlign: 'right' }}>Fee_Net</th>
@@ -65,9 +72,11 @@ export function AllocationTab({ call, result }: { call: CallDetail; result: Comp
               {eq && <th style={{ textAlign: 'right' }}>Eq_Capital</th>}
               {eq && <th style={{ textAlign: 'right' }}>Eq_Interest</th>}
               {eq && <th style={{ textAlign: 'right' }}>Eq_Catch_Up_Fee</th>}
+              {eq && <th style={{ textAlign: 'right' }}>Eq_Fee_Interest</th>}
               {eq && <th style={{ textAlign: 'right' }}>Equalization</th>}
               {eq && <th style={{ textAlign: 'right' }}>Amount_Due</th>}
               <th style={{ textAlign: 'right' }}>Reduces_Unfunded</th>
+              {eq && <th style={{ textAlign: 'right' }}>Eq_Reduces_Unfunded</th>}
               <th style={{ textAlign: 'right' }}>Closing_UCC</th>
               <th style={{ textAlign: 'right' }}>Closing_Paid_In</th>
             </tr>
@@ -93,6 +102,11 @@ export function AllocationTab({ call, result }: { call: CallDetail; result: Comp
                   );
                 })}
                 <td className="num">{result.fee.schedule ? scheduleLabel(result.fee.schedule) : pct(row.feeRate)}</td>
+                {periods.map((p, i) => (
+                  <td key={p.label} className="num">
+                    {fmt(row.feeByPeriod?.[i] ?? 0)}
+                  </td>
+                ))}
                 <td className="num">{fmt(row.feeGross)}</td>
                 <td className="num">{fmt(row.feeOffset)}</td>
                 <td className="num">{fmt(row.feeNet)}</td>
@@ -101,6 +115,7 @@ export function AllocationTab({ call, result }: { call: CallDetail; result: Comp
                 {eq && <td className="num">{row.equalization ? fmt(row.equalization) : '—'}</td>}
                 {eq && <td className="num" style={{ fontWeight: 600 }}>{fmt(amountDue(row, result.d))}</td>}
                 <td className="num">{fmt(row.reduces)}</td>
+                {eq && <td className="num">{row.eqReduces ? fmt(row.eqReduces) : '—'}</td>}
                 <td className="num">{fmt(row.closingUCC)}</td>
                 <td className="num">{fmt(row.closingPaid)}</td>
               </tr>
@@ -116,6 +131,11 @@ export function AllocationTab({ call, result }: { call: CallDetail; result: Comp
                 </td>
               ))}
               <td />
+              {periods.map((p) => (
+                <td key={p.label} className="num">
+                  {fmt(p.total)}
+                </td>
+              ))}
               <td className="num">{fmt(result.totals.feeGross)}</td>
               <td className="num">{fmt(result.totals.feeOffset)}</td>
               <td className="num">{fmt(result.totals.feeNet)}</td>
@@ -126,12 +146,14 @@ export function AllocationTab({ call, result }: { call: CallDetail; result: Comp
                     capital: eq.closings.reduce((t, c) => t + c.capital, 0),
                     interest: eq.closings.reduce((t, c) => t + c.interest, 0),
                     catchUpFee: eq.closings.reduce((t, c) => t + c.catchUpFee, 0),
+                    feeInterest: eq.closings.reduce((t, c) => t + c.feeInterest, 0),
                   }}
                 />
               )}
               {eq && <td className="num">{fmt(eq.total)}</td>}
               {eq && <td className="num">{fmt(round(result.totals.total + eq.total, result.d))}</td>}
               <td className="num">{fmt(result.totals.reduces)}</td>
+              {eq && <td className="num">{result.totals.eqReduces ? fmt(result.totals.eqReduces) : '—'}</td>}
               <td className="num">{fmt(result.totals.closingUCC)}</td>
               <td className="num">{fmt(result.totals.closingPaid)}</td>
             </tr>
@@ -142,14 +164,15 @@ export function AllocationTab({ call, result }: { call: CallDetail; result: Comp
   );
 }
 
-/** An investor's equalization on the call, taken apart: capital, late interest, catch-up fee. */
-function EqParts({ parts }: { parts: { capital: number; interest: number; catchUpFee: number } }) {
+/** An investor's equalization on the call, taken apart: capital, late interest, catch-up fee, interest on it. */
+function EqParts({ parts }: { parts: { capital: number; interest: number; catchUpFee: number; feeInterest: number } }) {
   const cell = (x: number) => <td className="num">{Math.abs(x) >= 0.005 ? fmt(x) : '—'}</td>;
   return (
     <>
       {cell(parts.capital)}
       {cell(parts.interest)}
       {cell(parts.catchUpFee)}
+      {cell(parts.feeInterest)}
     </>
   );
 }

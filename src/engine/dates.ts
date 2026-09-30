@@ -24,6 +24,21 @@ export function dayBefore(date: string): string {
   return iso(d);
 }
 
+/**
+ * `n` working days after `date`: Saturdays and Sundays are skipped. Public
+ * holidays are not known here, so a date it gives is a suggestion to check.
+ */
+export function addBusinessDays(date: string, n: number): string {
+  const d = utc(date);
+  let left = n;
+  while (left > 0) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const day = d.getUTCDay();
+    if (day !== 0 && day !== 6) left -= 1;
+  }
+  return iso(d);
+}
+
 /** Whole days from `a` to `b`: 0 for the same day, negative if `b` is earlier. */
 export function daysBetween(a: string, b: string): number {
   return Math.round((utc(b).getTime() - utc(a).getTime()) / 86_400_000);

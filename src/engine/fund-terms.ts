@@ -20,6 +20,16 @@ export type FeeDayCount = 'period_fraction' | 'actual_365' | 'actual_360' | '30_
 export type InterestBasis = 'simple' | 'compound';
 export type CatchUpFeeTo = 'gp' | 'existing_lps';
 export type EqualizationInterestTo = 'existing_lps' | 'fund' | 'gp';
+/** Where equalization interest on capital stops: the closing, or when the late investor actually pays. */
+export type EqualizationInterestUntil = 'closing_date' | 'collection_due_date';
+/** Interest on the catch-up management fee, and from when. */
+export type CatchUpFeeInterest = 'none' | 'first_close' | 'per_period';
+/**
+ * What a later closing's catch-up fee covers: the fee periods already billed to
+ * the investors in before it (later periods bill the late investor in full, like
+ * everyone else), or every day up to the closing.
+ */
+export type CatchUpFeeUntil = 'billed_periods' | 'closing_date';
 
 export interface FundTerms {
   /** YYYY-MM-DD. These terms apply from this date until a later row. */
@@ -51,6 +61,12 @@ export interface FundTerms {
   lateCloseInterestBasis: InterestBasis | null;
   catchUpFeeTo: CatchUpFeeTo | null;
   equalizationInterestTo: EqualizationInterestTo | null;
+  /** Blank: to the due date of the call or statement that collects it. */
+  equalizationInterestUntil: EqualizationInterestUntil | null;
+  /** Blank: on the whole catch-up fee, from the first closing to the late investor's closing. */
+  catchUpFeeInterest: CatchUpFeeInterest | null;
+  /** Blank: the fee periods already billed to the others. */
+  catchUpFeeUntil: CatchUpFeeUntil | null;
 
   /** Where investors wire money: printed on every notice and statement. */
   paymentBankName: string | null;
@@ -89,6 +105,9 @@ export const BLANK_TERMS: FundTerms = {
   lateCloseInterestBasis: null,
   catchUpFeeTo: null,
   equalizationInterestTo: null,
+  equalizationInterestUntil: null,
+  catchUpFeeInterest: null,
+  catchUpFeeUntil: null,
   paymentBankName: null,
   paymentAccountName: null,
   paymentAccountNo: null,
@@ -145,8 +164,11 @@ export const DEPENDS_ON: Partial<Record<keyof FundTerms, keyof FundTerms>> = {
   feeDayCount: 'feeRateAnnual',
   feeReducesUnfunded: 'feeRateAnnual',
   catchUpFeeTo: 'feeRateAnnual',
+  catchUpFeeUntil: 'feeRateAnnual',
   lateCloseInterestBasis: 'lateCloseInterestRate',
   equalizationInterestTo: 'lateCloseInterestRate',
+  equalizationInterestUntil: 'lateCloseInterestRate',
+  catchUpFeeInterest: 'lateCloseInterestRate',
 };
 
 /** Whether a term applies, given the terms it depends on. */
@@ -292,6 +314,9 @@ export const SUGGESTED_TERMS: Partial<FundTerms> = {
   lateCloseInterestBasis: 'simple',
   catchUpFeeTo: 'gp',
   equalizationInterestTo: 'existing_lps',
+  equalizationInterestUntil: 'collection_due_date',
+  catchUpFeeInterest: 'first_close',
+  catchUpFeeUntil: 'billed_periods',
 };
 
 /**
@@ -375,4 +400,19 @@ export function paymentFor(
   callNo: string | number,
 ): { label: string; value: string }[] | null {
   return paymentInstructions(termsOn(history, callDate || '9999-12-31'), { lpId, callNo });
+}
+
+/** Where equalization interest on capital stops, for these terms: blank is the collecting document's due date. */
+export function interestUntilOf(terms: Pick<FundTerms, 'equalizationInterestUntil'> | null): EqualizationInterestUntil {
+  return terms?.equalizationInterestUntil ?? 'collection_due_date';
+}
+
+/** Interest on the catch-up fee, for these terms: blank is the whole fee from the first closing. */
+export function catchUpFeeInterestOf(terms: Pick<FundTerms, 'catchUpFeeInterest'> | null): CatchUpFeeInterest {
+  return terms?.catchUpFeeInterest ?? 'first_close';
+}
+
+/** What the catch-up fee covers, for these terms: blank is the fee periods already billed to the others. */
+export function catchUpFeeUntilOf(terms: Pick<FundTerms, 'catchUpFeeUntil'> | null): CatchUpFeeUntil {
+  return terms?.catchUpFeeUntil ?? 'billed_periods';
 }

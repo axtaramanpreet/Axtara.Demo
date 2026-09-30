@@ -273,6 +273,8 @@ export interface CatchUpFee {
   total: number;
   /** The part that is the manager's fee income: all of it, or none. */
   toManager: number;
+  /** Interest late investors paid on it, which goes where the fee goes. Interest, not fee income. */
+  interest: number;
 }
 
 /**
@@ -316,6 +318,7 @@ export function catchUpFeesFor(history: FundHistory): CatchUpFee[] {
               .filter((l) => l.fee > 0),
       total: round(result.totals.catchUpFee, decimals),
       toManager,
+      interest: round(result.totals.feeInterest ?? 0, decimals),
     });
   }
   return out;

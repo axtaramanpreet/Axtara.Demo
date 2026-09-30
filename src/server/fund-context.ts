@@ -89,7 +89,16 @@ function describeCall(call: CallDetail) {
       ...(result.equalization
         ? (() => {
             const p = equalizationPartsOf(call.model.equalizationSchedule, r.LP_ID, result.d);
-            return { Eq_Capital: p.capital, Eq_Interest: p.interest, Eq_Catch_Up_Fee: p.catchUpFee, Equalization: r.equalization ?? 0, Amount_Due: amountDue(r, result.d) };
+            return {
+              Eq_Capital: p.capital,
+              Eq_Interest: p.interest,
+              Eq_Catch_Up_Fee: p.catchUpFee,
+              Eq_Fee_Interest: p.feeInterest,
+              Equalization: r.equalization ?? 0,
+              Eq_Paid_In: r.eqPaid ?? 0,
+              Eq_Reduces_Unfunded: r.eqReduces ?? 0,
+              Amount_Due: amountDue(r, result.d),
+            };
           })()
         : {}),
       Reduces_Unfunded: r.reduces,

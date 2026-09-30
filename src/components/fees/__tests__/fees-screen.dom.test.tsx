@@ -32,6 +32,8 @@ const terms: FundTerms = {
   feeBasis: 'Commitment',
   feeRateAnnual: 0.02,
   feePeriodFraction: 0.25,
+  // No fee period is billed before the late close here: the catch-up runs to the closing, as these figures were worked.
+  catchUpFeeUntil: 'closing_date',
 };
 const first: ClosingRecord = {
   id: 'c1', closingNo: 1, closingDate: '2026-01-01', finalised: true, result: null,

@@ -34,6 +34,7 @@ export {
 } from './fund-terms';
 export { allocate, type AllocationPart } from './allocate';
 export {
+  addBusinessDays,
   dayAfter,
   dayBefore,
   days360,
@@ -58,6 +59,8 @@ export {
 } from './fee-run';
 export {
   equalize,
+  equalizationRunTo,
+  interestOnCalls,
   type CallShare,
   type EqualizationCheck,
   type EqualizationInput,
@@ -93,6 +96,7 @@ export {
 export { capitalAccount, type AccountEntry, type CapitalAccount } from './capital-account';
 export {
   commitmentsFrom,
+  catchUpFeeThrough,
   equalizationInputFor,
   feeInvestorsFrom,
   feePeriodsFor,
@@ -119,7 +123,13 @@ export {
   amountDue,
   buildEqualizationSchedule,
   equalizationOwed,
+  equalizationNetOf,
   equalizationPartsOf,
+  equalizationForStatement,
+  settlementConflict,
+  interestRunsToDueDate,
+  suggestedStatementDueDate,
+  STATEMENT_DAYS_TO_PAY,
   equalizationScheduleDifferences,
   unsettledClosings,
   type ClosingOwed,

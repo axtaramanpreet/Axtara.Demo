@@ -13,7 +13,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(12);
+select plan(16);
 
 
 -- --- Two clients; an admin and a viewer at one, an admin at the other -------
@@ -143,6 +143,39 @@ select is(
   (select count(*) from fund_terms where fund_id = 'aaaa2222-2222-2222-2222-999999999999'),
   0::bigint,
   'and its terms go with it'
+);
+
+
+-- --- When equalization interest runs to, and interest on the catch-up fee ---
+
+select lives_ok(
+  $$ insert into fund_terms (fund_id, effective_from, late_close_interest_rate, equalization_interest_until, catch_up_fee_interest, catch_up_fee_until)
+     values ('aaaa2222-2222-2222-2222-222222222222', '2030-01-01', 0.08, 'collection_due_date', 'per_period', 'billed_periods') $$,
+  'the terms record when interest runs to and how the catch-up fee carries it'
+);
+
+select throws_ok(
+  $$ insert into fund_terms (fund_id, effective_from, equalization_interest_until)
+     values ('aaaa2222-2222-2222-2222-222222222222', '2031-01-01', 'whenever') $$,
+  '23514',
+  null,
+  'only the closing date or the collecting due date'
+);
+
+select throws_ok(
+  $$ insert into fund_terms (fund_id, effective_from, catch_up_fee_interest)
+     values ('aaaa2222-2222-2222-2222-222222222222', '2031-01-01', 'daily') $$,
+  '23514',
+  null,
+  'only none, from the first close, or per period'
+);
+
+select throws_ok(
+  $$ insert into fund_terms (fund_id, effective_from, catch_up_fee_until)
+     values ('aaaa2222-2222-2222-2222-222222222222', '2031-01-01', 'whenever') $$,
+  '23514',
+  null,
+  'the catch-up fee covers the billed periods or runs to the closing, nothing else'
 );
 
 

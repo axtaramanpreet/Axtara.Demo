@@ -13,8 +13,10 @@
 
 import type { EqualizationInput, EqualizationResult, PriorCall } from './equalization';
 import { feeForRange, type DatedAmount, type FeeInvestor, type FeeResult } from './fee-run';
-import { dayAfter, periodContaining, periodLabel, periodMonths } from './dates';
-import { termsOn, type FundTerms } from './fund-terms';
+import { dayAfter, dayBefore, periodContaining, periodLabel, periodMonths } from './dates';
+import { round } from './format';
+import { equalizationForStatement } from './equalization-billing';
+import { catchUpFeeUntilOf, termsOn, type FundTerms } from './fund-terms';
 import { positionsAsOf, type IssuedCall, type Position } from './positions';
 
 export interface ClosingRecord {
@@ -38,6 +40,11 @@ export interface ClosingRecord {
    * call. Absent or null: not chosen yet.
    */
   settlement?: Settlement | null;
+  /**
+   * Settled now: the date its sent statements are payable by, which the
+   * interest runs to. Absent or null: none sent, or sent before it was recorded.
+   */
+  statementDueDate?: string | null;
 }
 
 export type Settlement = 'on_closing' | 'next_call';
@@ -76,6 +83,27 @@ export function commitmentsFrom(
 }
 
 /**
+ * The last day a later closing's catch-up fee covers.
+ *
+ * By default (`catchUpFeeUntil` blank or 'billed_periods'), the fee periods
+ * already billed to the investors in before: the end of the latest period a
+ * call dated before the closing billed — so every later period bills the late
+ * investor in full, with everyone else, and nobody's period figures differ.
+ * Nothing billed yet: the day before the first close, so no catch-up at all. A
+ * period billed before the closing is covered whole, even past the closing
+ * date. With 'closing_date', every day up to the closing.
+ */
+export function catchUpFeeThrough(history: FundHistory, closing: Pick<ClosingRecord, 'closingDate'>): string {
+  if (catchUpFeeUntilOf(termsOn(history.terms, closing.closingDate)) === 'closing_date') return dayBefore(closing.closingDate);
+  const first = firstClosing(history);
+  const billed = history.calls
+    .filter((call) => call.callDate < closing.closingDate)
+    .flatMap((call) => (call.feeSchedule ?? []).filter((e) => Object.values(e.byLp).some((x) => x !== 0)).map((e) => e.to));
+  const none = dayBefore(first?.closingDate ?? closing.closingDate);
+  return billed.reduce((m, to) => (to > m ? to : m), none);
+}
+
+/**
  * What a later closing's equalization is worked out from. Null for the first
  * close, which admits everyone at the start and so has nothing to equalize.
  */
@@ -94,17 +122,37 @@ export function equalizationInputFor(history: FundHistory, closingId: string): E
     }
   }
 
+  // What each investor holds of each earlier call: what they paid into it, as
+  // moved by every earlier closing's equalization. An investor admitted at a
+  // second close holds their share of the first call from then on, so a third
+  // close refunds them too — not only those who paid on the day.
+  const earlierResults = before.flatMap((c) => (c.result ? [c.result] : []));
+  const d = termsOn(history.terms, closing.closingDate)?.roundingDecimals ?? 2;
   const priorCalls: PriorCall[] = history.calls
     .filter((call) => call.callDate < closing.closingDate)
-    .map((call) => ({
-      callNo: call.callNo,
-      dueDate: call.dueDate,
-      lines: call.lines.map((l) => ({ lpId: l.lpId, capital: l.capital, inside: l.inside })),
-    }));
+    .map((call) => {
+      const held = new Map(call.lines.map((l) => [l.lpId, { lpId: l.lpId, capital: l.capital, inside: l.inside }]));
+      for (const r of earlierResults) {
+        for (const l of r.lines) {
+          for (const share of l.calls.filter((x) => x.callNo === call.callNo)) {
+            const h = held.get(l.lpId) ?? { lpId: l.lpId, capital: 0, inside: 0 };
+            h.capital += share.capital;
+            h.inside += share.inside;
+            held.set(l.lpId, h);
+          }
+        }
+      }
+      return {
+        callNo: call.callNo,
+        dueDate: call.dueDate,
+        lines: [...held.values()].map((h) => ({ ...h, capital: round(h.capital, d), inside: round(h.inside, d) })),
+      };
+    });
 
   return {
     closingDate: closing.closingDate,
     feeStart: first.closingDate,
+    feeThrough: catchUpFeeThrough(history, closing),
     existing: [...existing.values()],
     newcomers: closing.commitments.map((k) => ({
       lpId: k.lpId,
@@ -118,6 +166,93 @@ export function equalizationInputFor(history: FundHistory, closingId: string): E
   };
 }
 
+/** A finalised closing's equalization, as it moved one investor's balances. */
+export interface EqualizationMovement {
+  closingId: string;
+  closingNo: number;
+  /** When it moved: the closing date, or the call that settled it. */
+  date: string;
+  /** The sent call it moved on, when it moved on a call. */
+  onCall?: number;
+  lpId: string;
+  name: string;
+  /** Into paid-in: capital and catch-up fee. */
+  paid: number;
+  /** The part of `paid` that counts against commitment. */
+  drawn: number;
+  /** Late-close interest, and interest on the catch-up fee: not capital, so no balance moves. */
+  interest: number;
+  /** What they paid (+) or got back (−) in all. */
+  net: number;
+}
+
+/**
+ * When and how each finalised closing's equalization moved the balances.
+ *
+ * Settled by statement, or not chosen yet: on the closing date. Settled on the
+ * next call: on that call, once it is sent — until then the late investor has
+ * paid nothing and all their commitment is unfunded. A call sent before that
+ * rule (its schedule has no `settles`) moved them on the closing date, and
+ * keeps doing so.
+ *
+ * `positionsOn` and `capitalAccount` both read this, so they end on the same
+ * figures. Invested capital is not here: it stays dated at the closing.
+ */
+export function equalizationMovements(history: FundHistory): EqualizationMovement[] {
+  const out: EqualizationMovement[] = [];
+  for (const c of history.closings) {
+    if (!c.finalised || !c.result) continue;
+    const feeReduces = termsOn(history.terms, c.closingDate)?.feeReducesUnfunded ?? true;
+    const names = new Map(c.result.lines.map((l) => [l.lpId, l.name]));
+    // Settled now, with interest run to the date its statements are payable by.
+    const asked = c.settlement === 'on_closing' && c.statementDueDate ? equalizationForStatement(c.result, c.statementDueDate) : c.result;
+    const atClosing = () => {
+      for (const l of asked.lines) {
+        out.push({
+          closingId: c.id,
+          closingNo: c.closingNo,
+          date: c.closingDate,
+          lpId: l.lpId,
+          name: l.name,
+          paid: l.capital + l.catchUpFee,
+          drawn: l.inside + (feeReduces ? l.catchUpFee : 0),
+          interest: l.interest + (l.feeInterest ?? 0),
+          net: l.net,
+        });
+      }
+    };
+    if (c.settlement !== 'next_call') {
+      atClosing();
+      continue;
+    }
+    const carriers = history.calls
+      .map((call) => ({ call, entry: call.equalizationSchedule?.find((e) => e.closingId === c.id) }))
+      .filter((x): x is { call: IssuedCall; entry: NonNullable<typeof x.entry> } => !!x.entry);
+    if (carriers.some((x) => !x.entry.settles)) {
+      atClosing();
+      continue;
+    }
+    for (const { call, entry } of carriers) {
+      for (const [lpId, p] of Object.entries(entry.parts)) {
+        const feeInterest = p.feeInterest ?? 0;
+        out.push({
+          closingId: c.id,
+          closingNo: c.closingNo,
+          date: call.callDate,
+          onCall: call.callNo,
+          lpId,
+          name: names.get(lpId) ?? lpId,
+          paid: p.capital + p.catchUpFee,
+          drawn: (p.inside ?? 0) + (entry.feeReducesUnfunded ? p.catchUpFee : 0),
+          interest: p.interest + feeInterest,
+          net: p.capital + p.interest + p.catchUpFee + feeInterest,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 /** Where every investor stands on `date`, from the record. */
 export function positionsOn(history: FundHistory, date: string): Position[] {
   const hasClosings = history.closings.some((c) => c.finalised);
@@ -125,11 +260,8 @@ export function positionsOn(history: FundHistory, date: string): Position[] {
     calls: history.calls,
     equalizations: history.closings
       .filter((c) => c.finalised && c.result)
-      .map((c) => ({
-        closingDate: c.closingDate,
-        lines: c.result!.lines,
-        feeReducesUnfunded: termsOn(history.terms, c.closingDate)?.feeReducesUnfunded ?? true,
-      })),
+      .map((c) => ({ closingDate: c.closingDate, lines: c.result!.lines })),
+    movements: equalizationMovements(history),
     commitments: hasClosings ? commitmentsFrom(history) : undefined,
   });
 }
@@ -156,9 +288,13 @@ export function feeInvestorsFrom(history: FundHistory): FeeInvestor[] {
   const finalised = history.closings.filter((c) => c.finalised).sort(byDate);
   if (finalised.length) {
     for (const c of finalised) {
+      // A later closing's commitment carries the fee from the day after its
+      // catch-up fee stops: before that, the catch-up fee charged it.
+      const covered = c.result?.totals.feeCoveredThrough;
+      const from = covered ? dayAfter(covered) : c.closingDate;
       for (const k of c.commitments) {
         const i = at(k.lpId, k.name);
-        i.commitments.push({ from: c.closingDate, amount: k.amount });
+        i.commitments.push({ from, amount: k.amount });
         if (k.feeRateOverride && k.feeRateOverride > 0) i.feeRateOverride = k.feeRateOverride;
         if (k.feeExempt) i.feeExempt = true;
       }

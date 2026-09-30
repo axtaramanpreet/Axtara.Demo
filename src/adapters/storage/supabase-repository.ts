@@ -247,7 +247,7 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
       const { data, error } = await db
         .from('closings')
         // One string literal: supabase-js types the row from the select.
-        .select('id, closing_no, closing_date, note, finalised_at, settlement, closing_commitments ( investor_id, amount, fee_rate_override, fee_exempt, position, investors!inner ( lp_id, lp_name, contact_email ) ), closing_results ( result )')
+        .select('id, closing_no, closing_date, note, finalised_at, settlement, closing_commitments ( investor_id, amount, fee_rate_override, fee_exempt, position, investors!inner ( lp_id, lp_name, contact_email ) ), closing_results ( result ), closing_statements ( status, payment_due_date )')
         .eq('fund_id', fundId)
         .order('closing_date')
         .order('closing_no');
@@ -255,6 +255,8 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
       return (data ?? []).map((c) => {
         const results = c.closing_results as unknown as { result: unknown } | { result: unknown }[] | null;
         const result = (Array.isArray(results) ? results[0]?.result : results?.result) ?? null;
+        const statements = (c.closing_statements as unknown as { status: string; payment_due_date: string | null }[] | null) ?? [];
+        const statementDueDate = statements.find((s) => s.status === 'sent' && s.payment_due_date)?.payment_due_date ?? null;
         const rows = [...((c.closing_commitments as unknown as {
           investor_id: string;
           amount: string | number;
@@ -272,6 +274,7 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
           finalised: c.finalised_at !== null,
           result: result as EqualizationResult | null,
           settlement: c.settlement as Settlement | null,
+          statementDueDate,
           commitments: rows.map((r) => ({
             investorId: r.investor_id,
             lpId: r.investors.lp_id,
@@ -341,13 +344,14 @@ export function createSupabaseRepository(db: SupabaseClient): CallRepository {
     async listClosingStatements(fundId: string): Promise<ClosingStatement[]> {
       const { data, error } = await db
         .from('closing_statements')
-        .select('closing_id, status, approved_at, sent_at, sent_to_email, email_status, email_error, email_delivered_to, investors!inner ( lp_id ), closings!inner ( fund_id )')
+        .select('closing_id, status, payment_due_date, approved_at, sent_at, sent_to_email, email_status, email_error, email_delivered_to, investors!inner ( lp_id ), closings!inner ( fund_id )')
         .eq('closings.fund_id', fundId);
       if (error) throw asError(error, "load the closings' statements");
       return (data ?? []).map((r) => ({
         closingId: r.closing_id,
         lpId: (r.investors as unknown as { lp_id: string }).lp_id,
         status: r.status as ClosingStatement['status'],
+        paymentDueDate: r.payment_due_date,
         approvedAt: r.approved_at,
         sentAt: r.sent_at,
         sentToEmail: r.sent_to_email,

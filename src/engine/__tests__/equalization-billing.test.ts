@@ -36,6 +36,8 @@ const terms: FundTerms = {
   feeRateAnnual: 0.02,
   feePeriodFraction: 0.25,
   catchUpFeeTo: 'existing_lps',
+  // No fee period is billed before the late close here: the catch-up runs to the closing, as these figures were worked.
+  catchUpFeeUntil: 'closing_date',
 };
 const first: ClosingRecord = {
   id: 'c1', closingNo: 1, closingDate: '2026-01-01', finalised: true, result: null,
@@ -59,7 +61,7 @@ const history = (settlement: Settlement | null, calls: IssuedCall[] = []): FundH
 });
 /** Amounts as one part of the equalization — here the catch-up fee, which is all this fixture moves. */
 const as = (part: 'capital' | 'interest' | 'catchUpFee', byLp: Record<string, number>) =>
-  Object.fromEntries(Object.entries(byLp).map(([id, x]) => [id, { capital: 0, interest: 0, catchUpFee: 0, [part]: x }]));
+  Object.fromEntries(Object.entries(byLp).map(([id, x]) => [id, { capital: 0, inside: 0, interest: 0, catchUpFee: 0, feeInterest: 0, [part]: x }]));
 const sentCall = (callNo: number, byLp: Record<string, number>): IssuedCall => ({
   callNo, callDate: '2026-09-01', dueDate: '2026-09-15', lines: [],
   equalizationSchedule: [{ closingId: 'c2', closingNo: 2, closingDate: '2026-08-01', byLp, parts: as('catchUpFee', byLp) }],
@@ -94,7 +96,7 @@ describe('what a closing settled on the next call still owes', () => {
     expect(c.settledOn).toEqual([{ callNo: 3, amount: Math.round((net.LP07 - 10_000) * 100) / 100 }]);
     expect(c.owed.LP07).toBeUndefined();
     expect(c.owed.LP01).toBe(Math.round((net.LP01 + 10_000) * 100) / 100);
-    expect(equalizationOwed(history('next_call', [part]), '2026-10-01', 3)[0].owed).toEqual(net);
+    expect(equalizationOwed(history('next_call', [part]), '2026-10-01', { excludeCallNo: 3 })[0].owed).toEqual(net);
   });
 });
 
@@ -151,11 +153,12 @@ describe('a call settling equalization', () => {
     expect(ra.equalization).toBe(1_000);
     expect(amountDue(ra)).toBe(Math.round((pa.total + 1_000) * 100) / 100);
     expect(amountDue(rb)).toBe(Math.round((pb.total - 500) * 100) / 100);
-    expect(r.totals).toEqual(plain.totals);
+    // An older schedule (no `settles`) moves no balance on the call.
+    expect(r.totals).toEqual({ ...plain.totals, eqPaid: 0, eqReduces: 0 });
     expect(ra.closingPaid).toBe(pa.closingPaid);
     expect(ra.closingUCC).toBe(pa.closingUCC);
     expect(r.equalization).toEqual({
-      closings: [{ closingId: 'c2', closingNo: 2, closingDate: '2026-08-01', paid: 1_000, credited: 500, capital: 500, interest: 0, catchUpFee: 0 }],
+      closings: [{ closingId: 'c2', closingNo: 2, closingDate: '2026-08-01', paid: 1_000, credited: 500, capital: 500, interest: 0, catchUpFee: 0, feeInterest: 0, interestUntil: '2026-08-01' }],
       total: 500,
     });
     expect(r.checks).toContainEqual({ level: 'info', text: 'Equalization from Closing 2: 1,000.00 collected from late investors, 500.00 credited to earlier investors.' });
@@ -222,7 +225,7 @@ describe('a call settling equalization', () => {
       equalizationSchedule: [{ closingId: 'c2', closingNo: 2, closingDate: '2026-08-01', byLp: { [a]: 1_000 }, parts: as('capital', { [a]: 900 }) }],
     };
     expect(compute(model).checks.filter((c) => c.level === 'fail').map((c) => c.text)).toEqual([
-      `Closing 2: ${a}'s equalization does not add up to its capital, interest and catch-up fee.`,
+      `Closing 2: ${a}'s equalization does not add up to its capital, interest, catch-up fee and fee interest.`,
     ]);
   });
 
@@ -256,8 +259,97 @@ describe('an investor’s equalization on a call, taken apart', () => {
       { closingId: 'c2', closingNo: 2, closingDate: '2026-05-01', byLp: { A: 110 }, parts: { A: { capital: 100, interest: 5, catchUpFee: 5 } } },
       { closingId: 'c3', closingNo: 3, closingDate: '2026-07-01', byLp: { A: -40, B: 7 }, parts: { A: { capital: -30, interest: -2.5, catchUpFee: -7.5 }, B: { capital: 0, interest: 0, catchUpFee: 7 } } },
     ];
-    expect(equalizationPartsOf(schedule, 'A')).toEqual({ capital: 70, interest: 2.5, catchUpFee: -2.5 });
-    expect(equalizationPartsOf(schedule, 'B')).toEqual({ capital: 0, interest: 0, catchUpFee: 7 });
-    expect(equalizationPartsOf(null, 'A')).toEqual({ capital: 0, interest: 0, catchUpFee: 0 });
+    // Schedules saved before inside and fee interest were recorded count them as nothing.
+    expect(equalizationPartsOf(schedule, 'A')).toEqual({ capital: 70, inside: 0, interest: 2.5, catchUpFee: -2.5, feeInterest: 0 });
+    expect(equalizationPartsOf(schedule, 'B')).toEqual({ capital: 0, inside: 0, interest: 0, catchUpFee: 7, feeInterest: 0 });
+    expect(equalizationPartsOf(null, 'A')).toEqual({ capital: 0, inside: 0, interest: 0, catchUpFee: 0, feeInterest: 0 });
+  });
+});
+
+/**
+ * Interest that runs to when the late investor pays: the fund manager's rule.
+ *
+ * First close 1 Jan 2026, LP01 6m, LP02 4m; no fee, 8% simple late-close
+ * interest to the earlier investors. Call 1, due 15 Feb: 1,000,000 (6 : 4).
+ * Second close 1 Aug admits LP07 5m: their share of call 1 is
+ * 1,000,000 × 5/15 = 333,333.33.
+ *
+ *   to the closing, 15 Feb → 1 Aug  = 167 days: 333,333.33 × 8% × 167/365 = 12,200.91
+ *   to the call due 15 Sep          = 212 days: 333,333.33 × 8% × 212/365 = 15,488.58
+ *   shared by what each paid into call 1 (6 : 4): LP01 9,293.15, LP02 6,195.43
+ */
+describe('interest that runs to the collecting call’s due date', () => {
+  const t: FundTerms = { ...BLANK_TERMS, effectiveFrom: '2026-01-01', createdAt: '', lateCloseInterestRate: 0.08, lateCloseInterestBasis: 'simple', equalizationInterestTo: 'existing_lps' };
+  const line = (lpId: string, commitment: number, capital: number) => ({
+    lpId, name: lpId, commitment, openPaid: 0, openUnfunded: commitment, openInvested: 0, total: capital, reduces: capital, capital, inside: capital, deal: capital,
+  });
+  const call1: IssuedCall = { callNo: 1, callDate: '2026-02-01', dueDate: '2026-02-15', lines: [line('LP01', 6e6, 600_000), line('LP02', 4e6, 400_000)] };
+  const firstClose: ClosingRecord = {
+    id: 'k1', closingNo: 1, closingDate: '2026-01-01', finalised: true, result: null,
+    commitments: [
+      { lpId: 'LP01', name: 'LP01', amount: 6e6, feeRateOverride: null, feeExempt: false },
+      { lpId: 'LP02', name: 'LP02', amount: 4e6, feeRateOverride: null, feeExempt: false },
+    ],
+  };
+  const secondClose: ClosingRecord = {
+    id: 'k2', closingNo: 2, closingDate: '2026-08-01', finalised: false, result: null,
+    commitments: [{ lpId: 'LP07', name: 'LP07', amount: 5e6, feeRateOverride: null, feeExempt: false }],
+  };
+  const fundWith = (terms: FundTerms, calls: IssuedCall[] = [call1]): FundHistory => {
+    const draft: FundHistory = { terms: [terms], closings: [firstClose, secondClose], calls: [call1] };
+    const r = equalize(equalizationInputFor(draft, 'k2')!);
+    return { terms: [terms], closings: [firstClose, { ...secondClose, finalised: true, result: r, settlement: 'next_call' }], calls };
+  };
+
+  it('runs to the call’s payment due date, from the frozen shares, rate and basis', () => {
+    const [c] = equalizationOwed(fundWith(t), '2026-09-01', { dueDate: '2026-09-15' });
+    expect(c.interestUntil).toBe('2026-09-15');
+    expect(c.interestToDueDate).toBe(true);
+    expect(c.parts.LP07).toMatchObject({ capital: 333_333.33, interest: 15_488.58 });
+    expect(c.parts.LP01.interest).toBe(-9_293.15);
+    expect(c.parts.LP02.interest).toBe(-6_195.43);
+    expect(c.owed.LP07).toBe(348_821.91);
+  });
+
+  it('stops at the closing date until the call has a due date — and the call is refused without one', () => {
+    const [c] = equalizationOwed(fundWith(t), '2026-09-01', { dueDate: '' });
+    expect(c.interestUntil).toBe('2026-08-01');
+    expect(c.parts.LP07.interest).toBe(12_200.91);
+    const [e] = buildEqualizationSchedule([c]);
+    const model: CallModel = { ...structuredClone(ILLUSTRATIVE_FUND), golden: null, equalizationSchedule: [{ ...e, byLp: {}, parts: {} }] };
+    model.setup.Payment_Due_Date = '';
+    expect(compute(model).checks.filter((x) => x.level === 'fail').map((x) => x.text)).toContain(
+      "Set the payment due date: interest on Closing 2's equalization runs to it.",
+    );
+    // With a due date that is not the one the interest ran to, it is refused as out of date.
+    model.setup.Payment_Due_Date = '2026-09-15';
+    expect(compute(model).checks.filter((x) => x.level === 'fail').map((x) => x.text)).toContain(
+      "Closing 2's interest runs to 1 August 2026, not this call's due date 15 September 2026. Open Setup to bring it up to date.",
+    );
+  });
+
+  it('stays at the closing date when the terms say so', () => {
+    const [c] = equalizationOwed(fundWith({ ...t, equalizationInterestUntil: 'closing_date' }), '2026-09-01', { dueDate: '2026-09-15' });
+    expect(c.interestUntil).toBe('2026-08-01');
+    expect(c.interestToDueDate).toBe(false);
+    expect(c.parts.LP07.interest).toBe(12_200.91);
+  });
+
+  it('stays at the closing date for a closing finalised before the setting existed', () => {
+    const h = fundWith(t);
+    const k = h.closings[1];
+    const older = { ...k.result!.totals };
+    delete older.interestUntil;
+    const old: FundHistory = { ...h, closings: [h.closings[0], { ...k, result: { ...k.result!, totals: older } }] };
+    const [c] = equalizationOwed(old, '2026-09-01', { dueDate: '2026-09-15' });
+    expect(c.parts.LP07.interest).toBe(12_200.91);
+  });
+
+  it('once a sent call carried it, what that call charged is the interest: nothing more is owed later', () => {
+    const [c] = equalizationOwed(fundWith(t), '2026-09-01', { dueDate: '2026-09-15' });
+    const sent: IssuedCall = { callNo: 2, callDate: '2026-09-01', dueDate: '2026-09-15', lines: [], equalizationSchedule: buildEqualizationSchedule([c]) };
+    const later = equalizationOwed(fundWith(t, [call1, sent]), '2026-12-01', { dueDate: '2026-12-15' });
+    expect(later[0].owed).toEqual({});
+    expect(later[0].interestToDueDate).toBe(false);
   });
 });

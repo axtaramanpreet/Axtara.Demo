@@ -430,7 +430,8 @@ before (`catch_up_fee_until`, blank = `billed_periods`): a quarter billed
 before the closing is covered whole, and every later quarter bills the late
 investor in full with everyone else, so the fee columns agree across
 investors. `closing_date` instead covers every day to the closing, and later
-periods bill them from that day. The catch-up fee carries interest at the same rate (`catch_up_fee_interest`,
+periods bill them from that day. The catch-up fee carries interest — at its own rate when the terms set one
+(`catch_up_fee_interest_rate`), otherwise at the late-close rate (`catch_up_fee_interest`,
 blank = from the first close to the late investor's closing; `per_period`
 runs each fee period's part from its own start; `none`), paid where the fee
 goes, as its own part `feeInterest`.

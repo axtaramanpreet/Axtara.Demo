@@ -42,6 +42,7 @@ import { feeForRange, type FeeInvestor, type FeeSlice } from './fee-run';
 import { fmt, fmtDate, pct as pctText, round } from './format';
 import {
   catchUpFeeInterestOf,
+  catchUpFeeInterestRateOf,
   interestUntilOf,
   termsOn,
   type CatchUpFeeInterest,
@@ -169,6 +170,8 @@ export interface EqualizationResult {
     interestRunTo?: string;
     /** Interest on the catch-up fee, and how it was worked out. */
     feeInterest?: number;
+    /** Its rate a year. Absent on a closing finalised before it was recorded: `interestRate`. */
+    feeInterestRate?: number | null;
     feeInterestToGp?: number;
     catchUpFeeInterest?: CatchUpFeeInterest;
   };
@@ -320,12 +323,13 @@ export function equalize(input: EqualizationInput): EqualizationResult {
   // At the late-close rate: on the whole fee from the first closing, or on each
   // fee period's part from that period's start. It goes where the fee goes.
   const feeInterestMode = catchUpFeeInterestOf(terms);
+  const feeRate = catchUpFeeInterestRateOf(terms);
   let feeInterestTotal = 0;
   let feeInterestToGp = 0;
-  if (rate && feeInterestMode !== 'none' && feeTotal > 0) {
+  if (feeRate && feeInterestMode !== 'none' && feeTotal > 0) {
     const grow = (amount: number, from: string) => {
       const years = Math.max(0, daysBetween(from, input.closingDate)) / 365;
-      return compound ? amount * ((1 + rate) ** years - 1) : amount * rate * years;
+      return compound ? amount * ((1 + feeRate) ** years - 1) : amount * feeRate * years;
     };
     for (const n of input.newcomers) {
       const l = lines.get(n.lpId)!;
@@ -411,7 +415,7 @@ export function equalize(input: EqualizationInput): EqualizationResult {
     if (feeInterestTotal) {
       checks.push({
         level: 'ok',
-        text: `Interest on the catch-up fee ${fmt(feeInterestTotal)} at ${pctText(rate!)} a year, ${
+        text: `Interest on the catch-up fee ${fmt(feeInterestTotal)} at ${pctText(feeRate!)} a year, ${
           feeInterestMode === 'first_close' ? `from ${fmtDate(input.feeStart)}` : 'from each fee period’s start'
         } to ${fmtDate(input.closingDate)}, ${feeTo === 'gp' ? 'to the general partner' : 'shared among the earlier investors'}.`,
       });
@@ -451,6 +455,7 @@ export function equalize(input: EqualizationInput): EqualizationResult {
       interestTo,
       interestUntil: interestUntilOf(terms),
       feeInterest: feeInterestTotal,
+      feeInterestRate: feeRate,
       feeInterestToGp,
       catchUpFeeInterest: feeInterestMode,
     },

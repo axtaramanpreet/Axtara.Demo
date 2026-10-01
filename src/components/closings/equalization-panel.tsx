@@ -32,6 +32,8 @@ export function EqualizationPanel({
   const failing = result.checks.filter((c) => c.level === 'fail').length;
   const toDue = t.interestUntil === 'collection_due_date';
   const feeInterest = t.feeInterest ?? 0;
+  const feeRateValue = t.feeInterestRate !== undefined ? t.feeInterestRate : t.interestRate;
+  const feeRateText = feeRateValue ? pct(feeRateValue) : 'no rate';
 
   return (
     <div style={{ display: 'grid', gap: 16, marginTop: 16 }}>
@@ -70,8 +72,8 @@ export function EqualizationPanel({
             value={fmt(feeInterest)}
             info={
               t.catchUpFeeInterest === 'per_period'
-                ? "On each fee period's part of the catch-up fee, from that period's start to the closing date, at the late-close rate."
-                : 'On the whole catch-up fee, from the first close to this closing, at the late-close rate.'
+                ? `On each fee period's part of the catch-up fee, from that period's start to the closing date, at ${feeRateText} a year.`
+                : `On the whole catch-up fee, from the first close to this closing, at ${feeRateText} a year.`
             }
           />
         )}
@@ -170,6 +172,8 @@ function Working({ line, result }: { line: EqualizationLine; result: Equalizatio
   const T = result.totals.commitmentsBefore;
   const N = result.totals.commitmentsNew;
   const late = line.role !== 'earlier';
+  // Interest on the catch-up fee has its own rate; a closing finalised before it was recorded used the late-close rate.
+  const feeRate = result.totals.feeInterestRate !== undefined ? result.totals.feeInterestRate : result.totals.interestRate;
 
   return (
     <div style={{ display: 'grid', gap: 12, fontSize: 13 }}>
@@ -245,15 +249,15 @@ function Working({ line, result }: { line: EqualizationLine; result: Equalizatio
         </table>
       )}
 
-      {late && (line.feeInterest ?? 0) !== 0 && result.totals.interestRate && (
+      {late && (line.feeInterest ?? 0) !== 0 && feeRate && (
         <div className="mono" style={{ fontSize: 12 }}>
           Interest on the catch-up fee:{' '}
           {result.totals.catchUpFeeInterest === 'per_period'
             ? line.feeSlices
                 .filter((s) => s.amount !== 0)
-                .map((s) => `${fmt(s.amount)} × ${pct(result.totals.interestRate!)} × ${daysBetween(s.from, result.closingDate)}/365`)
+                .map((s) => `${fmt(s.amount)} × ${pct(feeRate)} × ${daysBetween(s.from, result.closingDate)}/365`)
                 .join(' + ')
-            : `${fmt(line.catchUpFee)} × ${pct(result.totals.interestRate)} × ${daysBetween(line.feeSlices[0]?.from ?? result.closingDate, result.closingDate)}/365`}{' '}
+            : `${fmt(line.catchUpFee)} × ${pct(feeRate)} × ${daysBetween(line.feeSlices[0]?.from ?? result.closingDate, result.closingDate)}/365`}{' '}
           = {fmt(line.feeInterest ?? 0)}
         </div>
       )}

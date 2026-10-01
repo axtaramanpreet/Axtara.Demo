@@ -137,6 +137,28 @@ describe('interest on the catch-up fee, the other ways', () => {
   });
 });
 
+describe('interest on the catch-up fee at a rate of its own', () => {
+  it('uses it on the fee, and leaves the capital interest at the late-close rate', () => {
+    // 58,423.91 × 5% × 212/365 = 1,696.69; capital interest stays 23,598.17 at 8%
+    const late = lineOf(equalize(base({ terms: [terms({ catchUpFeeInterestRate: 0.05 })] })), 'LP07');
+    expect(late.feeInterest).toBe(1_696.69);
+    expect(late.interest).toBe(23_598.17);
+  });
+
+  it('charges it even with no late-close rate', () => {
+    const r = equalize(base({ terms: [terms({ lateCloseInterestRate: null, catchUpFeeInterestRate: 0.05 })] }));
+    expect(lineOf(r, 'LP07').interest).toBe(0);
+    expect(lineOf(r, 'LP07').feeInterest).toBe(1_696.69);
+    expect(r.totals.feeInterestRate).toBe(0.05);
+  });
+
+  it('blank uses the late-close rate', () => {
+    const r = equalize(base());
+    expect(lineOf(r, 'LP07').feeInterest).toBe(2_714.71);
+    expect(r.totals.feeInterestRate).toBe(0.08);
+  });
+});
+
 describe('capital interest run to a later date', () => {
   const r = equalize(base());
   const later = equalizationRunTo(r, '2026-09-01');

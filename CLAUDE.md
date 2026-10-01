@@ -137,7 +137,9 @@ Only finalised closings count; a draft is previewed, never counted.
   the late commitment's fee the day after, so later periods bill them in full
   (older results without it: from the closing date); and
   interest on it (`catchUpFeeInterest`: from the first close by default, or
-  per period, or none) as its own part `feeInterest`, paid where the fee goes.
+  per period, or none) as its own part `feeInterest`, paid where the fee goes,
+  at `catchUpFeeInterestRateOf` — its own rate, blank = the late-close rate
+  (recorded as `totals.feeInterestRate`).
 - Interest runs to when the late investor pays by default
   (`equalizationInterestUntil` blank = `collection_due_date`; blank is the FM
   rule here, not "not set"). The frozen result stops at the closing; the

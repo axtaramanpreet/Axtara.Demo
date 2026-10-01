@@ -838,6 +838,7 @@ export type Database = {
       fund_terms: {
         Row: {
           catch_up_fee_interest: string | null
+          catch_up_fee_interest_rate: number | null
           catch_up_fee_to: string | null
           catch_up_fee_until: string | null
           created_at: string
@@ -875,6 +876,7 @@ export type Database = {
         }
         Insert: {
           catch_up_fee_interest?: string | null
+          catch_up_fee_interest_rate?: number | null
           catch_up_fee_to?: string | null
           catch_up_fee_until?: string | null
           created_at?: string
@@ -912,6 +914,7 @@ export type Database = {
         }
         Update: {
           catch_up_fee_interest?: string | null
+          catch_up_fee_interest_rate?: number | null
           catch_up_fee_to?: string | null
           catch_up_fee_until?: string | null
           created_at?: string

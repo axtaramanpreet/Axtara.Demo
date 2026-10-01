@@ -225,6 +225,14 @@ export const GROUPS: Group[] = [
         ],
       },
       {
+        key: 'catchUpFeeInterestRate',
+        label: 'Interest rate on the catch-up fee',
+        kind: 'rate',
+        placeholder: 'e.g. 5%, or blank for the rate above',
+        hint: 'A year. Blank uses the interest rate on catching up.',
+        info: 'Some LPAs charge a different rate on the catch-up management fee than on the share of earlier calls. Blank uses the same rate; set "Interest on the catch-up fee" to None for no interest on it.',
+      },
+      {
         key: 'catchUpFeeUntil',
         label: 'Catch-up fee covers',
         kind: 'select',

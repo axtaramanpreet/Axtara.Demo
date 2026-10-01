@@ -41,6 +41,8 @@ export function StatementDocument({ s }: { s: StatementInput }) {
   const interestTo = t.interestRunTo ?? result.closingDate;
   const feeInterest = line.feeInterest ?? 0;
   const feeFrom = line.feeSlices[0]?.from;
+  // Interest on the catch-up fee has its own rate; a closing finalised before it was recorded used the late-close rate.
+  const feeRate = t.feeInterestRate !== undefined ? t.feeInterestRate : rate;
   // The last day the catch-up fee covers, when it was recorded.
   const feeTo = t.feeCoveredThrough && t.feeCoveredThrough >= (feeFrom ?? t.feeCoveredThrough) ? t.feeCoveredThrough : null;
 
@@ -137,19 +139,19 @@ export function StatementDocument({ s }: { s: StatementInput }) {
         {feeInterest !== 0 && (
           <>
             <Text style={styles.heading}>D. {late ? 'Interest on the catch-up fee' : 'Your share of the interest on the catch-up fee'}</Text>
-            {late && rate && t.catchUpFeeInterest === 'per_period'
+            {late && feeRate && t.catchUpFeeInterest === 'per_period'
               ? line.feeSlices
                   .filter((f) => f.amount !== 0)
                   .map((f, i) => (
                     <Line
                       key={`fi-${i}`}
-                      label={`${fmt(f.amount)} × ${pct(rate)} × ${daysBetween(f.from, result.closingDate)}/365, ${fmtDate(f.from)} to ${fmtDate(result.closingDate)}`}
+                      label={`${fmt(f.amount)} × ${pct(feeRate!)} × ${daysBetween(f.from, result.closingDate)}/365, ${fmtDate(f.from)} to ${fmtDate(result.closingDate)}`}
                       amount=""
                     />
                   ))
-              : late && rate && feeFrom && (
+              : late && feeRate && feeFrom && (
                   <Line
-                    label={`${fmt(line.catchUpFee)} × ${pct(rate)} × ${daysBetween(feeFrom, result.closingDate)}/365, ${fmtDate(feeFrom)} to ${fmtDate(result.closingDate)}`}
+                    label={`${fmt(line.catchUpFee)} × ${pct(feeRate)} × ${daysBetween(feeFrom, result.closingDate)}/365, ${fmtDate(feeFrom)} to ${fmtDate(result.closingDate)}`}
                     amount=""
                   />
                 )}

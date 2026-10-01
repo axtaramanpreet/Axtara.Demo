@@ -65,6 +65,8 @@ export interface FundTerms {
   equalizationInterestUntil: EqualizationInterestUntil | null;
   /** Blank: on the whole catch-up fee, from the first closing to the late investor's closing. */
   catchUpFeeInterest: CatchUpFeeInterest | null;
+  /** A year, for interest on the catch-up fee. Blank: the late-close interest rate. */
+  catchUpFeeInterestRate: number | null;
   /** Blank: the fee periods already billed to the others. */
   catchUpFeeUntil: CatchUpFeeUntil | null;
 
@@ -107,6 +109,7 @@ export const BLANK_TERMS: FundTerms = {
   equalizationInterestTo: null,
   equalizationInterestUntil: null,
   catchUpFeeInterest: null,
+  catchUpFeeInterestRate: null,
   catchUpFeeUntil: null,
   paymentBankName: null,
   paymentAccountName: null,
@@ -168,7 +171,9 @@ export const DEPENDS_ON: Partial<Record<keyof FundTerms, keyof FundTerms>> = {
   lateCloseInterestBasis: 'lateCloseInterestRate',
   equalizationInterestTo: 'lateCloseInterestRate',
   equalizationInterestUntil: 'lateCloseInterestRate',
-  catchUpFeeInterest: 'lateCloseInterestRate',
+  // Interest on the catch-up fee can have its own rate, so it needs only a fee.
+  catchUpFeeInterest: 'feeRateAnnual',
+  catchUpFeeInterestRate: 'feeRateAnnual',
 };
 
 /** Whether a term applies, given the terms it depends on. */
@@ -415,4 +420,9 @@ export function catchUpFeeInterestOf(terms: Pick<FundTerms, 'catchUpFeeInterest'
 /** What the catch-up fee covers, for these terms: blank is the fee periods already billed to the others. */
 export function catchUpFeeUntilOf(terms: Pick<FundTerms, 'catchUpFeeUntil'> | null): CatchUpFeeUntil {
   return terms?.catchUpFeeUntil ?? 'billed_periods';
+}
+
+/** The rate a year for interest on the catch-up fee: its own, or blank for the late-close rate. Null: none. */
+export function catchUpFeeInterestRateOf(terms: Pick<FundTerms, 'catchUpFeeInterestRate' | 'lateCloseInterestRate'> | null): number | null {
+  return terms?.catchUpFeeInterestRate ?? terms?.lateCloseInterestRate ?? null;
 }

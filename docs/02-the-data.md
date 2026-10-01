@@ -629,8 +629,9 @@ The same rules as calls:
 - **Two terms say how equalization interest runs** (`20260930090000`):
   `fund_terms.equalization_interest_until` (`closing_date` or
   `collection_due_date`), `catch_up_fee_until` (`billed_periods`,
-  `closing_date`) and `catch_up_fee_interest` (`none`, `first_close`,
-  `per_period`). Blank is the fund manager's rule — `collection_due_date`,
+  `closing_date`), `catch_up_fee_interest` (`none`, `first_close`,
+  `per_period`) and `catch_up_fee_interest_rate` (`20261001090000`; blank =
+  the late-close rate). Blank is the fund manager's rule — `collection_due_date`,
   `billed_periods` and `first_close` — which is a deliberate exception to "blank means not set":
   anything already finalised or sent keeps what it said.
 - **No fee is recorded by hand.** There used to be a `fee_runs` table, a

@@ -13,7 +13,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(16);
+select plan(17);
 
 
 -- --- Two clients; an admin and a viewer at one, an admin at the other -------
@@ -149,8 +149,8 @@ select is(
 -- --- When equalization interest runs to, and interest on the catch-up fee ---
 
 select lives_ok(
-  $$ insert into fund_terms (fund_id, effective_from, late_close_interest_rate, equalization_interest_until, catch_up_fee_interest, catch_up_fee_until)
-     values ('aaaa2222-2222-2222-2222-222222222222', '2030-01-01', 0.08, 'collection_due_date', 'per_period', 'billed_periods') $$,
+  $$ insert into fund_terms (fund_id, effective_from, late_close_interest_rate, equalization_interest_until, catch_up_fee_interest, catch_up_fee_until, catch_up_fee_interest_rate)
+     values ('aaaa2222-2222-2222-2222-222222222222', '2030-01-01', 0.08, 'collection_due_date', 'per_period', 'billed_periods', 0.05) $$,
   'the terms record when interest runs to and how the catch-up fee carries it'
 );
 
@@ -176,6 +176,13 @@ select throws_ok(
   '23514',
   null,
   'the catch-up fee covers the billed periods or runs to the closing, nothing else'
+);
+
+select is(
+  (select catch_up_fee_interest_rate from fund_terms
+    where fund_id = 'aaaa2222-2222-2222-2222-222222222222' and effective_from = '2030-01-01'),
+  0.05::rate_fraction,
+  'interest on the catch-up fee can have a rate of its own'
 );
 
 
